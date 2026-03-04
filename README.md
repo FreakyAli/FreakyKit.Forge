@@ -1,1 +1,479 @@
 # FreakyKit.Forge
+
+A compile-time object mapping library for C# powered by Roslyn source generators. Define your mappings as partial method declarations and Forge generates the implementations at build time — zero reflection, zero runtime overhead.
+
+## Quick Start
+
+```csharp
+using FreakyKit.Forge;
+
+public class Person    { public string Name { get; set; } public int Age { get; set; } }
+public class PersonDto { public string Name { get; set; } public int Age { get; set; } }
+
+[ForgeClass]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+}
+```
+
+At compile time, Forge generates the implementation:
+
+```csharp
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source)
+    {
+        var __result = new PersonDto();
+        __result.Name = source.Name;
+        __result.Age = source.Age;
+        return __result;
+    }
+}
+```
+
+Then just call it:
+
+```csharp
+var dto = PersonForges.ToDto(person);
+```
+
+## Installation
+
+Install via NuGet:
+
+```xml
+<PackageReference Include="FreakyKit.Forge" Version="1.0.0" />
+```
+
+This single package includes everything you need — no additional references required.
+
+### What's Inside the Package
+
+FreakyKit.Forge is built from four internal projects, all bundled into a single NuGet package for convenience:
+
+| Component | What It Does | Where It Lives in the Package |
+|-----------|-------------|-------------------------------|
+| **FreakyKit.Forge** | The attributes you use in your code (`[ForgeClass]`, `[Forge]`, `[ForgeMap]`, etc.) | `lib/netstandard2.0/` — referenced by your project at compile time and runtime |
+| **FreakyKit.Forge.Generator** | The Roslyn source generator that writes the mapping method bodies | `analyzers/dotnet/cs/` — runs during build only, not referenced at runtime |
+| **FreakyKit.Forge.Analyzers** | The Roslyn analyzer that validates your declarations and reports diagnostics | `analyzers/dotnet/cs/` — runs during build only, not referenced at runtime |
+| **FreakyKit.Forge.Diagnostics** | Shared diagnostic descriptors used by both the generator and analyzer | `analyzers/dotnet/cs/` — internal dependency, not referenced by your code |
+
+**Why does this matter?**
+- The attributes DLL (`FreakyKit.Forge`) is a normal library dependency — your compiled code references it
+- The generator and analyzer DLLs live in the special `analyzers/` folder, which tells the .NET SDK to run them during build but not include them in your app's output
+- You never need to reference the generator, analyzer, or diagnostics projects directly
+
+### Local Development (Without NuGet)
+
+If you're building from source instead of using the NuGet package, add these project references:
+
+```xml
+<ItemGroup>
+    <ProjectReference Include="path/to/FreakyKit.Forge" />
+    <ProjectReference Include="path/to/FreakyKit.Forge.Analyzers"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="path/to/FreakyKit.Forge.Generator"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+</ItemGroup>
+```
+
+The `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"` flags tell MSBuild to treat these as build-time tools rather than runtime dependencies.
+
+## Features
+
+- **Zero reflection** — all mapping code is generated at compile time
+- **Zero runtime dependencies** — the generated code is plain C#
+- **Parameterized constructor support** — automatically selects the best constructor
+- **Nested forging** — compose mappings for complex object graphs
+- **Collection mapping** — automatic `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>` conversion with LINQ
+- **Flattening** — map nested properties like `Address.City` to flat members like `AddressCity`
+- **Custom member mapping** — rename members with `[ForgeMap]`
+- **Ignore members** — exclude members with `[ForgeIgnore]`
+- **Type converters** — bridge incompatible types with `[ForgeConverter]`
+- **Nullable handling** — automatic `Nullable<T>` ↔ `T` conversion
+- **Enum mapping** — cast or name-based enum-to-enum conversion
+- **Update mapping** — modify existing objects in place (void return, 2 parameters)
+- **Reverse mapping** — auto-generate the reverse direction with `GenerateReverse = true`
+- **Before/after hooks** — run custom logic before or after mapping via partial methods
+- **Implicit and explicit modes** — control which methods get generated
+- **Rich diagnostics** — 32 diagnostics across 7 categories guide you at build time
+- **Field support** — opt-in to include fields in member discovery
+- **Private method support** — opt-in to include private forge methods
+
+## How It Works
+
+1. Mark a `static partial class` with `[ForgeClass]`
+2. Declare `static partial` methods that take a source type and return a destination type
+3. The source generator matches members by name (case-insensitive) and generates the mapping body
+4. The analyzer validates your declarations and reports warnings/errors at build time
+
+## Forge Method Shape
+
+A valid forge method is:
+- `static`
+- `partial` (declaration only, no body)
+- Returns a non-void type (the destination)
+- Takes exactly one parameter (the source)
+- Has no type parameters
+
+```csharp
+public static partial DestType MethodName(SourceType source);
+```
+
+### Update Method Shape
+
+A void-returning method with two parameters is an **update** method:
+
+```csharp
+public static partial void Update(SourceType source, DestType existing);
+// Generates: existing.Name = source.Name; (no construction, no return)
+```
+
+## Constructor Selection
+
+Forge picks the destination constructor using these rules (in order):
+
+1. **Parameterless constructor** — preferred if available
+2. **Parameterized constructor** — selected if exactly one public constructor can be fully satisfied from source members (matched by name and type, case-insensitive)
+3. **Ambiguity error** (`FKF500`) — if multiple constructors are equally viable
+4. **Missing parameter error** (`FKF501`) — if a single constructor has unsatisfiable parameters
+5. **No viable constructor error** (`FKF502`) — if no public constructor can be used
+
+```csharp
+public class Dest
+{
+    public string Name { get; }
+    public int Age { get; }
+    public Dest(string name, int age) { Name = name; Age = age; }
+}
+
+// Generates: var __result = new Dest(source.Name, source.Age);
+```
+
+## Nested Forging
+
+When source and destination have members with the same name but different types, you can compose mappings:
+
+```csharp
+[ForgeClass]
+public static partial class PersonForges
+{
+    public static partial AddressDto ToAddressDto(Address source);
+
+    [Forge(AllowNestedForging = true)]
+    public static partial PersonDto ToDto(Person source);
+}
+
+// Generates: __result.Home = ToAddressDto(source.Home);
+```
+
+Without `AllowNestedForging = true`, a type mismatch where a forge method exists emits `FKF300` (warning). Without any forge method for the conversion, it emits `FKF200` (error) and blocks generation.
+
+## Collection Mapping
+
+Collections are automatically mapped when source and destination members are collection types. Supported types include `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, and any type implementing `IEnumerable<T>`:
+
+```csharp
+public class Source { public List<int> Values { get; set; } = new(); }
+public class Dest   { public int[] Values { get; set; } = Array.Empty<int>(); }
+
+// Generates: __result.Values = source.Values.ToArray();
+```
+
+When element types differ and a forge method exists, use `AllowNestedForging = true`:
+
+```csharp
+[Forge(AllowNestedForging = true)]
+public static partial PersonDto ToDto(Person source);
+public static partial AddressDto ToAddressDto(Address source);
+
+// Generates: __result.Addresses = source.Addresses.Select(x => ToAddressDto(x)).ToList();
+```
+
+## Flattening
+
+Opt-in to flatten nested source properties into flat destination members:
+
+```csharp
+public class Source { public Address Address { get; set; } }
+public class Address { public string City { get; set; } }
+public class Dest { public string AddressCity { get; set; } }
+
+[Forge(AllowFlattening = true)]
+public static partial Dest ToDest(Source source);
+
+// Generates: __result.AddressCity = source.Address.City;
+```
+
+One level of nesting is supported. The destination member name is matched by concatenating the source member name with its nested property name (case-insensitive).
+
+## Custom Member Mapping
+
+Use `[ForgeMap]` to map members with different names:
+
+```csharp
+// Source-side: "FirstName" maps to destination member "Name"
+public class Source { [ForgeMap("Name")] public string FirstName { get; set; } }
+public class Dest   { public string Name { get; set; } }
+
+// Destination-side: "Name" reads from source member "FirstName"
+public class Source { public string FirstName { get; set; } }
+public class Dest   { [ForgeMap("FirstName")] public string Name { get; set; } }
+
+// Both sides with a common key
+public class Source { [ForgeMap("CommonKey")] public string SrcName { get; set; } }
+public class Dest   { [ForgeMap("CommonKey")] public string DstName { get; set; } }
+```
+
+## Ignore Members
+
+Use `[ForgeIgnore]` to exclude a member from mapping entirely:
+
+```csharp
+public class Source
+{
+    public string Name { get; set; }
+    [ForgeIgnore] public string InternalId { get; set; }  // skipped, no warnings
+}
+```
+
+## Type Converters
+
+Use `[ForgeConverter]` on a static method to bridge incompatible types:
+
+```csharp
+[ForgeClass]
+public static partial class MyForges
+{
+    public static partial Dest ToDest(Source source);
+
+    [ForgeConverter]
+    public static string ConvertDateTime(DateTime value) => value.ToString("yyyy-MM-dd");
+}
+
+// When source.Birthday (DateTime) maps to dest.Birthday (string):
+// Generates: __result.Birthday = ConvertDateTime(source.Birthday);
+```
+
+## Nullable Handling
+
+Forge automatically handles nullable type differences:
+
+- `Nullable<T>` → `T`: generates `source.Prop.Value` (with `FKF201` warning)
+- `T` → `Nullable<T>`: direct assignment
+- Reference type nullability differences: direct assignment
+
+## Enum Mapping
+
+Forge automatically handles enum-to-enum conversions:
+
+```csharp
+// Default: cast mapping
+[Forge(EnumMappingStrategy = ForgeEnumMapping.Cast)]
+public static partial Dest ToDest(Source source);
+// Generates: __result.Status = (DestStatus)source.Status;
+
+// Name-based mapping (safer when underlying values differ)
+[Forge(EnumMappingStrategy = ForgeEnumMapping.ByName)]
+public static partial Dest ToDest(Source source);
+// Generates: __result.Status = source.Status switch { ... };
+```
+
+## Reverse Mapping
+
+Automatically generate the reverse direction:
+
+```csharp
+[Forge(GenerateReverse = true, ReverseName = "FromDto")]
+public static partial PersonDto ToDto(Person source);
+
+// Also generates: public static partial Person FromDto(PersonDto source);
+```
+
+### Reverse Mapping Limitations
+
+The reverse method is a simplified mapping that only handles direct member matches and nullable conversions. It does **not** inherit options from the forward method:
+
+- Fields are always excluded (`IncludeFields` is not carried over)
+- No nested forging, flattening, enum mapping, or collection mapping
+- No before/after hooks
+- Unmatched members are silently skipped (no FKF100/FKF101 diagnostics)
+
+For complex reverse mappings, write a separate forward forge method instead of using `GenerateReverse`.
+
+## Before/After Hooks
+
+Add custom logic before or after mapping using convention-based partial methods:
+
+```csharp
+[ForgeClass]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+
+    // Called before mapping assignments
+    static partial void OnBeforeToDto(Person source);
+
+    // Called after mapping assignments, before return
+    static partial void OnAfterToDto(Person source, PersonDto result);
+}
+```
+
+### Hook Signatures for Update Methods
+
+For update methods (void return, 2 parameters), the hook signatures use the destination parameter directly:
+
+```csharp
+[ForgeClass]
+public static partial class PersonForges
+{
+    public static partial void Update(Person source, PersonDto existing);
+
+    // Before hook: same as create — takes only the source
+    static partial void OnBeforeUpdate(Person source);
+
+    // After hook: takes source + dest parameter (not __result)
+    static partial void OnAfterUpdate(Person source, PersonDto existing);
+}
+```
+
+## Implicit vs Explicit Mode
+
+**Implicit mode** (default) — all properly-shaped partial methods in the class are treated as forge methods:
+
+```csharp
+[ForgeClass] // Mode = ForgeMode.Implicit is the default
+public static partial class MyForges
+{
+    public static partial Dest ToDest(Source source);     // forged
+    public static partial Other ToOther(Source source);   // also forged
+}
+```
+
+**Explicit mode** — only methods decorated with `[Forge]` are treated as forge methods:
+
+```csharp
+[ForgeClass(Mode = ForgeMode.Explicit)]
+public static partial class MyForges
+{
+    [Forge]
+    public static partial Dest ToDest(Source source);     // forged
+
+    public static partial Other ToOther(Source source);   // ignored (FKF002 warning)
+}
+```
+
+## Attribute Reference
+
+### `[ForgeClass]`
+
+Applied to a `static partial class`. Marks it as a forge class.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Mode` | `ForgeMode` | `Implicit` | Controls which methods are treated as forge methods |
+| `IncludePrivateMethods` | `bool` | `false` | When true, private forge methods are included |
+
+### `[Forge]`
+
+Applied to a `static partial` method. Required in explicit mode, optional in implicit mode.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `IncludeFields` | `bool` | `false` | Include fields in member discovery |
+| `AllowNestedForging` | `bool` | `false` | Allow calling other forge methods for nested type conversions |
+| `EnumMappingStrategy` | `ForgeEnumMapping` | `Cast` | How enum-to-enum mappings are generated |
+| `AllowFlattening` | `bool` | `false` | Flatten nested source properties into flat destination members |
+| `GenerateReverse` | `bool` | `false` | Generate a reverse mapping method |
+| `ReverseName` | `string` | `""` | Name of the reverse method (required when `GenerateReverse` is true) |
+
+### `[ForgeIgnore]`
+
+Applied to a property or field. Excludes the member from mapping entirely — no FKF100/FKF101 warnings.
+
+### `[ForgeMap("name")]`
+
+Applied to a property or field. Maps the member to a differently-named counterpart.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `string` | The name of the counterpart member (or a shared key when used on both sides) |
+
+### `[ForgeConverter]`
+
+Applied to a `static` method. Marks it as a type converter. The method must take one parameter (source type) and return a value (destination type).
+
+### `ForgeMode`
+
+| Value | Description |
+|-------|-------------|
+| `Implicit` | All properly-shaped partial methods are forge methods |
+| `Explicit` | Only `[Forge]`-decorated methods are forge methods |
+
+### `ForgeEnumMapping`
+
+| Value | Description |
+|-------|-------------|
+| `Cast` | Direct cast: `(DestEnum)source.Value` |
+| `ByName` | Switch expression mapping by member name |
+
+## Diagnostics
+
+See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics reference.
+
+| ID | Severity | Summary |
+|----|----------|---------|
+| FKF001 | Info | Explicit mode activated |
+| FKF002 | Warning | Method ignored in explicit mode |
+| FKF010 | Warning | Private forge method ignored |
+| FKF011 | Info | Private visibility enabled |
+| FKF020 | Error | Forge method declares a body |
+| FKF030 | Error | Forge method name overloaded |
+| FKF040 | Info | Update mode activated |
+| FKF041 | Error | Update destination has no settable members |
+| FKF050 | Info | Before hook detected |
+| FKF051 | Info | After hook detected |
+| FKF060 | Info | Reverse method generated |
+| FKF100 | Warning | Destination member has no source match |
+| FKF101 | Warning | Source member unused |
+| FKF102 | Info | Member ignored via [ForgeIgnore] |
+| FKF103 | Info | Custom member mapping via [ForgeMap] |
+| FKF104 | Error | ForgeMap target not found |
+| FKF105 | Warning | Duplicate ForgeMap target |
+| FKF106 | Info | Flattened mapping applied |
+| FKF200 | Error | Incompatible member types |
+| FKF201 | Warning | Nullable value type to non-nullable mapping |
+| FKF202 | Info | Nullable mapping applied |
+| FKF210 | Info | Enum cast mapping |
+| FKF211 | Info | Enum name-based mapping |
+| FKF212 | Warning | Enum member missing in destination |
+| FKF220 | Info | Type converter used |
+| FKF300 | Warning | Nested forging disabled |
+| FKF310 | Info | Collection mapping applied |
+| FKF400 | Warning | Field ignored |
+| FKF401 | Info | Fields enabled |
+| FKF500 | Error | Constructor ambiguity |
+| FKF501 | Error | Missing constructor parameter |
+| FKF502 | Error | No viable constructor |
+
+## Project Structure
+
+```
+src/
+  FreakyKit.Forge/              # Attributes, enums, and NuGet package
+  FreakyKit.Forge.Analyzers/    # Roslyn analyzer — validates forge declarations
+  FreakyKit.Forge.Generator/    # Roslyn source generator — generates method bodies
+  FreakyKit.Forge.Diagnostics/  # Shared diagnostic descriptors
+  FreakyKit.Forge.Conventions/  # Optional naming conventions (advisory)
+tests/
+  FreakyKit.Forge.Analyzers.Tests/
+  FreakyKit.Forge.Generator.Tests/
+  FreakyKit.Forge.Integration.Tests/
+```
+
+## License
+
+TBD

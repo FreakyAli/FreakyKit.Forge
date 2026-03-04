@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>FreakyKit.Forge.Conventions</RootNamespace>
+    <AssemblyName>FreakyKit.Forge.Conventions</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FreakyKit.Forge\FreakyKit.Forge.csproj" />
+  </ItemGroup>
+
+</Project>

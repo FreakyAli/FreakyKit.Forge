@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>FreakyKit.Forge</RootNamespace>
+    <AssemblyName>FreakyKit.Forge</AssemblyName>
+
+    <!-- NuGet packaging -->
+    <PackageId>FreakyKit.Forge</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>FreakyKit</Authors>
+    <Description>Compile-time object mapping for C# powered by Roslyn source generators. Zero reflection, zero runtime overhead.</Description>
+    <PackageTags>mapping;source-generator;roslyn;codegen</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+
+    <!-- Attributes DLL goes to lib/netstandard2.0/ (default) -->
+    <IncludeBuildOutput>true</IncludeBuildOutput>
+
+    <!-- Suppress NU5128: analyzer DLLs intentionally have no lib/ counterparts -->
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <!-- Project references for build ordering only — not exposed as lib dependencies -->
+  <ItemGroup>
+    <ProjectReference Include="..\FreakyKit.Forge.Generator\FreakyKit.Forge.Generator.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <ProjectReference Include="..\FreakyKit.Forge.Analyzers\FreakyKit.Forge.Analyzers.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+    <ProjectReference Include="..\FreakyKit.Forge.Diagnostics\FreakyKit.Forge.Diagnostics.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Pack analyzer, generator, and diagnostics DLLs into analyzers/dotnet/cs/ -->
+  <ItemGroup>
+    <None Include="..\FreakyKit.Forge.Generator\bin\$(Configuration)\netstandard2.0\FreakyKit.Forge.Generator.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+    <None Include="..\FreakyKit.Forge.Analyzers\bin\$(Configuration)\netstandard2.0\FreakyKit.Forge.Analyzers.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+    <None Include="..\FreakyKit.Forge.Diagnostics\bin\$(Configuration)\netstandard2.0\FreakyKit.Forge.Diagnostics.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>
