@@ -40,33 +40,56 @@ var dto = PersonForges.ToDto(person);
 
 ## Installation
 
-Install via NuGet:
+FreakyKit.Forge is split into independent NuGet packages — install only what you need. Both `FreakyKit.Forge.Generator` and `FreakyKit.Forge.Analyzers` automatically pull in `FreakyKit.Forge` (core attributes), so you never need to add it separately.
+
+### Recommended: Code Generation + Build-Time Validation
+
+Install both the generator and the analyzer. The generator writes your mapping method bodies at compile time. The analyzer validates your declarations and reports 32 diagnostics (errors, warnings, and info messages) to catch mistakes before you run.
 
 ```xml
-<PackageReference Include="FreakyKit.Forge" Version="1.0.0" />
+<ItemGroup>
+    <PackageReference Include="FreakyKit.Forge.Generator" Version="1.0.0" />
+    <PackageReference Include="FreakyKit.Forge.Analyzers" Version="1.0.0" />
+</ItemGroup>
 ```
 
-This single package includes everything you need — no additional references required.
+### Lightweight: Code Generation Only
 
-### What's Inside the Package
+Install just the generator if you want the mapping implementations without the analyzer diagnostics. You still get compile errors for invalid code, but you won't see Forge-specific warnings like "destination member has no source match" (`FKF100`) or "nested forging disabled" (`FKF300`).
 
-FreakyKit.Forge is built from four internal projects, all bundled into a single NuGet package for convenience:
+```xml
+<PackageReference Include="FreakyKit.Forge.Generator" Version="1.0.0" />
+```
 
-| Component | What It Does | Where It Lives in the Package |
-|-----------|-------------|-------------------------------|
-| **FreakyKit.Forge** | The attributes you use in your code (`[ForgeClass]`, `[Forge]`, `[ForgeMap]`, etc.) | `lib/netstandard2.0/` — referenced by your project at compile time and runtime |
-| **FreakyKit.Forge.Generator** | The Roslyn source generator that writes the mapping method bodies | `analyzers/dotnet/cs/` — runs during build only, not referenced at runtime |
-| **FreakyKit.Forge.Analyzers** | The Roslyn analyzer that validates your declarations and reports diagnostics | `analyzers/dotnet/cs/` — runs during build only, not referenced at runtime |
-| **FreakyKit.Forge.Diagnostics** | Shared diagnostic descriptors used by both the generator and analyzer | `analyzers/dotnet/cs/` — internal dependency, not referenced by your code |
+### Optional: Naming Conventions
 
-**Why does this matter?**
-- The attributes DLL (`FreakyKit.Forge`) is a normal library dependency — your compiled code references it
-- The generator and analyzer DLLs live in the special `analyzers/` folder, which tells the .NET SDK to run them during build but not include them in your app's output
-- You never need to reference the generator, analyzer, or diagnostics projects directly
+Install the conventions package if you want advisory helpers for organizing forge classes and methods (e.g., `ForgeConventions.ForgeClassName("Person")` returns `"PersonForges"`). See [docs/conventions.md](docs/conventions.md) for details.
+
+```xml
+<PackageReference Include="FreakyKit.Forge.Conventions" Version="1.0.0" />
+```
+
+### Advanced: Custom Tooling
+
+Install the diagnostics package directly only if you are building your own Roslyn analyzers or tools that need to reference Forge diagnostic IDs. Most users do not need this — it is already bundled inside the Generator and Analyzers packages.
+
+```xml
+<PackageReference Include="FreakyKit.Forge.Diagnostics" Version="1.0.0" />
+```
+
+### All Packages
+
+| Package | What It Does | Install When |
+|---------|-------------|-------------|
+| **FreakyKit.Forge** | Core attributes and enums (`[ForgeClass]`, `[Forge]`, `[ForgeMap]`, etc.) | Installed automatically by Generator, Analyzers, or Conventions |
+| **FreakyKit.Forge.Generator** | Roslyn source generator — writes mapping method bodies at compile time | You want compile-time code generation |
+| **FreakyKit.Forge.Analyzers** | Roslyn analyzer — validates declarations and reports diagnostics at build time | You want build-time warnings and errors for your forge declarations |
+| **FreakyKit.Forge.Diagnostics** | Shared diagnostic descriptors | You are building custom Roslyn tooling on top of Forge |
+| **FreakyKit.Forge.Conventions** | Optional naming convention helpers | You want advisory naming utilities |
 
 ### Local Development (Without NuGet)
 
-If you're building from source instead of using the NuGet package, add these project references:
+If you're building from source instead of using the NuGet packages, add these project references:
 
 ```xml
 <ItemGroup>
@@ -463,11 +486,11 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 
 ```
 src/
-  FreakyKit.Forge/              # Attributes, enums, and NuGet package
-  FreakyKit.Forge.Analyzers/    # Roslyn analyzer — validates forge declarations
-  FreakyKit.Forge.Generator/    # Roslyn source generator — generates method bodies
-  FreakyKit.Forge.Diagnostics/  # Shared diagnostic descriptors
-  FreakyKit.Forge.Conventions/  # Optional naming conventions (advisory)
+  FreakyKit.Forge/              # Core attributes and enums (NuGet: FreakyKit.Forge)
+  FreakyKit.Forge.Generator/    # Roslyn source generator (NuGet: FreakyKit.Forge.Generator)
+  FreakyKit.Forge.Analyzers/    # Roslyn analyzer (NuGet: FreakyKit.Forge.Analyzers)
+  FreakyKit.Forge.Diagnostics/  # Shared diagnostic descriptors (NuGet: FreakyKit.Forge.Diagnostics)
+  FreakyKit.Forge.Conventions/  # Optional naming conventions (NuGet: FreakyKit.Forge.Conventions)
 tests/
   FreakyKit.Forge.Analyzers.Tests/
   FreakyKit.Forge.Generator.Tests/

@@ -37,16 +37,20 @@ jobs:
           echo "version_without_v=$version" >> $env:GITHUB_OUTPUT
 
       - name: Build
-        run: dotnet build -c Release
+        run: dotnet build -c Release -p:Version=${{ steps.get_version.outputs.version_without_v }}
 
       - name: Test
         run: dotnet test -c Release --no-build
 
-      - name: Pack NuGet package
+      - name: Pack NuGet packages
         run: |
-          dotnet pack src/FreakyKit.Forge/FreakyKit.Forge.csproj -c Release --no-build -p:PackageVersion=${{ steps.get_version.outputs.version_without_v }}
+          dotnet pack src/FreakyKit.Forge/FreakyKit.Forge.csproj -c Release --no-build
+          dotnet pack src/FreakyKit.Forge.Diagnostics/FreakyKit.Forge.Diagnostics.csproj -c Release --no-build
+          dotnet pack src/FreakyKit.Forge.Generator/FreakyKit.Forge.Generator.csproj -c Release --no-build
+          dotnet pack src/FreakyKit.Forge.Analyzers/FreakyKit.Forge.Analyzers.csproj -c Release --no-build
+          dotnet pack src/FreakyKit.Forge.Conventions/FreakyKit.Forge.Conventions.csproj -c Release --no-build
 
-      - name: Push NuGet package
+      - name: Push NuGet packages
         shell: pwsh
         run: |
           $version = "${{ steps.get_version.outputs.version_without_v }}"
@@ -54,9 +58,11 @@ jobs:
             $_.FullName -like "*$version*" -and $_.FullName -notlike "*.symbols.nupkg"
           }
 
-          if ($nupkgs.Count -ne 1) {
-            throw "Expected exactly 1 matching .nupkg, found $($nupkgs.Count). Aborting to prevent version discrepancies."
+          if ($nupkgs.Count -ne 5) {
+            throw "Expected exactly 5 matching .nupkg files, found $($nupkgs.Count). Aborting to prevent version discrepancies."
           }
 
-          Write-Host "Pushing: $($nupkgs[0].FullName)"
-          dotnet nuget push $nupkgs[0].FullName -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_API_KEY }}
+          foreach ($nupkg in $nupkgs) {
+            Write-Host "Pushing: $($nupkg.FullName)"
+            dotnet nuget push $nupkg.FullName -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_API_KEY }}
+          }

@@ -4,11 +4,13 @@ The `FreakyKit.Forge.Conventions` project provides optional naming conventions f
 
 **Namespace:** `FreakyKit.Forge.Conventions`
 
-**Note:** This is a separate project (`src/FreakyKit.Forge.Conventions/`) and is **not** included in the main `FreakyKit.Forge` NuGet package. To use it, add a project reference directly:
+Install via NuGet:
 
 ```xml
-<ProjectReference Include="path/to/FreakyKit.Forge.Conventions/FreakyKit.Forge.Conventions.csproj" />
+<PackageReference Include="FreakyKit.Forge.Conventions" Version="1.0.0" />
 ```
+
+This package depends on `FreakyKit.Forge` (core attributes), which will be installed automatically.
 
 ```csharp
 using FreakyKit.Forge.Conventions;

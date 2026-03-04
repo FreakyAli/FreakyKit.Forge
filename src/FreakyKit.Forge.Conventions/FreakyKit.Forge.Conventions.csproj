@@ -7,6 +7,10 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>FreakyKit.Forge.Conventions</RootNamespace>
     <AssemblyName>FreakyKit.Forge.Conventions</AssemblyName>
+
+    <!-- NuGet packaging -->
+    <PackageId>FreakyKit.Forge.Conventions</PackageId>
+    <Description>Optional naming conventions for FreakyKit.Forge. Provides advisory helpers for organizing forge classes and methods.</Description>
   </PropertyGroup>
 
   <ItemGroup>
