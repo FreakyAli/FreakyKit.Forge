@@ -32,7 +32,7 @@ public sealed class EndToEndTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("PersonDto ToDto(", generated);
         Assert.Contains("__result.Name = source.Name", generated);
         Assert.Contains("__result.Age = source.Age", generated);
@@ -150,7 +150,7 @@ public sealed class EndToEndTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var combinedSource = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText().ToString()));
+        var combinedSource = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText(TestContext.Current.CancellationToken).ToString()));
         Assert.Contains("ToAddressDto(source.Home)", combinedSource);
     }
 
@@ -182,7 +182,7 @@ public sealed class EndToEndTests : IntegrationTestBase
         Assert.Contains(result.AllDiagnostics, d => d.Id == "FKF002");
 
         // Only ONE method should be generated
-        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText().ToString()));
+        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText(TestContext.Current.CancellationToken).ToString()));
         Assert.Contains("ToDestExplicit(", generated);
         Assert.DoesNotContain("ToDestIgnored(", generated);
     }
@@ -213,7 +213,7 @@ public sealed class EndToEndTests : IntegrationTestBase
         var result = RunFull(source);
 
         Assert.False(result.HasErrors);
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("new Dest(source.Name, source.Age)", generated);
     }
 

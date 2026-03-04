@@ -28,7 +28,7 @@ public sealed class CollectionIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("__result.Values = source.Values.ToArray()", generated);
     }
 
@@ -60,7 +60,7 @@ public sealed class CollectionIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("source.Items.Select(x => ToItemDto(x)).ToList()", generated);
     }
 }

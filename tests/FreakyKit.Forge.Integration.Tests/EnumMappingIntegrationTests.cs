@@ -35,7 +35,7 @@ public sealed class EnumMappingIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("(DestStatus)source.Status", generated);
         Assert.Contains("__result.Name = source.Name", generated);
 
@@ -69,7 +69,7 @@ public sealed class EnumMappingIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("source.Status switch", generated);
         Assert.Contains("SourceStatus.Active => DestStatus.Active", generated);
 

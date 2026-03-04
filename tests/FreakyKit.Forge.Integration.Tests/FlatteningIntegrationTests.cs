@@ -29,7 +29,7 @@ public sealed class FlatteningIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("__result.Name = source.Name", generated);
         Assert.Contains("__result.AddressCity = source.Address.City", generated);
         Assert.Contains("__result.AddressState = source.Address.State", generated);

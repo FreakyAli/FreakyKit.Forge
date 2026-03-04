@@ -115,7 +115,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor UpdateDestinationNoSettableMembers = new(
         id: "FKF041",
         title: "Update destination has no settable members",
-        messageFormat: "Update forge method '{0}' destination type '{1}' has no settable members.",
+        messageFormat: "Update forge method '{0}' destination type '{1}' has no settable members",
         category: Category_MethodShape,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -127,7 +127,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor BeforeHookDetected = new(
         id: "FKF050",
         title: "Before hook detected",
-        messageFormat: "Before hook '{0}' detected for forge method '{1}'.",
+        messageFormat: "Before hook '{0}' detected for forge method '{1}'",
         category: Category_MethodShape,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -139,7 +139,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor AfterHookDetected = new(
         id: "FKF051",
         title: "After hook detected",
-        messageFormat: "After hook '{0}' detected for forge method '{1}'.",
+        messageFormat: "After hook '{0}' detected for forge method '{1}'",
         category: Category_MethodShape,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -151,7 +151,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor ReverseMethodGenerated = new(
         id: "FKF060",
         title: "Reverse method generated",
-        messageFormat: "Reverse mapping method '{0}' generated for forge method '{1}'.",
+        messageFormat: "Reverse mapping method '{0}' generated for forge method '{1}'",
         category: Category_MethodShape,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -217,7 +217,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor MemberIgnored = new(
         id: "FKF102",
         title: "Member ignored via [ForgeIgnore]",
-        messageFormat: "Member '{0}' on type '{1}' is excluded from mapping via [ForgeIgnore].",
+        messageFormat: "Member '{0}' on type '{1}' is excluded from mapping via [ForgeIgnore]",
         category: Category_MemberMatching,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -229,7 +229,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor CustomMemberMapping = new(
         id: "FKF103",
         title: "Custom member mapping",
-        messageFormat: "Member '{0}' on type '{1}' is mapped to counterpart '{2}' via [ForgeMap].",
+        messageFormat: "Member '{0}' on type '{1}' is mapped to counterpart '{2}' via [ForgeMap]",
         category: Category_MemberMatching,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -241,7 +241,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor ForgeMapTargetNotFound = new(
         id: "FKF104",
         title: "ForgeMap target not found",
-        messageFormat: "Member '{0}' on type '{1}' maps to '{2}' via [ForgeMap], but no member named '{2}' was found on the counterpart type.",
+        messageFormat: "Member '{0}' on type '{1}' maps to '{2}' via [ForgeMap], but no member named '{2}' was found on the counterpart type",
         category: Category_MemberMatching,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -265,7 +265,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor FlattenedMapping = new(
         id: "FKF106",
         title: "Flattened mapping applied",
-        messageFormat: "Destination member '{0}' was mapped via flattening to source path '{1}.{2}'.",
+        messageFormat: "Destination member '{0}' was mapped via flattening to source path '{1}.{2}'",
         category: Category_MemberMatching,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -293,7 +293,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor NullableValueTypeMapping = new(
         id: "FKF201",
         title: "Nullable value type to non-nullable mapping",
-        messageFormat: "Member '{0}': mapping nullable value type '{1}' to non-nullable '{2}' will use .Value which may throw at runtime.",
+        messageFormat: "Member '{0}': mapping nullable value type '{1}' to non-nullable '{2}' will use .Value which may throw at runtime",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
@@ -305,7 +305,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor NullableMappingApplied = new(
         id: "FKF202",
         title: "Nullable mapping applied",
-        messageFormat: "Member '{0}': nullable mapping applied from '{1}' to '{2}'.",
+        messageFormat: "Member '{0}': nullable mapping applied from '{1}' to '{2}'",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -317,7 +317,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor EnumCastMapping = new(
         id: "FKF210",
         title: "Enum cast mapping",
-        messageFormat: "Member '{0}': enum cast from '{1}' to '{2}'.",
+        messageFormat: "Member '{0}': enum cast from '{1}' to '{2}'",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -329,7 +329,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor EnumNameMapping = new(
         id: "FKF211",
         title: "Enum name-based mapping",
-        messageFormat: "Member '{0}': enum name-based mapping from '{1}' to '{2}'.",
+        messageFormat: "Member '{0}': enum name-based mapping from '{1}' to '{2}'",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -341,7 +341,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor EnumMemberMissing = new(
         id: "FKF212",
         title: "Enum member missing in destination",
-        messageFormat: "Enum member '{0}' in source type '{1}' has no corresponding member in destination type '{2}'.",
+        messageFormat: "Enum member '{0}' in source type '{1}' has no corresponding member in destination type '{2}'",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
@@ -353,7 +353,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor ConverterUsed = new(
         id: "FKF220",
         title: "Type converter used",
-        messageFormat: "Member '{0}': type converter '{1}' was used to convert from '{2}' to '{3}'.",
+        messageFormat: "Member '{0}': type converter '{1}' was used to convert from '{2}' to '{3}'",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -380,7 +380,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor CollectionMapping = new(
         id: "FKF310",
         title: "Collection mapping applied",
-        messageFormat: "Member '{0}': collection mapping from '{1}' to '{2}'.",
+        messageFormat: "Member '{0}': collection mapping from '{1}' to '{2}'",
         category: Category_Nested,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,

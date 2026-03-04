@@ -38,7 +38,7 @@ public sealed class ConstructorIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("new Dest(source.Name, source.Age)", generated);
     }
 
@@ -76,7 +76,7 @@ public sealed class ConstructorIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         // Constructor args
         Assert.Contains("new Dest(source.Name, source.Age)", generated);
         // Additional settable property assigned after construction

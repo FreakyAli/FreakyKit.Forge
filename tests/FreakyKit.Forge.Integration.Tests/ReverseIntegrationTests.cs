@@ -28,7 +28,7 @@ public sealed class ReverseIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("PersonDto ToDto(Person source)", generated);
         Assert.Contains("Person FromDto(PersonDto source)", generated);
     }

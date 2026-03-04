@@ -29,7 +29,7 @@ public sealed class PrivateMethodIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("ToDest(", generated);
         Assert.Contains("__result.Name = source.Name", generated);
     }
@@ -85,7 +85,7 @@ public sealed class PrivateMethodIntegrationTests : IntegrationTestBase
         Assert.Contains(result.AllDiagnostics, d => d.Id == "FKF010");
 
         // Private method is ignored — no method body generated for it
-        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText().ToString()));
+        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText(TestContext.Current.CancellationToken).ToString()));
         Assert.DoesNotContain("ToDest(", generated);
     }
 }

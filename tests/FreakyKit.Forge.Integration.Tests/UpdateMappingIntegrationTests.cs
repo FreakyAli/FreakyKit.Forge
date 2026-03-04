@@ -32,7 +32,7 @@ public sealed class UpdateMappingIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("void Update(Source source, Dest existing)", generated);
         Assert.Contains("existing.Name = source.Name", generated);
         Assert.Contains("existing.Age = source.Age", generated);
@@ -68,7 +68,7 @@ public sealed class UpdateMappingIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText().ToString()));
+        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText(TestContext.Current.CancellationToken).ToString()));
 
         // Create method present
         Assert.Contains("Dest ToDto(Source source)", generated);

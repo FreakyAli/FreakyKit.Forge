@@ -67,7 +67,7 @@ public sealed class ForgeIgnoreIntegrationTests : IntegrationTestBase
         // No FKF100 for Score
         Assert.DoesNotContain(result.AllDiagnostics, d => d.Id == "FKF100");
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("__result.Name = source.Name", generated);
         Assert.DoesNotContain("__result.Score", generated);
     }

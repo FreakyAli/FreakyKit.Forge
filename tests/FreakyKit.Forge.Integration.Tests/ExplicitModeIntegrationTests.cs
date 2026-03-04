@@ -34,7 +34,7 @@ public sealed class ExplicitModeIntegrationTests : IntegrationTestBase
         Assert.Contains(result.AllDiagnostics, d => d.Id == "FKF002");
 
         // Only the attributed method generates code
-        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText().ToString()));
+        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText(TestContext.Current.CancellationToken).ToString()));
         Assert.Contains("ToDestA(", generated);
         Assert.DoesNotContain("ToDestB(", generated);
     }
@@ -63,7 +63,7 @@ public sealed class ExplicitModeIntegrationTests : IntegrationTestBase
         Assert.False(result.HasErrors);
         Assert.True(result.HasGeneratedSource);
 
-        var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
+        var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("__result.Name = source.Name", generated);
         Assert.Contains("__result.Age = source.Age", generated);
     }
@@ -94,7 +94,7 @@ public sealed class ExplicitModeIntegrationTests : IntegrationTestBase
         Assert.Contains(result.AllDiagnostics, d => d.Id == "FKF002");
 
         // The unmarked method should NOT appear in generated code
-        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText().ToString()));
+        var generated = string.Join("\n", result.RunResult.GeneratedTrees.Select(t => t.GetText(TestContext.Current.CancellationToken).ToString()));
         Assert.DoesNotContain("ToDest(", generated);
     }
 }
