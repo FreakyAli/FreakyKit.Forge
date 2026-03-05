@@ -111,6 +111,10 @@ If you're building from source instead of using the NuGet packages, add these pr
 
 The `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"` flags tell MSBuild to treat these as build-time tools rather than runtime dependencies.
 
+### Like what you saw? Want to keep this repo alive?
+
+[![](https://miro.medium.com/max/600/0*wrBJU05A3BULKcWA.gif)](https://www.buymeacoffee.com/FreakyAli)
+
 ## Features
 
 - **Zero reflection** — all mapping code is generated at compile time
@@ -476,12 +480,6 @@ tests/
   FreakyKit.Forge.Generator.Tests/
   FreakyKit.Forge.Integration.Tests/
 ```
-
-## Support the Project
-
-If you find this library useful, consider [buying me a coffee](https://www.buymeacoffee.com/FreakyAli).
-
-[![](https://miro.medium.com/max/600/0*wrBJU05A3BULKcWA.gif)](https://www.buymeacoffee.com/FreakyAli)
 
 ## License
 
