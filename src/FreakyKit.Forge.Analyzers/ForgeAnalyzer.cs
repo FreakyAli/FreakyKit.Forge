@@ -323,33 +323,32 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         if (isUpdate)
         {
             // FKF041: check that dest type has at least one settable member
-            bool hasSettable = destMembers.Values.Any(m =>
-            {
-                // Check if property has a setter
-                foreach (var member in destType.GetMembers())
-                {
-                    if (member is IPropertySymbol prop &&
-                        prop.Name.ToLowerInvariant() == m.Type.Name.ToLowerInvariant())
-                    {
-                        return prop.SetMethod != null;
-                    }
-                }
-                return true; // fields are settable
-            });
-
-            // Simpler check: iterate dest members and check for settable ones
-            hasSettable = false;
+            bool hasSettable = false;
             foreach (var kvp in destMembers)
             {
+                if (kvp.Value.IsField)
+                {
+                    hasSettable = true;
+                    break;
+                }
+
+                // Find the actual property by resolving its effective key (respecting ForgeMap)
                 bool isReadOnly = false;
                 foreach (var member in destType.GetMembers())
                 {
                     if (member is IPropertySymbol prop &&
-                        prop.Name.ToLowerInvariant() == kvp.Key)
+                        !prop.IsStatic &&
+                        !prop.IsIndexer &&
+                        member.DeclaredAccessibility != Accessibility.Private)
                     {
-                        if (prop.SetMethod == null)
-                            isReadOnly = true;
-                        break;
+                        var mapName = GetForgeMapName(prop);
+                        var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
+                        if (effectiveKey == kvp.Key)
+                        {
+                            if (prop.SetMethod == null)
+                                isReadOnly = true;
+                            break;
+                        }
                     }
                 }
                 if (!isReadOnly)

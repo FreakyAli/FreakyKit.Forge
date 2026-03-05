@@ -1,4 +1,3 @@
-
 namespace FreakyKit.Forge.Samples;
 
 /// <summary>

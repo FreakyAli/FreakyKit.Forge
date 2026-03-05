@@ -48,7 +48,7 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Age = source.Age", generated);
-        Assert.DoesNotContain(".Value", generated);
+        Assert.DoesNotContain("source.Age.Value", generated);
     }
 
     [Fact]

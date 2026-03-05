@@ -160,9 +160,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             ? string.Empty
             : type.ContainingNamespace?.ToDisplayString() ?? string.Empty;
 
+        var classAccessibility = AccessibilityToString(type.DeclaredAccessibility);
+
         var classModel = new ForgeClassModel(
             @namespace: ns,
             className: type.Name,
+            accessibility: classAccessibility,
             fullyQualifiedName: type.ToDisplayString(),
             hasErrors: false,
             methods: methodModels);
@@ -237,7 +240,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             bool hasSettable = false;
             foreach (var kvp in destMembers)
             {
-                if (!IsReadOnlyProperty(destType, kvp.Key))
+                if (!IsReadOnlyMember(destType, kvp.Key))
                 {
                     hasSettable = true;
                     break;
@@ -283,7 +286,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 continue;
 
             // Skip read-only properties unless set via constructor
-            if (IsReadOnlyProperty(destType, key))
+            if (IsReadOnlyMember(destType, key))
                 continue;
 
             if (!sourceMembers.TryGetValue(key, out var srcMember))
@@ -472,7 +475,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         foreach (var m in forgeClass.GetMembers().OfType<IMethodSymbol>())
         {
-            if (m.IsStatic && m.IsPartialDefinition && m.ReturnsVoid && m.Name == beforeName)
+            if (m.IsStatic && m.IsPartialDefinition && m.ReturnsVoid && m.Name == beforeName &&
+                m.Parameters.Length == 1 &&
+                m.Parameters[0].RefKind == RefKind.None &&
+                m.Parameters[0].Type.ToDisplayString() == sourceType.ToDisplayString())
             {
                 beforeHookName = beforeName;
                 diagnostics.Add(Diagnostic.Create(
@@ -480,7 +486,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     method.Locations.FirstOrDefault(),
                     beforeName, method.Name));
             }
-            if (m.IsStatic && m.IsPartialDefinition && m.ReturnsVoid && m.Name == afterName)
+            if (m.IsStatic && m.IsPartialDefinition && m.ReturnsVoid && m.Name == afterName &&
+                m.Parameters.Length == 2 &&
+                m.Parameters[0].RefKind == RefKind.None &&
+                m.Parameters[1].RefKind == RefKind.None &&
+                m.Parameters[0].Type.ToDisplayString() == sourceType.ToDisplayString() &&
+                m.Parameters[1].Type.ToDisplayString() == destType.ToDisplayString())
             {
                 afterHookName = afterName;
                 diagnostics.Add(Diagnostic.Create(
@@ -646,7 +657,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             sb.AppendLine("{");
         }
 
-        sb.AppendLine($"    public static partial class {model.ClassName}");
+        sb.AppendLine($"    {model.Accessibility} static partial class {model.ClassName}");
         sb.AppendLine("    {");
 
         foreach (var method in model.Methods)
@@ -860,14 +871,27 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static bool IsReadOnlyProperty(INamedTypeSymbol type, string keyLower)
+    private static bool IsReadOnlyMember(INamedTypeSymbol type, string keyLower)
     {
         foreach (var member in type.GetMembers())
         {
-            if (member is IPropertySymbol prop &&
-                prop.Name.ToLowerInvariant() == keyLower)
+            if (member.IsStatic) continue;
+            if (member.DeclaredAccessibility == Accessibility.Private) continue;
+
+            if (member is IPropertySymbol prop)
             {
-                return prop.SetMethod == null;
+                if (prop.IsIndexer) continue;
+                var mapName = GetForgeMapName(prop);
+                var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
+                if (effectiveKey == keyLower)
+                    return prop.SetMethod == null;
+            }
+            else if (member is IFieldSymbol field)
+            {
+                var mapName = GetForgeMapName(field);
+                var effectiveKey = (mapName ?? field.Name).ToLowerInvariant();
+                if (effectiveKey == keyLower)
+                    return field.IsReadOnly || field.IsConst;
             }
         }
         return false;
@@ -974,6 +998,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         string suffix;
         if (destType is IArrayTypeSymbol)
             suffix = ".ToArray()";
+        else if (IsHashSetType(destType))
+            suffix = ".ToHashSet()";
         else
             suffix = ".ToList()";
 
@@ -1030,6 +1056,18 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         return null;
+    }
+
+    private static bool IsHashSetType(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol named && named.IsGenericType)
+        {
+            var def = named.OriginalDefinition.ToDisplayString();
+            if (def == "System.Collections.Generic.HashSet<T>" ||
+                def == "System.Collections.Generic.ISet<T>")
+                return true;
+        }
+        return false;
     }
 
     private static bool HasForgeIgnoreAttribute(ISymbol member)

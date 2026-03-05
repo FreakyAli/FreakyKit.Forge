@@ -387,6 +387,7 @@ Applied to a `static partial` method. Required in explicit mode, optional in imp
 | `AllowNestedForging` | `bool` | `false` | Allow calling other forge methods for nested type conversions |
 | `MappingStrategy` | `ForgeMapping` | `Cast` | How enum-to-enum mappings are generated |
 | `AllowFlattening` | `bool` | `false` | Flatten nested source properties into flat destination members |
+
 ### `[ForgeIgnore]`
 
 Applied to a property or field. Excludes the member from mapping entirely — no FKF100/FKF101 warnings.
@@ -457,7 +458,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 
 ## Project Structure
 
-```
+```text
 src/
   FreakyKit.Forge/              # Core attributes and enums (NuGet: FreakyKit.Forge)
   FreakyKit.Forge.Generator/    # Roslyn source generator (NuGet: FreakyKit.Forge.Generator)
@@ -472,4 +473,4 @@ tests/
 
 ## License
 
-TBD
+Apache-2.0 — see [LICENSE](LICENSE) for details.

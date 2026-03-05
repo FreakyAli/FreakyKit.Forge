@@ -61,11 +61,15 @@ public abstract class IntegrationTestBase
         // Step 2: Run analyzer on the (potentially augmented) compilation
         var analyzerDiagnostics = RunAnalyzer(generatedCompilation);
 
+        // Step 3: Collect compilation diagnostics to catch invalid generated code
+        var compilationDiagnostics = generatedCompilation.GetDiagnostics();
+
         return new IntegrationResult(
             generatedCompilation,
             runResult,
             generatorDiagnostics,
-            analyzerDiagnostics);
+            analyzerDiagnostics,
+            compilationDiagnostics);
     }
 
     private static ImmutableArray<Diagnostic> RunAnalyzer(Compilation compilation)
@@ -82,23 +86,31 @@ public abstract class IntegrationTestBase
         public GeneratorDriverRunResult RunResult { get; }
         public ImmutableArray<Diagnostic> GeneratorDiagnostics { get; }
         public ImmutableArray<Diagnostic> AnalyzerDiagnostics { get; }
+        public ImmutableArray<Diagnostic> CompilationDiagnostics { get; }
 
         public IEnumerable<Diagnostic> AllDiagnostics =>
             GeneratorDiagnostics.Concat(AnalyzerDiagnostics);
 
-        public bool HasErrors => AllDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
+        public bool HasErrors =>
+            AllDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
+
+        public bool HasCompilationErrors =>
+            CompilationDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
+
         public bool HasGeneratedSource => RunResult.GeneratedTrees.Length > 0;
 
         public IntegrationResult(
             Compilation outputCompilation,
             GeneratorDriverRunResult runResult,
             ImmutableArray<Diagnostic> generatorDiagnostics,
-            ImmutableArray<Diagnostic> analyzerDiagnostics)
+            ImmutableArray<Diagnostic> analyzerDiagnostics,
+            ImmutableArray<Diagnostic> compilationDiagnostics)
         {
             OutputCompilation = outputCompilation;
             RunResult = runResult;
             GeneratorDiagnostics = generatorDiagnostics;
             AnalyzerDiagnostics = analyzerDiagnostics;
+            CompilationDiagnostics = compilationDiagnostics;
         }
     }
 }

@@ -30,7 +30,7 @@ public sealed class NullableIntegrationTests : IntegrationTestBase
         Assert.True(result.HasGeneratedSource);
 
         var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
-        Assert.Contains(".Value", generated);
+        Assert.Contains("source.Value.Value", generated);
     }
 
     [Fact]

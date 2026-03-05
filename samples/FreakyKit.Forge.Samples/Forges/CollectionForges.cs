@@ -1,4 +1,3 @@
-
 namespace FreakyKit.Forge.Samples;
 
 /// <summary>
@@ -8,10 +7,10 @@ namespace FreakyKit.Forge.Samples;
 [Forge]
 public static partial class CollectionForges
 {
-    // List&lt;string&gt; → string[] (same element type, different collection type)
+    // List<string> → string[] (same element type, different collection type)
     public static partial PersonWithOrdersDto ToWithTags(Person source);
 
-    // List&lt;Order&gt; → List&lt;OrderDto&gt; (different element type via nested forge)
+    // List<Order> → List<OrderDto> (different element type via nested forge)
     [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonWithOrderListDto ToWithOrders(Person source);
 

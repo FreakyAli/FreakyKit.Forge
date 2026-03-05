@@ -53,7 +53,8 @@ public abstract class GeneratorTestBase
             .RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out var diagnostics);
 
         var runResult = driver.GetRunResult();
-        return new ForgeRunResult(outputCompilation, runResult, diagnostics);
+        var compilationDiagnostics = outputCompilation.GetDiagnostics();
+        return new ForgeRunResult(outputCompilation, runResult, diagnostics, compilationDiagnostics);
     }
 
     protected static void AssertNoErrors(ForgeRunResult result)
@@ -96,15 +97,21 @@ public abstract class GeneratorTestBase
         public Compilation OutputCompilation { get; }
         public GeneratorDriverRunResult RunResult { get; }
         public ImmutableArray<Diagnostic> Diagnostics { get; }
+        public ImmutableArray<Diagnostic> CompilationDiagnostics { get; }
+
+        public bool HasCompilationErrors =>
+            CompilationDiagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
 
         public ForgeRunResult(
             Compilation compilation,
             GeneratorDriverRunResult runResult,
-            ImmutableArray<Diagnostic> diagnostics)
+            ImmutableArray<Diagnostic> diagnostics,
+            ImmutableArray<Diagnostic> compilationDiagnostics)
         {
             OutputCompilation = compilation;
             RunResult = runResult;
             Diagnostics = diagnostics;
+            CompilationDiagnostics = compilationDiagnostics;
         }
     }
 }

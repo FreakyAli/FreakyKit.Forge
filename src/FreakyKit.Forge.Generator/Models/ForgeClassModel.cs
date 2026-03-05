@@ -10,6 +10,7 @@ internal sealed class ForgeClassModel
 {
     public string Namespace { get; }
     public string ClassName { get; }
+    public string Accessibility { get; }
     public string FullyQualifiedName { get; }
     public bool HasErrors { get; }
     public IReadOnlyList<ForgeMethodModel> Methods { get; }
@@ -17,12 +18,14 @@ internal sealed class ForgeClassModel
     public ForgeClassModel(
         string @namespace,
         string className,
+        string accessibility,
         string fullyQualifiedName,
         bool hasErrors,
         IReadOnlyList<ForgeMethodModel> methods)
     {
         Namespace = @namespace;
         ClassName = className;
+        Accessibility = accessibility;
         FullyQualifiedName = fullyQualifiedName;
         HasErrors = hasErrors;
         Methods = methods;

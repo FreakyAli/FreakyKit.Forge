@@ -231,8 +231,8 @@ public static partial class MyForges
 
 Controls which methods in a forge class are treated as forge methods.
 
-| Value | Value | Description |
-|-------|-------|-------------|
+| Value | Numeric Value | Description |
+|-------|---------------|-------------|
 | `Implicit` | `0` | All properly-shaped static partial methods are forge methods |
 | `Explicit` | `1` | Only `[ForgeMethod]`-decorated methods are forge methods |
 
@@ -254,7 +254,7 @@ A method is a valid forge method candidate if it is:
 
 Controls how enum-to-enum mappings are generated.
 
-| Value | Value | Description |
-|-------|-------|-------------|
+| Value | Numeric Value | Description |
+|-------|---------------|-------------|
 | `Cast` | `0` | Direct cast: `(DestEnum)source.Value`. Works when both enums share the same underlying integer values. |
 | `ByName` | `1` | Switch expression mapping by member name. Safer when enums may have different underlying values. |

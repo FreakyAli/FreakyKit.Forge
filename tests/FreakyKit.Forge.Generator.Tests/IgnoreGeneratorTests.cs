@@ -105,6 +105,9 @@ public sealed class IgnoreGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         // Name is ignored on source, so the constructor can't be satisfied
         // This should result in an error (FKF501 or FKF502)
+        Assert.Contains(result.Diagnostics, d =>
+            d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error &&
+            (d.Id == "FKF501" || d.Id == "FKF502"));
         var generated = result.RunResult.GeneratedTrees;
         Assert.Empty(generated);
     }
