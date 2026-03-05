@@ -1,5 +1,9 @@
 # FreakyKit.Forge
 
+<p align="center">
+  <img src="forge.png" alt="FreakyKit.Forge" width="600" />
+</p>
+
 <div>
    <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget"></a>
    <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge.svg"></a>
@@ -43,6 +47,12 @@ Then just call it:
 ```csharp
 var dto = PersonForges.ToDto(person);
 ```
+
+### Support the Project
+
+If you find this project helpful, consider supporting its development:
+
+[![](https://miro.medium.com/max/600/0*wrBJU05A3BULKcWA.gif)](https://www.buymeacoffee.com/FreakyAli)
 
 ## Installation
 
@@ -110,10 +120,6 @@ If you're building from source instead of using the NuGet packages, add these pr
 ```
 
 The `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"` flags tell MSBuild to treat these as build-time tools rather than runtime dependencies.
-
-### Like what you saw? Want to keep this repo alive?
-
-[![](https://miro.medium.com/max/600/0*wrBJU05A3BULKcWA.gif)](https://www.buymeacoffee.com/FreakyAli)
 
 ## Features
 
