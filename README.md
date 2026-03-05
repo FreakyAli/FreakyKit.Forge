@@ -84,6 +84,7 @@ For other installation options (lightweight, conventions, local development), se
 - **Rich diagnostics** — 31 diagnostics across 7 categories guide you at build time
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
+- **Debugging friendly** — generated code includes `[GeneratedCode]`, `[DebuggerStepThrough]`, `#line` directives, `#pragma warning disable`, and XML doc comments
 
 ## Comparison
 
@@ -106,6 +107,7 @@ For other installation options (lightweight, conventions, local development), se
 | Before/after hooks | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Rich diagnostics | ✅ | ❌ | ✅ | ~ | ✅ |
 | Field support | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Debugging friendly output | ✅ | N/A | ✅ | ~ | ✅ |
 | Implicit + explicit modes | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Performance Benchmarks

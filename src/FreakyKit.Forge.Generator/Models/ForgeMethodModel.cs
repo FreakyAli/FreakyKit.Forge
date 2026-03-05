@@ -22,6 +22,8 @@ internal sealed class ForgeMethodModel
     public string DestParameterName { get; }
     public string? BeforeHookName { get; }
     public string? AfterHookName { get; }
+    public string? SourceFilePath { get; }
+    public int SourceLineNumber { get; }
 
     public ForgeMethodModel(
         string methodName,
@@ -37,7 +39,9 @@ internal sealed class ForgeMethodModel
         ForgeMethodKind methodKind = ForgeMethodKind.Create,
         string destParameterName = "",
         string? beforeHookName = null,
-        string? afterHookName = null)
+        string? afterHookName = null,
+        string? sourceFilePath = null,
+        int sourceLineNumber = 0)
     {
         MethodName = methodName;
         Accessibility = accessibility;
@@ -53,5 +57,7 @@ internal sealed class ForgeMethodModel
         DestParameterName = destParameterName;
         BeforeHookName = beforeHookName;
         AfterHookName = afterHookName;
+        SourceFilePath = sourceFilePath;
+        SourceLineNumber = sourceLineNumber;
     }
 }
