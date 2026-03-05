@@ -1,5 +1,11 @@
 # FreakyKit.Forge
 
+<div>
+   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget"></a>
+   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge.svg"></a>
+   <a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge"></a>
+</div>
+
 A compile-time object mapping library for C# powered by Roslyn source generators. Define your mappings as partial method declarations and Forge generates the implementations at build time — zero reflection, zero runtime overhead.
 
 ## Quick Start
@@ -471,6 +477,22 @@ tests/
   FreakyKit.Forge.Integration.Tests/
 ```
 
+## Support the Project
+
+If you find this library useful, consider [buying me a coffee](https://www.buymeacoffee.com/FreakyAli).
+
+[![](https://miro.medium.com/max/600/0*wrBJU05A3BULKcWA.gif)](https://www.buymeacoffee.com/FreakyAli)
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE) for details.
+
+## Activity
+
+Sparkline:
+
+[![Sparkline](https://stars.medv.io/FreakyAli/FreakyKit.Forge.svg)](https://stars.medv.io/FreakyAli/FreakyKit.Forge)
+
+RepoBeats:
+
+![Alt](https://repobeats.axiom.co/api/embed/4e1dad54a0d67502121ef9d06efa2b3fba64c7a3.svg "Repobeats analytics image")
