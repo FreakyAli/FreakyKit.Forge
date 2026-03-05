@@ -157,6 +157,20 @@ Maps a property or field to a differently-named member on the counterpart type. 
 |-----------|------|-------------|
 | `name` | `string` | The name of the counterpart member to map to/from |
 
+### Properties
+
+#### `DefaultValue` (`object?`, default: `null`)
+
+Provides a fallback value for `Nullable<T>` → `T` mappings. When set, the generator emits `source.Prop ?? defaultValue` instead of `source.Prop.Value`, preventing `InvalidOperationException` at runtime. The `FKF201` warning is suppressed when a default value is provided.
+
+Can be placed on either the source or destination member. Accepts any compile-time constant (numbers, strings, bools, etc.).
+
+```csharp
+public class Source { [ForgeMap("Age", DefaultValue = 0)] public int? Age { get; set; } }
+public class Dest   { public int Age { get; set; } }
+// Generates: __result.Age = source.Age ?? 0;
+```
+
 ### Usage Patterns
 
 **Source-side mapping:** The attribute value names the destination member.

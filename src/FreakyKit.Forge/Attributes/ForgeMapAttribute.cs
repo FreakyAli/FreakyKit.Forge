@@ -15,6 +15,13 @@ public sealed class ForgeMapAttribute : Attribute
     /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// The default value to use when the source is null during a Nullable&lt;T&gt; to T mapping.
+    /// When set, generates <c>source.Prop ?? defaultValue</c> instead of <c>source.Prop.Value</c>,
+    /// preventing InvalidOperationException at runtime.
+    /// </summary>
+    public object? DefaultValue { get; set; }
+
     public ForgeMapAttribute(string name)
     {
         Name = name;

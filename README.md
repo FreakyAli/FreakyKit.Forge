@@ -76,7 +76,7 @@ For other installation options (lightweight, conventions, local development), se
 - **Custom member mapping** — rename members with `[ForgeMap]`
 - **Ignore members** — exclude members with `[ForgeIgnore]`
 - **Type converters** — bridge incompatible types with `[ForgeConverter]`
-- **Nullable handling** — automatic `Nullable<T>` ↔ `T` conversion
+- **Nullable handling** — automatic `Nullable<T>` ↔ `T` conversion with optional default values
 - **Enum mapping** — cast or name-based enum-to-enum conversion
 - **Update mapping** — modify existing objects in place (void return, 2 parameters)
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
@@ -87,24 +87,26 @@ For other installation options (lightweight, conventions, local development), se
 
 ## Comparison
 
+> **Note:** This comparison is based on publicly available documentation at the time of writing. If you spot an inaccuracy, please [open an issue](https://github.com/FreakyAli/FreakyKit.Forge/issues) and we'll correct it.
+
 | Feature | Forge | AutoMapper | Mapperly | Mapster | Facet |
 |---------|:-----:|:----------:|:--------:|:-------:|:-----:|
-| Source generator (compile-time) | Yes | No | Yes | Yes | Yes |
-| Zero runtime dependencies | Yes | No | Yes | No | Yes |
-| Constructor mapping | Yes | Yes | Yes | Yes | Yes |
-| Nested object mapping | Yes | Yes | Yes | Yes | Yes |
-| Collection mapping | Yes | Yes | Yes | Yes | Yes |
-| Flattening | Yes | Yes | Yes | Yes | Yes |
-| Custom member renaming | Yes | Yes | Yes | Yes | Yes |
-| Ignore members | Yes | Yes | Yes | Yes | Yes |
-| Type converters | Yes | Yes | Yes | Yes | Partial |
-| Nullable handling | Yes | Yes | Yes | Yes | Yes |
-| Enum mapping | Yes | Yes | Yes | Yes | Yes |
-| Update existing objects | Yes | Yes | Yes | Yes | Yes |
-| Before/after hooks | Yes | Yes | No | No | Yes |
-| Rich diagnostics | Yes | No | Yes | Partial | Yes |
-| Field support | Yes | Yes | Yes | Yes | No |
-| Implicit + explicit modes | Yes | No | No | No | No |
+| Source generator (compile-time) | ✅ | ❌ | ✅ | ✅ | ✅ |
+| Zero runtime dependencies | ✅ | ❌ | ✅ | ❌ | ✅ |
+| Constructor mapping | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Nested object mapping | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Collection mapping | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Flattening | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Custom member renaming | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Ignore members | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Type converters | ✅ | ✅ | ✅ | ✅ | ~ |
+| Nullable handling | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Enum mapping | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Update existing objects | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Before/after hooks | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Rich diagnostics | ✅ | ❌ | ✅ | ~ | ✅ |
+| Field support | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Implicit + explicit modes | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 ## Performance Benchmarks
 
@@ -114,11 +116,11 @@ Benchmarks coming soon. Forge generates plain C# assignments at compile time wit
 
 | Package | Description |
 |---------|-------------|
-| **FreakyKit.Forge** | Core attributes and enums (`[Forge]`, `[ForgeMethod]`, `[ForgeMap]`, etc.) |
-| **FreakyKit.Forge.Generator** | Roslyn source generator — writes mapping method bodies at compile time |
-| **FreakyKit.Forge.Analyzers** | Roslyn analyzer — 31 diagnostics to validate your declarations at build time |
-| **FreakyKit.Forge.Diagnostics** | Shared diagnostic descriptors for custom Roslyn tooling |
-| **FreakyKit.Forge.Conventions** | Optional naming convention helpers |
+| [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | Core attributes and enums (`[Forge]`, `[ForgeMethod]`, `[ForgeMap]`, etc.) |
+| [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | Roslyn source generator — writes mapping method bodies at compile time |
+| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | Roslyn analyzer — 31 diagnostics to validate your declarations at build time |
+| [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | Shared diagnostic descriptors for custom Roslyn tooling |
+| [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | Optional naming convention helpers |
 
 ## How It Works
 
@@ -283,6 +285,20 @@ Forge automatically handles nullable type differences:
 - `T` → `Nullable<T>`: direct assignment
 - Reference type nullability differences: direct assignment
 
+### Default Values for Nullable Mappings
+
+Use `DefaultValue` on `[ForgeMap]` to provide a fallback instead of `.Value`:
+
+```csharp
+public class Source { [ForgeMap("Age", DefaultValue = 0)] public int? Age { get; set; } }
+public class Dest   { public int Age { get; set; } }
+
+// Generates: __result.Age = source.Age ?? 0;
+// No FKF201 warning — the fallback prevents InvalidOperationException
+```
+
+`DefaultValue` can be placed on either the source or destination member.
+
 ## Enum Mapping
 
 Forge automatically handles enum-to-enum conversions:
@@ -394,6 +410,7 @@ Applied to a property or field. Maps the member to a differently-named counterpa
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `name` | `string` | The name of the counterpart member (or a shared key when used on both sides) |
+| `DefaultValue` | `object?` | Fallback value for `Nullable<T>` → `T` mappings. Generates `??` instead of `.Value` |
 
 ### `[ForgeConverter]`
 

@@ -324,18 +324,30 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 // Nullable-compatible types
                 var paramName = method.Parameters[0].Name;
-                var sourceExpr = nullableKind == NullableConversionKind.UnwrapValue
-                    ? $"{paramName}.{srcMember.Name}.Value"
-                    : $"{paramName}.{srcMember.Name}";
+                var srcSymbol = sourceType.GetMembers().FirstOrDefault(m => m.Name == srcMember.Name);
+                var destSymbol = destType.GetMembers().FirstOrDefault(m => m.Name == destMember.Name);
+                var defaultValue = (srcSymbol != null ? GetForgeDefaultValue(srcSymbol) : null)
+                    ?? (destSymbol != null ? GetForgeDefaultValue(destSymbol) : null);
 
-                if (nullableKind == NullableConversionKind.UnwrapValue)
+                string sourceExpr;
+                if (nullableKind == NullableConversionKind.UnwrapValue && defaultValue != null)
                 {
+                    // Use ?? defaultValue for safe fallback
+                    sourceExpr = $"{paramName}.{srcMember.Name} ?? {FormatLiteral(defaultValue)}";
+                }
+                else if (nullableKind == NullableConversionKind.UnwrapValue)
+                {
+                    sourceExpr = $"{paramName}.{srcMember.Name}.Value";
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.NullableValueTypeMapping,
                         method.Locations.FirstOrDefault(),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
+                }
+                else
+                {
+                    sourceExpr = $"{paramName}.{srcMember.Name}";
                 }
 
                 assignments.Add(new MemberAssignmentModel(
@@ -569,9 +581,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     }
                     else if (TryResolveNullableMapping(src.Type, param.Type, out var nk))
                     {
-                        var expr = nk == NullableConversionKind.UnwrapValue
-                            ? $"{forgeMethod.Parameters[0].Name}.{src.Name}.Value"
-                            : $"{forgeMethod.Parameters[0].Name}.{src.Name}";
+                        var srcSymbol = forgeMethod.Parameters[0].Type.GetMembers().FirstOrDefault(m => m.Name == src.Name);
+                        var defaultVal = srcSymbol != null ? GetForgeDefaultValue(srcSymbol) : null;
+                        string expr;
+                        if (nk == NullableConversionKind.UnwrapValue && defaultVal != null)
+                            expr = $"{forgeMethod.Parameters[0].Name}.{src.Name} ?? {FormatLiteral(defaultVal)}";
+                        else if (nk == NullableConversionKind.UnwrapValue)
+                            expr = $"{forgeMethod.Parameters[0].Name}.{src.Name}.Value";
+                        else
+                            expr = $"{forgeMethod.Parameters[0].Name}.{src.Name}";
                         args.Add(new ConstructorArgModel(param.Name, expr));
                     }
                     else
@@ -1083,6 +1101,35 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         if (attr != null && attr.ConstructorArguments.Length == 1 && attr.ConstructorArguments[0].Value is string name)
             return name;
         return null;
+    }
+
+    private static object? GetForgeDefaultValue(ISymbol member)
+    {
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
+        if (attr == null) return null;
+        foreach (var namedArg in attr.NamedArguments)
+        {
+            if (namedArg.Key == "DefaultValue" && !namedArg.Value.IsNull)
+                return namedArg.Value.Value;
+        }
+        return null;
+    }
+
+    private static string FormatLiteral(object value)
+    {
+        return value switch
+        {
+            string s => $"\"{s.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"",
+            bool b => b ? "true" : "false",
+            char c => $"'{c}'",
+            float f => $"{f}f",
+            double d => $"{d}d",
+            decimal m => $"{m}m",
+            long l => $"{l}L",
+            ulong ul => $"{ul}UL",
+            _ => value.ToString()
+        };
     }
 
     private static bool HasForgeAttribute(IMethodSymbol method)
