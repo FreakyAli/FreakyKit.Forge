@@ -37,4 +37,11 @@ public sealed class ForgeMethodAttribute : Attribute
     /// </summary>
     public bool AllowFlattening { get; set; } = false;
 
+    /// <summary>
+    /// When true, all property assignments are wrapped in a null check:
+    /// the destination member is only assigned when the source value is not null.
+    /// Can be overridden per-member using <see cref="ForgeMapAttribute.IgnoreIfNull"/>.
+    /// </summary>
+    public bool IgnoreIfNull { get; set; } = false;
+
 }

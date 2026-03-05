@@ -214,6 +214,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         bool includeFields = forgeAttr != null && GetBoolNamedArg(forgeAttr, "ShouldIncludeFields");
         bool allowNested = forgeAttr != null && GetBoolNamedArg(forgeAttr, "AllowNestedForging");
         bool allowFlattening = forgeAttr != null && GetBoolNamedArg(forgeAttr, "AllowFlattening");
+        bool methodIgnoreIfNull = forgeAttr != null && GetBoolNamedArg(forgeAttr, "IgnoreIfNull");
         int enumMappingStrategy = GetEnumMappingStrategy(forgeAttr);
 
         if (includeFields)
@@ -313,19 +314,29 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             matchedSourceKeys.Add(key);
 
+            // Determine IgnoreIfNull: per-member overrides method-level
+            var srcSymbolForNull = sourceType.GetMembers().FirstOrDefault(m => m.Name == srcMember.Name);
+            var destSymbolForNull = destType.GetMembers().FirstOrDefault(m => m.Name == destMember.Name);
+            bool memberIgnoreIfNull = (srcSymbolForNull != null && GetForgeIgnoreIfNull(srcSymbolForNull))
+                || (destSymbolForNull != null && GetForgeIgnoreIfNull(destSymbolForNull))
+                || methodIgnoreIfNull;
+            string? nullCheckExpr = memberIgnoreIfNull ? $"{method.Parameters[0].Name}.{srcMember.Name}" : null;
+
             if (srcMember.Type.ToDisplayString() == destMember.Type.ToDisplayString())
             {
                 // Exact type match
                 assignments.Add(new MemberAssignmentModel(
                     destMemberName: destMember.Name,
-                    sourceExpression: $"{method.Parameters[0].Name}.{srcMember.Name}"));
+                    sourceExpression: $"{method.Parameters[0].Name}.{srcMember.Name}",
+                    ignoreIfNull: memberIgnoreIfNull,
+                    nullCheckExpression: nullCheckExpr));
             }
             else if (TryResolveNullableMapping(srcMember.Type, destMember.Type, out var nullableKind))
             {
                 // Nullable-compatible types
                 var paramName = method.Parameters[0].Name;
-                var srcSymbol = sourceType.GetMembers().FirstOrDefault(m => m.Name == srcMember.Name);
-                var destSymbol = destType.GetMembers().FirstOrDefault(m => m.Name == destMember.Name);
+                var srcSymbol = srcSymbolForNull;
+                var destSymbol = destSymbolForNull;
                 var defaultValue = (srcSymbol != null ? GetForgeDefaultValue(srcSymbol) : null)
                     ?? (destSymbol != null ? GetForgeDefaultValue(destSymbol) : null);
 
@@ -352,7 +363,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 assignments.Add(new MemberAssignmentModel(
                     destMemberName: destMember.Name,
-                    sourceExpression: sourceExpr));
+                    sourceExpression: sourceExpr,
+                    ignoreIfNull: memberIgnoreIfNull,
+                    nullCheckExpression: nullCheckExpr));
             }
             else if (srcMember.Type.TypeKind == TypeKind.Enum && destMember.Type.TypeKind == TypeKind.Enum)
             {
@@ -406,7 +419,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     assignments.Add(new MemberAssignmentModel(
                         destMemberName: destMember.Name,
-                        sourceExpression: switchExpr));
+                        sourceExpression: switchExpr,
+                        ignoreIfNull: memberIgnoreIfNull,
+                        nullCheckExpression: nullCheckExpr));
                 }
                 else // Cast (default)
                 {
@@ -421,7 +436,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     assignments.Add(new MemberAssignmentModel(
                         destMemberName: destMember.Name,
-                        sourceExpression: $"({destEnumType.Name}){paramName}.{srcMember.Name}"));
+                        sourceExpression: $"({destEnumType.Name}){paramName}.{srcMember.Name}",
+                        ignoreIfNull: memberIgnoreIfNull,
+                        nullCheckExpression: nullCheckExpr));
                 }
             }
             else if (TryResolveCollectionMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, method, srcMember.Name, out var collectionExpr))
@@ -435,7 +452,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 assignments.Add(new MemberAssignmentModel(
                     destMemberName: destMember.Name,
-                    sourceExpression: collectionExpr));
+                    sourceExpression: collectionExpr,
+                    ignoreIfNull: memberIgnoreIfNull,
+                    nullCheckExpression: nullCheckExpr));
             }
             else if (FindConverterMethod(forgeClass, srcMember.Type, destMember.Type, out var converterName))
             {
@@ -449,7 +468,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 assignments.Add(new MemberAssignmentModel(
                     destMemberName: destMember.Name,
-                    sourceExpression: $"{converterName}({method.Parameters[0].Name}.{srcMember.Name})"));
+                    sourceExpression: $"{converterName}({method.Parameters[0].Name}.{srcMember.Name})",
+                    ignoreIfNull: memberIgnoreIfNull,
+                    nullCheckExpression: nullCheckExpr));
             }
             else
             {
@@ -459,7 +480,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     assignments.Add(new MemberAssignmentModel(
                         destMemberName: destMember.Name,
-                        sourceExpression: $"{nestedMethodName}({method.Parameters[0].Name}.{srcMember.Name})"));
+                        sourceExpression: $"{nestedMethodName}({method.Parameters[0].Name}.{srcMember.Name})",
+                        ignoreIfNull: memberIgnoreIfNull,
+                        nullCheckExpression: nullCheckExpr));
                 }
                 else if (!nestedForgeExists)
                 {
@@ -731,7 +754,14 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Property assignments — assign to the dest parameter directly
             foreach (var assignment in method.Assignments)
             {
-                sb.AppendLine($"{indent}    {method.DestParameterName}.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                if (assignment.IgnoreIfNull && assignment.NullCheckExpression != null)
+                {
+                    sb.AppendLine($"{indent}    if ({assignment.NullCheckExpression} != null) {method.DestParameterName}.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                }
+                else
+                {
+                    sb.AppendLine($"{indent}    {method.DestParameterName}.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                }
             }
 
             // After hook
@@ -768,7 +798,14 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Property assignments
             foreach (var assignment in method.Assignments)
             {
-                sb.AppendLine($"{indent}    __result.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                if (assignment.IgnoreIfNull && assignment.NullCheckExpression != null)
+                {
+                    sb.AppendLine($"{indent}    if ({assignment.NullCheckExpression} != null) __result.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                }
+                else
+                {
+                    sb.AppendLine($"{indent}    __result.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                }
             }
 
             // After hook
@@ -1138,6 +1175,19 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 return namedArg.Value.Value;
         }
         return null;
+    }
+
+    private static bool GetForgeIgnoreIfNull(ISymbol member)
+    {
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
+        if (attr == null) return false;
+        foreach (var namedArg in attr.NamedArguments)
+        {
+            if (namedArg.Key == "IgnoreIfNull" && namedArg.Value.Value is bool b)
+                return b;
+        }
+        return false;
     }
 
     private static string FormatLiteral(object value)

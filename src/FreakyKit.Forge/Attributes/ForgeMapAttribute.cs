@@ -22,6 +22,13 @@ public sealed class ForgeMapAttribute : Attribute
     /// </summary>
     public object? DefaultValue { get; set; }
 
+    /// <summary>
+    /// When true, the assignment is wrapped in a null check: the destination member
+    /// is only assigned when the source value is not null. Useful for update methods
+    /// where you want to preserve existing values when the source is null.
+    /// </summary>
+    public bool IgnoreIfNull { get; set; }
+
     public ForgeMapAttribute(string name)
     {
         Name = name;

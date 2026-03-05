@@ -84,6 +84,7 @@ For other installation options (lightweight, conventions, local development), se
 - **Rich diagnostics** — 31 diagnostics across 7 categories guide you at build time
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
+- **Conditional mapping** — skip assignments when source is null with `IgnoreIfNull`
 - **Debugging friendly** — generated code includes `[GeneratedCode]`, `[DebuggerStepThrough]`, `#line` directives, `#pragma warning disable`, and XML doc comments
 
 ## Comparison
@@ -107,6 +108,7 @@ For other installation options (lightweight, conventions, local development), se
 | Before/after hooks | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Rich diagnostics | ✅ | ❌ | ✅ | ~ | ✅ |
 | Field support | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Conditional mapping (ignore if null) | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Debugging friendly output | ✅ | N/A | ✅ | ~ | ✅ |
 | Implicit + explicit modes | ✅ | ❌ | ❌ | ❌ | ❌ |
 
@@ -301,6 +303,42 @@ public class Dest   { public int Age { get; set; } }
 
 `DefaultValue` can be placed on either the source or destination member.
 
+## Conditional Mapping (Ignore If Null)
+
+Skip assignments when the source value is null. Useful for update methods where you want to preserve existing values.
+
+**Method-level** — applies to all assignments:
+
+```csharp
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(IgnoreIfNull = true)]
+    public static partial void Update(Source source, Dest existing);
+}
+
+// Generates:
+// if (source.Name != null) existing.Name = source.Name;
+// if (source.Age != null) existing.Age = source.Age;
+```
+
+**Per-member** — applies to a specific member via `[ForgeMap]`:
+
+```csharp
+public class Source
+{
+    [ForgeMap("Name", IgnoreIfNull = true)]
+    public string? Name { get; set; }
+    public string? Email { get; set; }
+}
+
+// Generates:
+// if (source.Name != null) __result.Name = source.Name;
+// __result.Email = source.Email;  (no null check)
+```
+
+`IgnoreIfNull` can be placed on `[ForgeMap]` on either the source or destination member, or on `[ForgeMethod]` for method-wide behavior.
+
 ## Enum Mapping
 
 Forge automatically handles enum-to-enum conversions:
@@ -400,6 +438,7 @@ Applied to a `static partial` method. Required in explicit mode, optional in imp
 | `AllowNestedForging` | `bool` | `false` | Allow calling other forge methods for nested type conversions |
 | `MappingStrategy` | `ForgeMapping` | `Cast` | How enum-to-enum mappings are generated |
 | `AllowFlattening` | `bool` | `false` | Flatten nested source properties into flat destination members |
+| `IgnoreIfNull` | `bool` | `false` | Wrap all assignments in null checks — skip when source is null |
 
 ### `[ForgeIgnore]`
 
@@ -413,6 +452,7 @@ Applied to a property or field. Maps the member to a differently-named counterpa
 |-----------|------|-------------|
 | `name` | `string` | The name of the counterpart member (or a shared key when used on both sides) |
 | `DefaultValue` | `object?` | Fallback value for `Nullable<T>` → `T` mappings. Generates `??` instead of `.Value` |
+| `IgnoreIfNull` | `bool` | When true, wraps the assignment in `if (source.X != null)` — skips when source is null |
 
 ### `[ForgeConverter]`
 

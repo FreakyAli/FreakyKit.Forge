@@ -125,6 +125,22 @@ public static partial PersonDto ToDto(Person source);
 // dest.AddressCity = source.Address.City
 ```
 
+#### `IgnoreIfNull` (`bool`, default: `false`)
+
+When true, all property assignments are wrapped in a null check. The destination member is only assigned when the source value is not null. Particularly useful for update methods where you want to preserve existing values when the source field is null.
+
+Can be overridden per-member using `ForgeMapAttribute.IgnoreIfNull`.
+
+```csharp
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(IgnoreIfNull = true)]
+    public static partial void Update(Source source, Dest existing);
+    // Generates: if (source.Name != null) existing.Name = source.Name;
+}
+```
+
 ---
 
 ## `[ForgeIgnore]`
@@ -169,6 +185,18 @@ Can be placed on either the source or destination member. Accepts any compile-ti
 public class Source { [ForgeMap("Age", DefaultValue = 0)] public int? Age { get; set; } }
 public class Dest   { public int Age { get; set; } }
 // Generates: __result.Age = source.Age ?? 0;
+```
+
+#### `IgnoreIfNull` (`bool`, default: `false`)
+
+When true, the assignment for this member is wrapped in a null check: the destination member is only assigned when the source value is not null. Useful for update methods where you want to preserve existing values.
+
+Can be placed on either the source or destination member. Overrides the method-level `IgnoreIfNull` setting (per-member takes priority).
+
+```csharp
+public class Source { [ForgeMap("Name", IgnoreIfNull = true)] public string? Name { get; set; } }
+public class Dest   { public string Name { get; set; } = ""; }
+// Generates: if (source.Name != null) __result.Name = source.Name;
 ```
 
 ### Usage Patterns
