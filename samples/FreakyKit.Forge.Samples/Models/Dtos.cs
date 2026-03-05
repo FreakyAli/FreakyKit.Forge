@@ -122,15 +122,6 @@ public class EventDto
     public double Duration { get; set; }            // TimeSpan → double via converter
 }
 
-// Reverse mapping destination
-public class PersonReverseDto
-{
-    public string FirstName { get; set; } = "";
-    public string LastName { get; set; } = "";
-    public int Age { get; set; }
-    public string Email { get; set; } = "";
-}
-
 // Update mapping destination
 public class PersonMutableDto
 {

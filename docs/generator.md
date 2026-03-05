@@ -4,7 +4,7 @@ The FreakyKit.Forge source generator (`FreakyKit.Forge.Generator`) is a Roslyn i
 
 ## Pipeline
 
-1. **Discovery** — finds all `static partial class` types decorated with `[ForgeClass]`
+1. **Discovery** — finds all `static partial class` types decorated with `[Forge]`
 2. **Extraction** — for each forge class, collects valid forge methods and extracts their mapping models
 3. **Validation** — emits diagnostics for errors and warnings
 4. **Generation** — if no errors exist for a forge class, generates the partial method implementations
@@ -38,7 +38,7 @@ No construction or return statement is generated — members are assigned direct
 Members are matched between source and destination types by **name** (case-insensitive). Only public, non-static, instance members are considered:
 
 - **Properties** are always included
-- **Fields** are included only when `IncludeFields = true` on `[Forge]`
+- **Fields** are included only when `ShouldIncludeFields = true` on `[ForgeMethod]`
 - **Indexers** are excluded
 - **Private members** are excluded
 
@@ -149,7 +149,7 @@ When `AllowFlattening = true` and a destination member has no direct match, the 
 2. If so, look for a **property** on `S`'s type whose name matches the remainder
 3. Generate: `__result.AddressCity = source.Address.City`
 
-Only one level of nesting is supported. Flattening only traverses **properties** on intermediate types — fields are not considered, even when `IncludeFields = true`.
+Only one level of nesting is supported. Flattening only traverses **properties** on intermediate types — fields are not considered, even when `ShouldIncludeFields = true`.
 
 ## Nested Forging
 
@@ -201,31 +201,6 @@ public static partial void Update(Person source, PersonDto existing)
 }
 ```
 
-## Reverse Mapping
-
-When `GenerateReverse = true` on `[Forge]`, the generator creates a second method that maps from destination back to source. The reverse method uses the name specified in `ReverseName`.
-
-```csharp
-[Forge(GenerateReverse = true, ReverseName = "FromDto")]
-public static partial PersonDto ToDto(Person source);
-// Generates both ToDto and FromDto methods
-```
-
-### Limitations
-
-The reverse method is a simplified mapping. It does **not** inherit the forward method's configuration:
-
-- **Fields excluded** — `IncludeFields` is always `false` regardless of the forward method's setting
-- **No nested forging** — only direct type matches and nullable conversions are handled
-- **No flattening** — `AllowFlattening` is not applied
-- **No enum mapping** — `EnumMappingStrategy` is not applied
-- **No collection mapping** — collection members are silently skipped
-- **No hooks** — before/after hooks are not scanned or emitted
-- **No diagnostics for unmatched members** — unmatched members are silently skipped (no FKF100/FKF101)
-- **Hardcoded parameter name** — the reverse method always uses `source` as its parameter name
-
-For complex reverse mappings that need these features, write a separate forward forge method instead.
-
 ## Generated File
 
 For each forge class, the generator produces a single `.g.cs` file containing:
@@ -235,7 +210,7 @@ For each forge class, the generator produces a single `.g.cs` file containing:
 - `using System;`
 - `using System.Linq;`
 - The partial class in the same namespace as the original
-- All forge method implementations (including reverse methods)
+- All forge method implementations
 
 The file is named `{FullyQualifiedClassName}.Forge.g.cs` (with `.`, `<`, and `>` replaced by underscores).
 

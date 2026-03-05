@@ -7,7 +7,7 @@ namespace FreakyKit.Forge.Integration.Tests;
 public sealed class FieldIntegrationTests : IntegrationTestBase
 {
     [Fact]
-    public void E2E_IncludeFields_MapsFieldsAndProperties()
+    public void E2E_ShouldIncludeFields_MapsFieldsAndProperties()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -24,10 +24,10 @@ public sealed class FieldIntegrationTests : IntegrationTestBase
                     public int Score;
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -44,7 +44,7 @@ public sealed class FieldIntegrationTests : IntegrationTestBase
     }
 
     [Fact]
-    public void E2E_IncludeFields_EmitsFKF401Info()
+    public void E2E_ShouldIncludeFields_EmitsFKF401Info()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -61,10 +61,10 @@ public sealed class FieldIntegrationTests : IntegrationTestBase
                     public int Score;
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -78,7 +78,7 @@ public sealed class FieldIntegrationTests : IntegrationTestBase
     }
 
     [Fact]
-    public void E2E_WithoutIncludeFields_FieldsIgnored()
+    public void E2E_WithoutShouldIncludeFields_FieldsIgnored()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -95,7 +95,7 @@ public sealed class FieldIntegrationTests : IntegrationTestBase
                     public int Score;
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

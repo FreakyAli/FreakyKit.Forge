@@ -15,10 +15,10 @@ public sealed class FlatteningTests : AnalyzerTestBase
                 public class Source  { public Address Address { get; set; } = new(); }
                 public class Dest    { public string AddressCity { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(AllowFlattening = true)]
+                    [ForgeMethod(AllowFlattening = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -38,7 +38,7 @@ public sealed class FlatteningTests : AnalyzerTestBase
                 public class Source  { public Address Address { get; set; } = new(); }
                 public class Dest    { public string AddressCity { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -60,10 +60,10 @@ public sealed class FlatteningTests : AnalyzerTestBase
                 public class Source  { public Address Address { get; set; } = new(); }
                 public class Dest    { public string AddressZipCode { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(AllowFlattening = true)]
+                    [ForgeMethod(AllowFlattening = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }

@@ -23,7 +23,7 @@ public sealed class MemberDiscoveryTests : AnalyzerTestBase
                     public int score;
                 }
                 public class Dest { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -42,7 +42,7 @@ public sealed class MemberDiscoveryTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -53,7 +53,7 @@ public sealed class MemberDiscoveryTests : AnalyzerTestBase
     // ─── FKF401: Fields enabled ───────────────────────────────────────────────
 
     [Fact]
-    public void FKF401_IncludeFields_EmitsInfo()
+    public void FKF401_ShouldIncludeFields_EmitsInfo()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -61,10 +61,10 @@ public sealed class MemberDiscoveryTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -74,14 +74,14 @@ public sealed class MemberDiscoveryTests : AnalyzerTestBase
     }
 
     [Fact]
-    public void FKF401_IncludeFieldsFalse_NoInfo() =>
+    public void FKF401_ShouldIncludeFieldsFalse_NoInfo() =>
         AssertNotContainsDiagnostic("""
             using FreakyKit.Forge;
             namespace TestNs
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

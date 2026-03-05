@@ -5,9 +5,9 @@ namespace FreakyKit.Forge.Samples;
 /// Flattening maps nested source properties to flat destination members.
 /// source.HomeAddress.City → result.HomeAddressCity (prefix match, one level deep).
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class FlatteningForges
 {
-    [Forge(AllowFlattening = true)]
+    [ForgeMethod(AllowFlattening = true)]
     public static partial PersonFlatDto ToFlatDto(Person source);
 }

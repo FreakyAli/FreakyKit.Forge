@@ -10,7 +10,7 @@ using FreakyKit.Forge;
 public class Person    { public string Name { get; set; } public int Age { get; set; } }
 public class PersonDto { public string Name { get; set; } public int Age { get; set; } }
 
-[ForgeClass]
+[Forge]
 public static partial class PersonForges
 {
     public static partial PersonDto ToDto(Person source);
@@ -44,7 +44,7 @@ FreakyKit.Forge is split into independent NuGet packages — install only what y
 
 ### Recommended: Code Generation + Build-Time Validation
 
-Install both the generator and the analyzer. The generator writes your mapping method bodies at compile time. The analyzer validates your declarations and reports 32 diagnostics (errors, warnings, and info messages) to catch mistakes before you run.
+Install both the generator and the analyzer. The generator writes your mapping method bodies at compile time. The analyzer validates your declarations and reports 31 diagnostics (errors, warnings, and info messages) to catch mistakes before you run.
 
 ```xml
 <ItemGroup>
@@ -81,7 +81,7 @@ Install the diagnostics package directly only if you are building your own Rosly
 
 | Package | What It Does | Install When |
 |---------|-------------|-------------|
-| **FreakyKit.Forge** | Core attributes and enums (`[ForgeClass]`, `[Forge]`, `[ForgeMap]`, etc.) | Installed automatically by Generator, Analyzers, or Conventions |
+| **FreakyKit.Forge** | Core attributes and enums (`[Forge]`, `[ForgeMethod]`, `[ForgeMap]`, etc.) | Installed automatically by Generator, Analyzers, or Conventions |
 | **FreakyKit.Forge.Generator** | Roslyn source generator — writes mapping method bodies at compile time | You want compile-time code generation |
 | **FreakyKit.Forge.Analyzers** | Roslyn analyzer — validates declarations and reports diagnostics at build time | You want build-time warnings and errors for your forge declarations |
 | **FreakyKit.Forge.Diagnostics** | Shared diagnostic descriptors | You are building custom Roslyn tooling on top of Forge |
@@ -119,16 +119,15 @@ The `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"` flags tell
 - **Nullable handling** — automatic `Nullable<T>` ↔ `T` conversion
 - **Enum mapping** — cast or name-based enum-to-enum conversion
 - **Update mapping** — modify existing objects in place (void return, 2 parameters)
-- **Reverse mapping** — auto-generate the reverse direction with `GenerateReverse = true`
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
-- **Rich diagnostics** — 32 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 31 diagnostics across 7 categories guide you at build time
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
 
 ## How It Works
 
-1. Mark a `static partial class` with `[ForgeClass]`
+1. Mark a `static partial class` with `[Forge]`
 2. Declare `static partial` methods that take a source type and return a destination type
 3. The source generator matches members by name (case-insensitive) and generates the mapping body
 4. The analyzer validates your declarations and reports warnings/errors at build time
@@ -181,12 +180,12 @@ public class Dest
 When source and destination have members with the same name but different types, you can compose mappings:
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class PersonForges
 {
     public static partial AddressDto ToAddressDto(Address source);
 
-    [Forge(AllowNestedForging = true)]
+    [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonDto ToDto(Person source);
 }
 
@@ -209,7 +208,7 @@ public class Dest   { public int[] Values { get; set; } = Array.Empty<int>(); }
 When element types differ and a forge method exists, use `AllowNestedForging = true`:
 
 ```csharp
-[Forge(AllowNestedForging = true)]
+[ForgeMethod(AllowNestedForging = true)]
 public static partial PersonDto ToDto(Person source);
 public static partial AddressDto ToAddressDto(Address source);
 
@@ -225,7 +224,7 @@ public class Source { public Address Address { get; set; } }
 public class Address { public string City { get; set; } }
 public class Dest { public string AddressCity { get; set; } }
 
-[Forge(AllowFlattening = true)]
+[ForgeMethod(AllowFlattening = true)]
 public static partial Dest ToDest(Source source);
 
 // Generates: __result.AddressCity = source.Address.City;
@@ -268,7 +267,7 @@ public class Source
 Use `[ForgeConverter]` on a static method to bridge incompatible types:
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class MyForges
 {
     public static partial Dest ToDest(Source source);
@@ -295,44 +294,22 @@ Forge automatically handles enum-to-enum conversions:
 
 ```csharp
 // Default: cast mapping
-[Forge(EnumMappingStrategy = ForgeEnumMapping.Cast)]
+[ForgeMethod(MappingStrategy = ForgeMapping.Cast)]
 public static partial Dest ToDest(Source source);
 // Generates: __result.Status = (DestStatus)source.Status;
 
 // Name-based mapping (safer when underlying values differ)
-[Forge(EnumMappingStrategy = ForgeEnumMapping.ByName)]
+[ForgeMethod(MappingStrategy = ForgeMapping.ByName)]
 public static partial Dest ToDest(Source source);
 // Generates: __result.Status = source.Status switch { ... };
 ```
-
-## Reverse Mapping
-
-Automatically generate the reverse direction:
-
-```csharp
-[Forge(GenerateReverse = true, ReverseName = "FromDto")]
-public static partial PersonDto ToDto(Person source);
-
-// Also generates: public static partial Person FromDto(PersonDto source);
-```
-
-### Reverse Mapping Limitations
-
-The reverse method is a simplified mapping that only handles direct member matches and nullable conversions. It does **not** inherit options from the forward method:
-
-- Fields are always excluded (`IncludeFields` is not carried over)
-- No nested forging, flattening, enum mapping, or collection mapping
-- No before/after hooks
-- Unmatched members are silently skipped (no FKF100/FKF101 diagnostics)
-
-For complex reverse mappings, write a separate forward forge method instead of using `GenerateReverse`.
 
 ## Before/After Hooks
 
 Add custom logic before or after mapping using convention-based partial methods:
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class PersonForges
 {
     public static partial PersonDto ToDto(Person source);
@@ -350,7 +327,7 @@ public static partial class PersonForges
 For update methods (void return, 2 parameters), the hook signatures use the destination parameter directly:
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class PersonForges
 {
     public static partial void Update(Person source, PersonDto existing);
@@ -368,7 +345,7 @@ public static partial class PersonForges
 **Implicit mode** (default) — all properly-shaped partial methods in the class are treated as forge methods:
 
 ```csharp
-[ForgeClass] // Mode = ForgeMode.Implicit is the default
+[Forge] // Mode = ForgeMode.Implicit is the default
 public static partial class MyForges
 {
     public static partial Dest ToDest(Source source);     // forged
@@ -376,13 +353,13 @@ public static partial class MyForges
 }
 ```
 
-**Explicit mode** — only methods decorated with `[Forge]` are treated as forge methods:
+**Explicit mode** — only methods decorated with `[ForgeMethod]` are treated as forge methods:
 
 ```csharp
-[ForgeClass(Mode = ForgeMode.Explicit)]
+[Forge(Mode = ForgeMode.Explicit)]
 public static partial class MyForges
 {
-    [Forge]
+    [ForgeMethod]
     public static partial Dest ToDest(Source source);     // forged
 
     public static partial Other ToOther(Source source);   // ignored (FKF002 warning)
@@ -391,28 +368,25 @@ public static partial class MyForges
 
 ## Attribute Reference
 
-### `[ForgeClass]`
+### `[Forge]`
 
 Applied to a `static partial class`. Marks it as a forge class.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
 | `Mode` | `ForgeMode` | `Implicit` | Controls which methods are treated as forge methods |
-| `IncludePrivateMethods` | `bool` | `false` | When true, private forge methods are included |
+| `ShouldIncludePrivate` | `bool` | `false` | When true, private forge methods are included |
 
-### `[Forge]`
+### `[ForgeMethod]`
 
 Applied to a `static partial` method. Required in explicit mode, optional in implicit mode.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `IncludeFields` | `bool` | `false` | Include fields in member discovery |
+| `ShouldIncludeFields` | `bool` | `false` | Include fields in member discovery |
 | `AllowNestedForging` | `bool` | `false` | Allow calling other forge methods for nested type conversions |
-| `EnumMappingStrategy` | `ForgeEnumMapping` | `Cast` | How enum-to-enum mappings are generated |
+| `MappingStrategy` | `ForgeMapping` | `Cast` | How enum-to-enum mappings are generated |
 | `AllowFlattening` | `bool` | `false` | Flatten nested source properties into flat destination members |
-| `GenerateReverse` | `bool` | `false` | Generate a reverse mapping method |
-| `ReverseName` | `string` | `""` | Name of the reverse method (required when `GenerateReverse` is true) |
-
 ### `[ForgeIgnore]`
 
 Applied to a property or field. Excludes the member from mapping entirely — no FKF100/FKF101 warnings.
@@ -434,9 +408,9 @@ Applied to a `static` method. Marks it as a type converter. The method must take
 | Value | Description |
 |-------|-------------|
 | `Implicit` | All properly-shaped partial methods are forge methods |
-| `Explicit` | Only `[Forge]`-decorated methods are forge methods |
+| `Explicit` | Only `[ForgeMethod]`-decorated methods are forge methods |
 
-### `ForgeEnumMapping`
+### `ForgeMapping`
 
 | Value | Description |
 |-------|-------------|
@@ -459,7 +433,6 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF041 | Error | Update destination has no settable members |
 | FKF050 | Info | Before hook detected |
 | FKF051 | Info | After hook detected |
-| FKF060 | Info | Reverse method generated |
 | FKF100 | Warning | Destination member has no source match |
 | FKF101 | Warning | Source member unused |
 | FKF102 | Info | Member ignored via [ForgeIgnore] |

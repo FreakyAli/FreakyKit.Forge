@@ -14,7 +14,7 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
                 public class Source { public int? Age { get; set; } }
                 public class Dest   { public int  Age { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -37,7 +37,7 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
                 public class Source { public int  Age { get; set; } }
                 public class Dest   { public int? Age { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -65,7 +65,7 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
                     public Dest(int age) { Age = age; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -89,7 +89,7 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; public int? Score { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int  Score { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

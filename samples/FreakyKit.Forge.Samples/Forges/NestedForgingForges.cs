@@ -5,10 +5,10 @@ namespace FreakyKit.Forge.Samples;
 /// Nested forging: when source and destination have different nested types,
 /// the generator calls another forge method in the same class to convert them.
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class NestedForgingForges
 {
-    [Forge(AllowNestedForging = true)]
+    [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonWithAddressDto ToWithAddress(Person source);
 
     // This method is called automatically for HomeAddress: Address → AddressDto

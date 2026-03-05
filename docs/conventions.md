@@ -58,7 +58,7 @@ Before and after hooks follow a convention-based naming pattern:
 - **After hook:** `OnAfter{MethodName}` — e.g., `OnAfterToDto`
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class PersonForges
 {
     public static partial PersonDto ToDto(Person source);

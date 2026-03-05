@@ -4,7 +4,7 @@ namespace FreakyKit.Forge;
 /// Controls how enum-to-enum mappings are generated when source and destination
 /// have members with the same name but different enum types.
 /// </summary>
-public enum ForgeEnumMapping
+public enum ForgeMapping
 {
     /// <summary>
     /// Generates a direct cast: <c>(DestEnum)source.Value</c>.

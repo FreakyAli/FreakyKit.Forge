@@ -4,7 +4,7 @@ The FreakyKit.Forge analyzer (`FreakyKit.Forge.Analyzers`) is a Roslyn diagnosti
 
 ## What It Checks
 
-The analyzer validates every `[ForgeClass]`-decorated static partial class and its forge methods.
+The analyzer validates every `[Forge]`-decorated static partial class and its forge methods.
 
 ### Class-Level Checks
 
@@ -17,21 +17,20 @@ The analyzer validates every `[ForgeClass]`-decorated static partial class and i
 
 | Check | Diagnostic |
 |-------|-----------|
-| Method has forge shape but no `[Forge]` in explicit mode | FKF002 (Warning) |
-| Private forge method without `IncludePrivateMethods` | FKF010 (Warning) |
+| Method has forge shape but no `[ForgeMethod]` in explicit mode | FKF002 (Warning) |
+| Private forge method without `ShouldIncludePrivate` | FKF010 (Warning) |
 | Method has an implementation body | FKF020 (Error) |
 | Duplicate forge method names (overloading) | FKF030 (Error) |
 | Update method shape detected | FKF040 (Info) |
 | Update destination has no settable members | FKF041 (Error) |
 | Before hook detected | FKF050 (Info) |
 | After hook detected | FKF051 (Info) |
-| Reverse method generated | FKF060 (Info) |
 
 ### Member-Level Checks
 
 | Check | Diagnostic |
 |-------|-----------|
-| Public field excluded (IncludeFields = false) | FKF400 (Warning) |
+| Public field excluded (ShouldIncludeFields = false) | FKF400 (Warning) |
 | Fields enabled on method | FKF401 (Info) |
 | Member excluded via `[ForgeIgnore]` | FKF102 (Info) — reserved, not currently emitted |
 | Custom mapping via `[ForgeMap]` | FKF103 (Info) — reserved, not currently emitted |

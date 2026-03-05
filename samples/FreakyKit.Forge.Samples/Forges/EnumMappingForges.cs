@@ -6,13 +6,13 @@ namespace FreakyKit.Forge.Samples;
 /// - Cast (default): (DestEnum)source.Value
 /// - ByName: switch expression matching by member name
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class EnumMappingForges
 {
     // Default cast strategy
     public static partial PersonWithStatusDto ToCastDto(Person source);
 
     // ByName strategy — generates a switch expression
-    [Forge(EnumMappingStrategy = ForgeEnumMapping.ByName)]
+    [ForgeMethod(MappingStrategy = ForgeMapping.ByName)]
     public static partial PersonWithStatusDto ToByNameDto(Person source);
 }

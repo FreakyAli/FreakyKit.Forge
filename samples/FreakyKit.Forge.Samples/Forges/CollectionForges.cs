@@ -5,14 +5,14 @@ namespace FreakyKit.Forge.Samples;
 /// Collection mapping: List → array uses .ToArray(), others use .ToList().
 /// For different element types, combine with AllowNestedForging.
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class CollectionForges
 {
     // List&lt;string&gt; → string[] (same element type, different collection type)
     public static partial PersonWithOrdersDto ToWithTags(Person source);
 
     // List&lt;Order&gt; → List&lt;OrderDto&gt; (different element type via nested forge)
-    [Forge(AllowNestedForging = true)]
+    [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonWithOrderListDto ToWithOrders(Person source);
 
     public static partial OrderDto ToOrderDto(Order source);

@@ -5,14 +5,14 @@ namespace FreakyKit.Forge.Generator.Tests;
 /// <summary>
 /// Tests for private method handling in the source generator.
 /// Verifies that private methods are skipped by default and included when
-/// IncludePrivateMethods = true on [ForgeClass].
+/// ShouldIncludePrivate = true on [Forge].
 /// </summary>
 public sealed class PrivateMethodGeneratorTests : GeneratorTestBase
 {
     [Fact]
     public void PrivateMethod_SkippedByDefault()
     {
-        // Private forge method without IncludePrivateMethods = true should be skipped.
+        // Private forge method without ShouldIncludePrivate = true should be skipped.
         // The generator still emits the class wrapper, but the method body is not generated.
         const string source = """
             using FreakyKit.Forge;
@@ -21,7 +21,7 @@ public sealed class PrivateMethodGeneratorTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     private static partial Dest ToDest(Source source);
@@ -45,7 +45,7 @@ public sealed class PrivateMethodGeneratorTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(IncludePrivateMethods = true)]
+                [Forge(ShouldIncludePrivate = true)]
                 public static partial class MyForges
                 {
                     private static partial Dest ToDest(Source source);
@@ -72,7 +72,7 @@ public sealed class PrivateMethodGeneratorTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass(IncludePrivateMethods = true)]
+                [Forge(ShouldIncludePrivate = true)]
                 public static partial class MyForges
                 {
                     private static partial Dest ToDest(Source source);
@@ -103,7 +103,7 @@ public sealed class PrivateMethodGeneratorTests : GeneratorTestBase
                 public class B    { public int Y { get; set; } }
                 public class BDto { public int Y { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial ADto ToADto(A source);
@@ -133,7 +133,7 @@ public sealed class PrivateMethodGeneratorTests : GeneratorTestBase
                 public class B    { public int Y { get; set; } }
                 public class BDto { public int Y { get; set; } }
 
-                [ForgeClass(IncludePrivateMethods = true)]
+                [Forge(ShouldIncludePrivate = true)]
                 public static partial class MyForges
                 {
                     public static partial ADto ToADto(A source);

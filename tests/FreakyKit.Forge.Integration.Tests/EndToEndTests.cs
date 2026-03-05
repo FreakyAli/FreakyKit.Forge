@@ -19,7 +19,7 @@ public sealed class EndToEndTests : IntegrationTestBase
                 public class Person    { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class PersonDto { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class PersonForges
                 {
                     public static partial PersonDto ToDto(Person source);
@@ -48,7 +48,7 @@ public sealed class EndToEndTests : IntegrationTestBase
                 public class Source { public int    Value { get; set; } }
                 public class Dest   { public string Value { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -72,7 +72,7 @@ public sealed class EndToEndTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; public int Extra { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -102,13 +102,13 @@ public sealed class EndToEndTests : IntegrationTestBase
                 public class B    { public int Y { get; set; } }
                 public class BDto { public int Y { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class AForges
                 {
                     public static partial ADto ToDto(A source);
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class BForges
                 {
                     public static partial BDto ToDto(B source);
@@ -134,12 +134,12 @@ public sealed class EndToEndTests : IntegrationTestBase
                 public class Person     { public string Name { get; set; } = ""; public Address    Home { get; set; } = new(); }
                 public class PersonDto  { public string Name { get; set; } = ""; public AddressDto Home { get; set; } = new(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class PersonForges
                 {
                     public static partial AddressDto ToAddressDto(Address source);
 
-                    [Forge(AllowNestedForging = true)]
+                    [ForgeMethod(AllowNestedForging = true)]
                     public static partial PersonDto ToDto(Person source);
                 }
             }
@@ -164,13 +164,13 @@ public sealed class EndToEndTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial Dest ToDestExplicit(Source source);
 
-                    // No [Forge] — should be ignored, not generate, emit FKF002
+                    // No [ForgeMethod] — should be ignored, not generate, emit FKF002
                     public static partial Dest ToDestIgnored(Source source);
                 }
             }
@@ -202,7 +202,7 @@ public sealed class EndToEndTests : IntegrationTestBase
                     public Dest(string name, int age) { Name = name; Age = age; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -231,7 +231,7 @@ public sealed class EndToEndTests : IntegrationTestBase
                     public string Name { get; set; } = "";
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

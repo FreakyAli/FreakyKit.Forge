@@ -7,7 +7,7 @@ namespace FreakyKit.Forge.Integration.Tests;
 public sealed class PrivateMethodIntegrationTests : IntegrationTestBase
 {
     [Fact]
-    public void E2E_IncludePrivateMethods_GeneratesPrivateMethodBody()
+    public void E2E_ShouldIncludePrivate_GeneratesPrivateMethodBody()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -16,7 +16,7 @@ public sealed class PrivateMethodIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(IncludePrivateMethods = true)]
+                [Forge(ShouldIncludePrivate = true)]
                 public static partial class MyForges
                 {
                     static partial Dest ToDest(Source source);
@@ -35,7 +35,7 @@ public sealed class PrivateMethodIntegrationTests : IntegrationTestBase
     }
 
     [Fact]
-    public void E2E_IncludePrivateMethods_EmitsFKF011Info()
+    public void E2E_ShouldIncludePrivate_EmitsFKF011Info()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -44,7 +44,7 @@ public sealed class PrivateMethodIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(IncludePrivateMethods = true)]
+                [Forge(ShouldIncludePrivate = true)]
                 public static partial class MyForges
                 {
                     static partial Dest ToDest(Source source);
@@ -69,7 +69,7 @@ public sealed class PrivateMethodIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     static partial Dest ToDest(Source source);

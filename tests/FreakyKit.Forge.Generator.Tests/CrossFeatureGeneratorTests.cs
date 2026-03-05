@@ -21,7 +21,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; public List<int> Values { get; set; } = new(); }
                 public class Dest   { public string Name { get; set; } = ""; public int[] Values { get; set; } = System.Array.Empty<int>(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void ApplyUpdate(Source source, Dest target);
@@ -54,7 +54,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                 public class Source { public Status? Status { get; set; } }
                 public class Dest   { public Status  Status { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -79,7 +79,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                 public class Source { public Status  Status { get; set; } }
                 public class Dest   { public Status? Status { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -117,7 +117,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                     public int Age { get; set; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -138,38 +138,6 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
-    public void Reverse_WithNullableProperty()
-    {
-        // Reverse mapping where source has a nullable int and dest has non-nullable int.
-        // The forward direction should use .Value, and the reverse should do direct assignment.
-        const string source = """
-            using FreakyKit.Forge;
-            namespace TestNs
-            {
-                public class Person    { public string Name { get; set; } = ""; public int? Score { get; set; } }
-                public class PersonDto { public string Name { get; set; } = ""; public int  Score { get; set; } }
-
-                [ForgeClass]
-                public static partial class MyForges
-                {
-                    [Forge(GenerateReverse = true, ReverseName = "FromDto")]
-                    public static partial PersonDto ToDto(Person source);
-                }
-            }
-            """;
-
-        var result = RunGenerator(source);
-        AssertNoErrors(result);
-
-        var generated = AssertSingleGeneratedFile(result);
-        // Forward: Person -> PersonDto (nullable int? -> int uses .Value)
-        Assert.Contains("PersonDto ToDto(Person source)", generated);
-        Assert.Contains("source.Score.Value", generated);
-        // Reverse: PersonDto -> Person (int -> int? is direct assignment)
-        Assert.Contains("Person FromDto(PersonDto source)", generated);
-    }
-
-    [Fact]
     public void CollectionWithNestedForge_AndRegularProps()
     {
         // Collection of complex types with nested forging, combined with regular property mapping.
@@ -183,10 +151,10 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                 public class Source  { public string Title { get; set; } = ""; public int Count { get; set; } public List<Item> Items { get; set; } = new(); }
                 public class Dest    { public string Title { get; set; } = ""; public int Count { get; set; } public List<ItemDto> Items { get; set; } = new(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(AllowNestedForging = true)]
+                    [ForgeMethod(AllowNestedForging = true)]
                     public static partial Dest ToDest(Source source);
                     public static partial ItemDto ToItemDto(Item source);
                 }
@@ -218,7 +186,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                 public class Source { public DateTime Created { get; set; } public SourceKind Kind { get; set; } }
                 public class Dest   { public string Created { get; set; } = ""; public DestKind Kind { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -242,7 +210,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
     [Fact]
     public void ExplicitMode_WithFieldsAndForgeMap()
     {
-        // Explicit mode + IncludeFields + ForgeMap all on the same forge method.
+        // Explicit mode + ShouldIncludeFields + ForgeMap all on the same forge method.
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
@@ -259,10 +227,10 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                     public string FullName { get; set; } = "";
                 }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -272,7 +240,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
 
         var generated = AssertSingleGeneratedFile(result);
-        // Field included because IncludeFields = true
+        // Field included because ShouldIncludeFields = true
         Assert.Contains("__result.Tag = source.Tag", generated);
         // ForgeMap applied: First -> FullName
         Assert.Contains("__result.FullName = source.First", generated);
@@ -290,10 +258,10 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
                 public class Source  { public int? Score { get; set; } public Address Address { get; set; } = new(); }
                 public class Dest    { public int  Score { get; set; } public string AddressCity { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(AllowFlattening = true)]
+                    [ForgeMethod(AllowFlattening = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }

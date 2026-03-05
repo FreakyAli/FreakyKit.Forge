@@ -8,7 +8,7 @@ namespace FreakyKit.Forge.Samples;
 /// PersonRecordDto(string name, int age) ← source.Name, source.Age via ctor
 /// PersonRecordDto.Email ← source.Email via property setter
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class ConstructorForges
 {
     public static partial PersonRecordDto ToRecordDto(ConstructorSource source);

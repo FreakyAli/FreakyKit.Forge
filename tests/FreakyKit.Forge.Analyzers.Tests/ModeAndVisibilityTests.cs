@@ -20,10 +20,10 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -41,7 +41,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -60,7 +60,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -79,10 +79,10 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -96,7 +96,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -115,7 +115,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     private static partial Dest ToDest(Source source);
@@ -134,7 +134,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -150,7 +150,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     internal static partial Dest ToDest(Source source);
@@ -161,7 +161,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
     // ─── FKF011: Private visibility enabled ──────────────────────────────────
 
     [Fact]
-    public void FKF011_IncludePrivateMethods_EmitsInfo()
+    public void FKF011_ShouldIncludePrivate_EmitsInfo()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -169,7 +169,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass(IncludePrivateMethods = true)]
+                [Forge(ShouldIncludePrivate = true)]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -188,7 +188,7 @@ public sealed class ModeAndVisibilityTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

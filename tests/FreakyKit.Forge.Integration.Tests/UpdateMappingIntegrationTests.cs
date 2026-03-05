@@ -19,7 +19,7 @@ public sealed class UpdateMappingIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void Update(Source source, Dest existing);
@@ -54,7 +54,7 @@ public sealed class UpdateMappingIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDto(Source source);

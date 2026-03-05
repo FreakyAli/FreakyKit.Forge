@@ -24,7 +24,7 @@ public sealed class ConstructionTests : AnalyzerTestBase
                     public Dest(string name) { Name = name; }
                     public Dest(int age)     { Age = age; }
                 }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -46,7 +46,7 @@ public sealed class ConstructionTests : AnalyzerTestBase
                     public string Name { get; }
                     public Dest(string name) { Name = name; }
                 }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -70,7 +70,7 @@ public sealed class ConstructionTests : AnalyzerTestBase
                     public string Email { get; }
                     public Dest(string name, string email) { Name = name; Email = email; }
                 }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -93,7 +93,7 @@ public sealed class ConstructionTests : AnalyzerTestBase
                     public int    Age  { get; }
                     public Dest(string name, int age) { Name = name; Age = age; }
                 }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -116,7 +116,7 @@ public sealed class ConstructionTests : AnalyzerTestBase
                     public string Name { get; set; } = "";
                     private Dest() { }
                 }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -138,7 +138,7 @@ public sealed class ConstructionTests : AnalyzerTestBase
                     public string Name { get; set; } = "";
                     public Dest() { }
                 }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -159,7 +159,7 @@ public sealed class ConstructionTests : AnalyzerTestBase
                     public Dest(int x)    { }
                     public Dest(double y) { }
                 }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

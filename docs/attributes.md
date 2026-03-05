@@ -1,6 +1,6 @@
 # Attributes Reference
 
-## `[ForgeClass]`
+## `[Forge]`
 
 **Namespace:** `FreakyKit.Forge`
 **Target:** Class (`static partial class` only)
@@ -14,11 +14,11 @@ Marks a static partial class as a forge class. The source generator discovers al
 Controls which methods in the class are treated as forge methods.
 
 - **`ForgeMode.Implicit`** — all properly-shaped static partial methods are automatically treated as forge methods. No additional attributes needed on methods.
-- **`ForgeMode.Explicit`** — only methods explicitly decorated with `[Forge]` are treated as forge methods. Unmarked candidate methods emit `FKF002`.
+- **`ForgeMode.Explicit`** — only methods explicitly decorated with `[ForgeMethod]` are treated as forge methods. Unmarked candidate methods emit `FKF002`.
 
 ```csharp
 // Implicit (default) — both methods are forged
-[ForgeClass]
+[Forge]
 public static partial class PersonForges
 {
     public static partial PersonDto ToDto(Person source);
@@ -26,21 +26,21 @@ public static partial class PersonForges
 }
 
 // Explicit — only ToDto is forged, ToSummary emits FKF002
-[ForgeClass(Mode = ForgeMode.Explicit)]
+[Forge(Mode = ForgeMode.Explicit)]
 public static partial class PersonForges
 {
-    [Forge]
+    [ForgeMethod]
     public static partial PersonDto ToDto(Person source);
     public static partial PersonSummary ToSummary(Person source);
 }
 ```
 
-#### `IncludePrivateMethods` (`bool`, default: `false`)
+#### `ShouldIncludePrivate` (`bool`, default: `false`)
 
 When true, private forge methods are included in generation. When false, private forge methods emit `FKF010` and are ignored.
 
 ```csharp
-[ForgeClass(IncludePrivateMethods = true)]
+[Forge(ShouldIncludePrivate = true)]
 public static partial class PersonForges
 {
     private static partial PersonDto ToDto(Person source);  // included
@@ -49,7 +49,7 @@ public static partial class PersonForges
 
 ---
 
-## `[Forge]`
+## `[ForgeMethod]`
 
 **Namespace:** `FreakyKit.Forge`
 **Target:** Method (`static partial` method only)
@@ -58,7 +58,7 @@ Marks a method as a forge method and configures its mapping behavior. In `ForgeM
 
 ### Properties
 
-#### `IncludeFields` (`bool`, default: `false`)
+#### `ShouldIncludeFields` (`bool`, default: `false`)
 
 When true, public fields on the source and destination types are included in member discovery alongside properties. When false, fields are excluded and emit `FKF400`.
 
@@ -69,14 +69,14 @@ public class Source
     public int Age { get; set; }  // property
 }
 
-[ForgeClass]
+[Forge]
 public static partial class MyForges
 {
-    // Without IncludeFields: only Age is mapped, Name emits FKF400
+    // Without ShouldIncludeFields: only Age is mapped, Name emits FKF400
     public static partial Dest ToDest(Source source);
 
-    // With IncludeFields: both Name and Age are mapped
-    [Forge(IncludeFields = true)]
+    // With ShouldIncludeFields: both Name and Age are mapped
+    [ForgeMethod(ShouldIncludeFields = true)]
     public static partial Dest ToDestWithFields(Source source);
 }
 ```
@@ -88,27 +88,27 @@ When true, the generator calls an existing forge method to convert nested types 
 Also enables collection mapping with different element types via `.Select()`.
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class PersonForges
 {
     public static partial AddressDto ToAddressDto(Address source);
 
-    [Forge(AllowNestedForging = true)]
+    [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonDto ToDto(Person source);
     // Generates: __result.Home = ToAddressDto(source.Home);
     // Generates: __result.Addresses = source.Addresses.Select(x => ToAddressDto(x)).ToList();
 }
 ```
 
-#### `EnumMappingStrategy` (`ForgeEnumMapping`, default: `ForgeEnumMapping.Cast`)
+#### `MappingStrategy` (`ForgeMapping`, default: `ForgeMapping.Cast`)
 
 Controls how enum-to-enum mappings are generated when source and destination members share the same name but have different enum types.
 
-- **`ForgeEnumMapping.Cast`** — generates a direct cast: `(DestEnum)source.Value`
-- **`ForgeEnumMapping.ByName`** — generates a switch expression that maps each member by name
+- **`ForgeMapping.Cast`** — generates a direct cast: `(DestEnum)source.Value`
+- **`ForgeMapping.ByName`** — generates a switch expression that maps each member by name
 
 ```csharp
-[Forge(EnumMappingStrategy = ForgeEnumMapping.ByName)]
+[ForgeMethod(MappingStrategy = ForgeMapping.ByName)]
 public static partial PersonDto ToDto(Person source);
 // Generates a switch expression for enum members
 ```
@@ -117,27 +117,13 @@ public static partial PersonDto ToDto(Person source);
 
 When true, the generator attempts to flatten nested source properties into flat destination members. When a destination member has no direct match, the generator tries prefix matching: `AddressCity` → `source.Address.City`.
 
-Only one level of nesting is supported. Flattening only traverses **properties** on intermediate types — fields are not considered for traversal, even when `IncludeFields = true`.
+Only one level of nesting is supported. Flattening only traverses **properties** on intermediate types — fields are not considered for traversal, even when `ShouldIncludeFields = true`.
 
 ```csharp
-[Forge(AllowFlattening = true)]
+[ForgeMethod(AllowFlattening = true)]
 public static partial PersonDto ToDto(Person source);
 // dest.AddressCity = source.Address.City
 ```
-
-#### `GenerateReverse` (`bool`, default: `false`)
-
-When true, the generator also produces a reverse mapping method that maps from the destination type back to the source type. Must be used with `ReverseName`.
-
-```csharp
-[Forge(GenerateReverse = true, ReverseName = "FromDto")]
-public static partial PersonDto ToDto(Person source);
-// Also generates: Person FromDto(PersonDto source)
-```
-
-#### `ReverseName` (`string`, default: `""`)
-
-The name of the reverse mapping method. Required when `GenerateReverse` is true.
 
 ---
 
@@ -221,7 +207,7 @@ The converter method must be:
 - In the same forge class
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class MyForges
 {
     public static partial Dest ToDest(Source source);
@@ -248,7 +234,7 @@ Controls which methods in a forge class are treated as forge methods.
 | Value | Value | Description |
 |-------|-------|-------------|
 | `Implicit` | `0` | All properly-shaped static partial methods are forge methods |
-| `Explicit` | `1` | Only `[Forge]`-decorated methods are forge methods |
+| `Explicit` | `1` | Only `[ForgeMethod]`-decorated methods are forge methods |
 
 ### What Is a "Properly-Shaped" Method?
 
@@ -262,7 +248,7 @@ A method is a valid forge method candidate if it is:
 
 ---
 
-## `ForgeEnumMapping` (Enum)
+## `ForgeMapping` (Enum)
 
 **Namespace:** `FreakyKit.Forge`
 

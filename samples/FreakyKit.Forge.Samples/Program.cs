@@ -52,7 +52,7 @@ Console.WriteLine($"  {person.FirstName} {person.LastName} → PersonDto: Id={ba
 
 PrintHeader("2. Explicit Mode");
 var explicitDto = ExplicitModeForges.ToExplicitDto(person);
-Console.WriteLine($"  Only [Forge]-decorated methods are generated: {explicitDto.FirstName} {explicitDto.LastName}");
+Console.WriteLine($"  Only [ForgeMethod]-decorated methods are generated: {explicitDto.FirstName} {explicitDto.LastName}");
 
 // ─── 3. ForgeMap (Custom Name Mapping) ────────────────────────
 
@@ -73,7 +73,7 @@ Console.WriteLine($"  InternalNotes excluded: Id={publicDto.Id}, Email={publicDt
 
 // ─── 5. Field Mapping ─────────────────────────────────────────
 
-PrintHeader("5. Field Mapping (IncludeFields = true)");
+PrintHeader("5. Field Mapping (ShouldIncludeFields = true)");
 var measurement = new Measurement { Label = "Temperature", Value = 98.6, Unit = "°F" };
 var measurementDto = FieldMappingForges.ToMeasurementDto(measurement);
 Console.WriteLine($"  {measurementDto.Label}: {measurementDto.Value} {measurementDto.Unit}");
@@ -144,25 +144,17 @@ PrintHeader("13. Before/After Hooks");
 var hooked = HooksForges.ToPersonDtoWithHooks(person);
 Console.WriteLine($"  Result: {hooked.FirstName} {hooked.LastName}");
 
-// ─── 14. Reverse Mapping ──────────────────────────────────────
+// ─── 14. Update Mapping ───────────────────────────────────────
 
-PrintHeader("14. Reverse Mapping (GenerateReverse = true)");
-var reverseDto = ReverseForges.ToReverseDto(person);
-Console.WriteLine($"  Forward: Person → PersonReverseDto: {reverseDto.FirstName} {reverseDto.LastName}");
-var reversed = ReverseForges.FromDto(reverseDto);
-Console.WriteLine($"  Reverse: PersonReverseDto → Person: {reversed.FirstName} {reversed.LastName}, Age={reversed.Age}");
-
-// ─── 15. Update Mapping ───────────────────────────────────────
-
-PrintHeader("15. Update Mapping (void, in-place)");
+PrintHeader("14. Update Mapping (void, in-place)");
 var mutable = new PersonMutableDto { FirstName = "OldFirst", LastName = "OldLast", Age = 0, Email = "old@example.com" };
 Console.WriteLine($"  Before: {mutable.FirstName} {mutable.LastName}, Age={mutable.Age}");
 UpdateForges.UpdatePerson(person, mutable);
 Console.WriteLine($"  After:  {mutable.FirstName} {mutable.LastName}, Age={mutable.Age}, LastUpdated={mutable.LastUpdated:u}");
 
-// ─── 16. Private Methods ──────────────────────────────────────
+// ─── 15. Private Methods ──────────────────────────────────────
 
-PrintHeader("16. Private Methods (IncludePrivateMethods = true)");
+PrintHeader("15. Private Methods (ShouldIncludePrivate = true)");
 var internalDto = PrivateMethodForges.MapInternal(person);
 Console.WriteLine($"  Private forge method result: {internalDto.FirstName}, Age={internalDto.Age}");
 

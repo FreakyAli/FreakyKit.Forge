@@ -22,7 +22,7 @@ public sealed class EnumMappingIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; public SourceStatus Status { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public DestStatus   Status { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -55,10 +55,10 @@ public sealed class EnumMappingIntegrationTests : IntegrationTestBase
                 public class Source { public SourceStatus Status { get; set; } }
                 public class Dest   { public DestStatus   Status { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(EnumMappingStrategy = ForgeEnumMapping.ByName)]
+                    [ForgeMethod(MappingStrategy = ForgeMapping.ByName)]
                     public static partial Dest ToDest(Source source);
                 }
             }

@@ -12,7 +12,6 @@ FKF040 | FreakyKit.Forge.MethodShape | Info |
 FKF041 | FreakyKit.Forge.MethodShape | Error |
 FKF050 | FreakyKit.Forge.MethodShape | Info |
 FKF051 | FreakyKit.Forge.MethodShape | Info |
-FKF060 | FreakyKit.Forge.MethodShape | Info |
 FKF100 | FreakyKit.Forge.MemberMatching | Warning |
 FKF101 | FreakyKit.Forge.MemberMatching | Warning |
 FKF102 | FreakyKit.Forge.MemberMatching | Info |

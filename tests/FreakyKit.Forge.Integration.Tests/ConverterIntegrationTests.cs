@@ -15,7 +15,7 @@ public sealed class ConverterIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; public DateTime Created { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public string Created { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

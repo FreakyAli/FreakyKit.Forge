@@ -23,7 +23,7 @@ public sealed class IgnoreGeneratorTests : GeneratorTestBase
                     public string Secret { get; set; } = "";
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -58,7 +58,7 @@ public sealed class IgnoreGeneratorTests : GeneratorTestBase
                     public int Score { get; set; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -94,7 +94,7 @@ public sealed class IgnoreGeneratorTests : GeneratorTestBase
                     public Dest(string name, int age) { Name = name; Age = age; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

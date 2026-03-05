@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 32 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 31 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -10,9 +10,9 @@ FreakyKit.Forge emits 32 diagnostics across 7 categories. Error-severity diagnos
 |--|--|
 | **Severity** | Info |
 | **Category** | FreakyKit.Forge.Mode |
-| **Message** | Forge class '{0}' uses explicit method selection mode. Only methods decorated with [Forge] will be treated as forge methods. |
+| **Message** | Forge class '{0}' uses explicit method selection mode. Only methods decorated with [ForgeMethod] will be treated as forge methods. |
 
-Emitted on the forge class when `Mode = ForgeMode.Explicit` is set on `[ForgeClass]`. Informational only — reminds you that unmarked methods will be ignored.
+Emitted on the forge class when `Mode = ForgeMode.Explicit` is set on `[Forge]`. Informational only — reminds you that unmarked methods will be ignored.
 
 ### FKF002 — Method ignored in explicit mode
 
@@ -20,15 +20,15 @@ Emitted on the forge class when `Mode = ForgeMode.Explicit` is set on `[ForgeCla
 |--|--|
 | **Severity** | Warning |
 | **Category** | FreakyKit.Forge.Mode |
-| **Message** | Method '{0}' in forge class '{1}' is ignored because explicit mode is active. Add [Forge] to include this method. |
+| **Message** | Method '{0}' in forge class '{1}' is ignored because explicit mode is active. Add [ForgeMethod] to include this method. |
 
-Emitted when a method has the right shape to be a forge method but lacks the `[Forge]` attribute in a class using `ForgeMode.Explicit`. Add `[Forge]` to include the method, or remove it if it's intentionally excluded.
+Emitted when a method has the right shape to be a forge method but lacks the `[ForgeMethod]` attribute in a class using `ForgeMode.Explicit`. Add `[ForgeMethod]` to include the method, or remove it if it's intentionally excluded.
 
 ```csharp
-[ForgeClass(Mode = ForgeMode.Explicit)]
+[Forge(Mode = ForgeMode.Explicit)]
 public static partial class MyForges
 {
-    [Forge]
+    [ForgeMethod]
     public static partial Dest ToDest(Source s);     // OK
 
     public static partial Other ToOther(Source s);   // FKF002
@@ -41,9 +41,9 @@ public static partial class MyForges
 |--|--|
 | **Severity** | Warning |
 | **Category** | FreakyKit.Forge.Mode |
-| **Message** | Private method '{0}' in forge class '{1}' is ignored. Set IncludePrivateMethods = true on [ForgeClass] to include private methods. |
+| **Message** | Private method '{0}' in forge class '{1}' is ignored. Set ShouldIncludePrivate = true on [Forge] to include private methods. |
 
-Emitted when a private method has the forge method shape but `IncludePrivateMethods` is false (the default). Set `IncludePrivateMethods = true` on `[ForgeClass]` to opt in.
+Emitted when a private method has the forge method shape but `ShouldIncludePrivate` is false (the default). Set `ShouldIncludePrivate = true` on `[Forge]` to opt in.
 
 ### FKF011 — Private visibility enabled
 
@@ -51,9 +51,9 @@ Emitted when a private method has the forge method shape but `IncludePrivateMeth
 |--|--|
 | **Severity** | Info |
 | **Category** | FreakyKit.Forge.Mode |
-| **Message** | Forge class '{0}' has IncludePrivateMethods = true. Private forge methods will be included. |
+| **Message** | Forge class '{0}' has ShouldIncludePrivate = true. Private forge methods will be included. |
 
-Informational. Emitted on the class when `IncludePrivateMethods = true`.
+Informational. Emitted on the class when `ShouldIncludePrivate = true`.
 
 ---
 
@@ -91,7 +91,7 @@ public static partial PersonDto ToDto(Person source);
 Two or more forge methods in the same class share the same name. Forge method names must be unique within a forge class. Rename one of the methods.
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class MyForges
 {
     public static partial DtoA ToDest(SourceA source);  // FKF030
@@ -135,7 +135,7 @@ The destination type of an update forge method has no settable properties or fie
 A partial method named `OnBefore{MethodName}` was found in the forge class. It will be called before the mapping assignments.
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class MyForges
 {
     public static partial PersonDto ToDto(Person source);
@@ -154,28 +154,12 @@ public static partial class MyForges
 A partial method named `OnAfter{MethodName}` was found in the forge class. It will be called after the mapping assignments, before the return statement.
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class MyForges
 {
     public static partial PersonDto ToDto(Person source);
     static partial void OnAfterToDto(Person source, PersonDto result);  // FKF051
 }
-```
-
-### FKF060 — Reverse method generated
-
-| | |
-|--|--|
-| **Severity** | Info |
-| **Category** | FreakyKit.Forge.MethodShape |
-| **Message** | Reverse mapping method '{0}' generated for forge method '{1}'. |
-
-Emitted when `GenerateReverse = true` is set on `[Forge]`. An additional method that maps from destination back to source is generated.
-
-```csharp
-[Forge(GenerateReverse = true, ReverseName = "FromDto")]
-public static partial PersonDto ToDto(Person source);
-// Also generates: Person FromDto(PersonDto source)
 ```
 
 ---
@@ -188,9 +172,9 @@ public static partial PersonDto ToDto(Person source);
 |--|--|
 | **Severity** | Warning |
 | **Category** | FreakyKit.Forge.MemberDiscovery |
-| **Message** | Field '{0}' on type '{1}' is ignored because IncludeFields is false. Set IncludeFields = true on [Forge] to include fields. |
+| **Message** | Field '{0}' on type '{1}' is ignored because ShouldIncludeFields is false. Set ShouldIncludeFields = true on [ForgeMethod] to include fields. |
 
-A public field was found on the source or destination type but excluded from member discovery because `IncludeFields` is false (the default). Set `IncludeFields = true` on `[Forge]` to include fields.
+A public field was found on the source or destination type but excluded from member discovery because `ShouldIncludeFields` is false (the default). Set `ShouldIncludeFields = true` on `[ForgeMethod]` to include fields.
 
 ### FKF401 — Fields enabled
 
@@ -198,9 +182,9 @@ A public field was found on the source or destination type but excluded from mem
 |--|--|
 | **Severity** | Info |
 | **Category** | FreakyKit.Forge.MemberDiscovery |
-| **Message** | Forge method '{0}' has IncludeFields = true. Fields will be included in member discovery. |
+| **Message** | Forge method '{0}' has ShouldIncludeFields = true. Fields will be included in member discovery. |
 
-Informational. Emitted when `IncludeFields = true` is set on a `[Forge]` attribute.
+Informational. Emitted when `ShouldIncludeFields = true` is set on a `[ForgeMethod]` attribute.
 
 ---
 
@@ -304,7 +288,7 @@ The destination member was matched by flattening a nested source property. For e
 > **Note:** This diagnostic is emitted by the **generator** only, not by the analyzer.
 
 ```csharp
-[Forge(AllowFlattening = true)]
+[ForgeMethod(AllowFlattening = true)]
 public static partial Dest ToDest(Source source);
 // FKF106: AddressCity → Address.City
 ```
@@ -378,7 +362,7 @@ The source and destination members are different enum types. A direct cast (`(De
 | **Category** | FreakyKit.Forge.TypeSafety |
 | **Message** | Member '{0}': enum name-based mapping from '{1}' to '{2}'. |
 
-The source and destination members are different enum types. A switch expression mapping by member name is generated. Enabled with `EnumMappingStrategy = ForgeEnumMapping.ByName`.
+The source and destination members are different enum types. A switch expression mapping by member name is generated. Enabled with `MappingStrategy = ForgeMapping.ByName`.
 
 ### FKF212 — Enum member missing in destination
 
@@ -423,10 +407,10 @@ public static string ConvertDateTime(DateTime value) => value.ToString("yyyy-MM-
 | **Category** | FreakyKit.Forge.Nested |
 | **Message** | Member '{0}': source type '{1}' differs from destination type '{2}'. A forge method exists for this conversion but AllowNestedForging is false. |
 
-A member pair has different types and a forge method exists that could convert between them, but `AllowNestedForging` is false on the current method. Set `AllowNestedForging = true` on `[Forge]` to enable it. Without it, the member is skipped.
+A member pair has different types and a forge method exists that could convert between them, but `AllowNestedForging` is false on the current method. Set `AllowNestedForging = true` on `[ForgeMethod]` to enable it. Without it, the member is skipped.
 
 ```csharp
-[ForgeClass]
+[Forge]
 public static partial class MyForges
 {
     public static partial AddressDto ToAddressDto(Address source);
@@ -434,8 +418,8 @@ public static partial class MyForges
     // FKF300 — forge method exists but AllowNestedForging is false
     public static partial PersonDto ToDto(Person source);
 
-    // Fix: add [Forge(AllowNestedForging = true)]
-    [Forge(AllowNestedForging = true)]
+    // Fix: add [ForgeMethod(AllowNestedForging = true)]
+    [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonDto ToDtoFixed(Person source);  // OK
 }
 ```

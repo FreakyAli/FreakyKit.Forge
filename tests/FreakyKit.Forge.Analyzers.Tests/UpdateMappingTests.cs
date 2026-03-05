@@ -18,7 +18,7 @@ public sealed class UpdateMappingTests : AnalyzerTestBase
                 public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void Update(Source source, Dest existing);
@@ -42,7 +42,7 @@ public sealed class UpdateMappingTests : AnalyzerTestBase
                 public class Source { public string Name { get; set; } = ""; public int Extra { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void Update(Source source, Dest existing);
@@ -64,7 +64,7 @@ public sealed class UpdateMappingTests : AnalyzerTestBase
                 public class Source { public int    Value { get; set; } }
                 public class Dest   { public string Value { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void Update(Source source, Dest existing);

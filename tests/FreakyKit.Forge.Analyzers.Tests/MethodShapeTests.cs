@@ -18,7 +18,7 @@ public sealed class MethodShapeTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source)
@@ -40,7 +40,7 @@ public sealed class MethodShapeTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source) => new Dest();
@@ -58,7 +58,7 @@ public sealed class MethodShapeTests : AnalyzerTestBase
             {
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -78,7 +78,7 @@ public sealed class MethodShapeTests : AnalyzerTestBase
                 public class SourceA { public string Name { get; set; } = ""; }
                 public class SourceB { public string Name { get; set; } = ""; }
                 public class Dest    { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest Map(SourceA source);
@@ -99,7 +99,7 @@ public sealed class MethodShapeTests : AnalyzerTestBase
                 public class DestA   { public string Name { get; set; } = ""; }
                 public class SourceB { public string Name { get; set; } = ""; }
                 public class DestB   { public string Name { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial DestA MapA(SourceA source);

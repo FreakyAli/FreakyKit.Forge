@@ -15,7 +15,7 @@ public sealed class ConverterAnalyzerTests : AnalyzerTestBase
                 public class Source { public DateTime Birthday { get; set; } }
                 public class Dest   { public string Birthday { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -40,7 +40,7 @@ public sealed class ConverterAnalyzerTests : AnalyzerTestBase
                 public class Source { public DateTime Birthday { get; set; } }
                 public class Dest   { public string Birthday { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

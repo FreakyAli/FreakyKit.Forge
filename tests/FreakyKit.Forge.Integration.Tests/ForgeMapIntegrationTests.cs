@@ -14,7 +14,7 @@ public sealed class ForgeMapIntegrationTests : IntegrationTestBase
                 public class Source { [ForgeMap("Name")] public string FirstName { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -41,7 +41,7 @@ public sealed class ForgeMapIntegrationTests : IntegrationTestBase
                 public class Source { [ForgeMap("Key")] public string SrcProp { get; set; } = ""; }
                 public class Dest   { [ForgeMap("Key")] public string DstProp { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -76,7 +76,7 @@ public sealed class ForgeMapIntegrationTests : IntegrationTestBase
                     public string DisplayName { get; set; } = "";
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

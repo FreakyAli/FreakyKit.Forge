@@ -6,7 +6,7 @@ namespace FreakyKit.Forge.Samples;
 /// Convention: OnBefore{MethodName}(source) and OnAfter{MethodName}(source, result).
 /// Declare them as partial methods and provide the implementation body.
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class HooksForges
 {
     public static partial PersonDto ToPersonDtoWithHooks(Person source);

@@ -14,7 +14,7 @@ public enum ForgeMode
     Implicit = 0,
 
     /// <summary>
-    /// Only methods explicitly decorated with <see cref="ForgeAttribute"/> are treated as forge methods.
+    /// Only methods explicitly decorated with <see cref="ForgeMethodAttribute"/> are treated as forge methods.
     /// Methods without the attribute emit FKF002.
     /// </summary>
     Explicit = 1

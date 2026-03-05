@@ -22,7 +22,7 @@ public sealed class UpdateErrorAnalyzerTests : AnalyzerTestBase
                     public Dest(string name) { Name = name; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void Update(Source source, Dest existing);
@@ -44,7 +44,7 @@ public sealed class UpdateErrorAnalyzerTests : AnalyzerTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void Update(Source source, Dest existing);
@@ -73,7 +73,7 @@ public sealed class UpdateErrorAnalyzerTests : AnalyzerTestBase
                     public int Age { get; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial void Update(Source source, Dest existing);
@@ -99,7 +99,7 @@ public sealed class UpdateErrorAnalyzerTests : AnalyzerTestBase
                     public Dest(string name) { Name = name; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

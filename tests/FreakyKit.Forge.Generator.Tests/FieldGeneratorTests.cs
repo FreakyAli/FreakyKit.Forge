@@ -4,7 +4,7 @@ namespace FreakyKit.Forge.Generator.Tests;
 
 /// <summary>
 /// Tests for field mapping in the source generator.
-/// Verifies that fields are skipped by default and included when IncludeFields = true on [Forge].
+/// Verifies that fields are skipped by default and included when ShouldIncludeFields = true on [ForgeMethod].
 /// </summary>
 public sealed class FieldGeneratorTests : GeneratorTestBase
 {
@@ -18,7 +18,7 @@ public sealed class FieldGeneratorTests : GeneratorTestBase
                 public class Source { public string Tag; public string Name { get; set; } = ""; }
                 public class Dest   { public string Tag; public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -45,10 +45,10 @@ public sealed class FieldGeneratorTests : GeneratorTestBase
                 public class Source { public string Tag; public string Name { get; set; } = ""; }
                 public class Dest   { public string Tag; public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -82,10 +82,10 @@ public sealed class FieldGeneratorTests : GeneratorTestBase
                     public string PropC { get; set; } = "";
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -104,7 +104,7 @@ public sealed class FieldGeneratorTests : GeneratorTestBase
     public void Fields_OnlySourceHasField_DestHasProperty()
     {
         // Source has a field, dest has a property with the same name.
-        // When IncludeFields = true, fields from source participate in matching.
+        // When ShouldIncludeFields = true, fields from source participate in matching.
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
@@ -112,10 +112,10 @@ public sealed class FieldGeneratorTests : GeneratorTestBase
                 public class Source { public string Tag; }
                 public class Dest   { public string Tag { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -132,7 +132,7 @@ public sealed class FieldGeneratorTests : GeneratorTestBase
     public void Fields_SourcePropertyDestField_Included()
     {
         // Source has a property, dest has a field with the same name.
-        // When IncludeFields = true, fields on dest are included.
+        // When ShouldIncludeFields = true, fields on dest are included.
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
@@ -140,10 +140,10 @@ public sealed class FieldGeneratorTests : GeneratorTestBase
                 public class Source { public string Tag { get; set; } = ""; }
                 public class Dest   { public string Tag; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }

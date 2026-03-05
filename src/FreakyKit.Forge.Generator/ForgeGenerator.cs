@@ -21,10 +21,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 {
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Pipeline: find static partial classes decorated with [ForgeClass]
+        // Pipeline: find static partial classes decorated with [Forge]
         var forgeClasses = context.SyntaxProvider
             .ForAttributeWithMetadataName(
-                "FreakyKit.Forge.ForgeClassAttribute",
+                "FreakyKit.Forge.ForgeAttribute",
                 predicate: static (node, _) => node is ClassDeclarationSyntax cds &&
                     cds.Modifiers.Any(SyntaxKind.StaticKeyword) &&
                     cds.Modifiers.Any(SyntaxKind.PartialKeyword),
@@ -59,12 +59,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var diagnostics = new List<Diagnostic>();
 
         var forgeClassAttr = type.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeClassAttribute");
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
 
         if (forgeClassAttr is null) return ForgeClassResult.Empty;
 
         var mode = GetForgeMode(forgeClassAttr);
-        var includePrivate = GetBoolNamedArg(forgeClassAttr, "IncludePrivateMethods");
+        var includePrivate = GetBoolNamedArg(forgeClassAttr, "ShouldIncludePrivate");
 
         // Collect all candidate static partial methods
         var allMethods = type.GetMembers()
@@ -150,25 +150,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 methodModels.Add(methodModel);
 
-                // Check for reverse mapping
-                var forgeAttr = GetForgeAttribute(method);
-                if (forgeAttr != null && GetBoolNamedArg(forgeAttr, "GenerateReverse"))
-                {
-                    var reverseName = GetStringNamedArg(forgeAttr, "ReverseName");
-                    if (!string.IsNullOrEmpty(reverseName))
-                    {
-                        var (reverseModel, reverseDiags) = ExtractReverseMethod(method, type, methodModel, reverseName!, ct);
-                        diagnostics.AddRange(reverseDiags);
-                        if (reverseModel != null)
-                        {
-                            methodModels.Add(reverseModel);
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.ReverseMethodGenerated,
-                                method.Locations.FirstOrDefault(),
-                                reverseName, method.Name));
-                        }
-                    }
-                }
             }
         }
 
@@ -227,7 +208,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             return (null, diagnostics);
 
         var forgeAttr = GetForgeAttribute(method);
-        bool includeFields = forgeAttr != null && GetBoolNamedArg(forgeAttr, "IncludeFields");
+        bool includeFields = forgeAttr != null && GetBoolNamedArg(forgeAttr, "ShouldIncludeFields");
         bool allowNested = forgeAttr != null && GetBoolNamedArg(forgeAttr, "AllowNestedForging");
         bool allowFlattening = forgeAttr != null && GetBoolNamedArg(forgeAttr, "AllowFlattening");
         int enumMappingStrategy = GetEnumMappingStrategy(forgeAttr);
@@ -644,82 +625,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
-    }
-
-    /// <summary>
-    /// Creates a reverse method model by swapping source and dest types.
-    /// Uses a simple approach: collect members from both sides and do direct matching.
-    /// </summary>
-    private static (ForgeMethodModel? Model, List<Diagnostic> Diagnostics) ExtractReverseMethod(
-        IMethodSymbol originalMethod,
-        INamedTypeSymbol forgeClass,
-        ForgeMethodModel originalModel,
-        string reverseName,
-        System.Threading.CancellationToken ct)
-    {
-        var diagnostics = new List<Diagnostic>();
-
-        // For reverse: the original dest becomes the new source, and vice versa
-        var newSourceType = originalMethod.ReturnType as INamedTypeSymbol;
-        var newDestType = originalMethod.Parameters[0].Type as INamedTypeSymbol;
-        if (newSourceType == null || newDestType == null)
-            return (null, diagnostics);
-
-        // Collect members for the reverse direction
-        var newSourceMembers = CollectMembers(newSourceType, false, null, null);
-        var newDestMembers = CollectMembers(newDestType, false, null, null);
-
-        // Determine construction for the new dest (which is the original source type)
-        var (construction, ctorDiags) = DetermineConstruction(newDestType, newSourceMembers, originalMethod);
-        diagnostics.AddRange(ctorDiags);
-
-        if (ctorDiags.Any(d => d.Severity == DiagnosticSeverity.Error))
-            return (null, diagnostics);
-
-        var constructorUsedKeys = new HashSet<string>(
-            construction.ConstructorArgs.Select(a => a.ParameterName.ToLowerInvariant()));
-
-        var assignments = new List<MemberAssignmentModel>();
-        foreach (var destKvp in newDestMembers)
-        {
-            var key = destKvp.Key;
-            if (constructorUsedKeys.Contains(key) && construction.Kind == ConstructionKind.Parameterized)
-                continue;
-            if (IsReadOnlyProperty(newDestType, key))
-                continue;
-            if (!newSourceMembers.TryGetValue(key, out var srcMember))
-                continue;
-
-            var destMember = destKvp.Value;
-            if (srcMember.Type.ToDisplayString() == destMember.Type.ToDisplayString())
-            {
-                assignments.Add(new MemberAssignmentModel(
-                    destMemberName: destMember.Name,
-                    sourceExpression: $"source.{srcMember.Name}"));
-            }
-            else if (TryResolveNullableMapping(srcMember.Type, destMember.Type, out var nk))
-            {
-                var expr = nk == NullableConversionKind.UnwrapValue
-                    ? $"source.{srcMember.Name}.Value"
-                    : $"source.{srcMember.Name}";
-                assignments.Add(new MemberAssignmentModel(destMemberName: destMember.Name, sourceExpression: expr));
-            }
-        }
-
-        var accessibility = AccessibilityToString(originalMethod.DeclaredAccessibility);
-        var reverseModel = new ForgeMethodModel(
-            methodName: reverseName,
-            accessibility: accessibility,
-            sourceTypeFqn: newSourceType.ToDisplayString(),
-            sourceTypeShortName: newSourceType.Name,
-            sourceParameterName: "source",
-            destTypeFqn: newDestType.ToDisplayString(),
-            destTypeShortName: newDestType.Name,
-            construction: construction,
-            assignments: assignments,
-            nestedMethods: ImmutableArray<ForgeMethodModel>.Empty);
-
-        return (reverseModel, diagnostics);
     }
 
     // ─── Source Generation ────────────────────────────────────────────────────
@@ -1145,13 +1050,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     private static bool HasForgeAttribute(IMethodSymbol method)
     {
         return method.GetAttributes()
-            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
+            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMethodAttribute");
     }
 
     private static AttributeData? GetForgeAttribute(IMethodSymbol method)
     {
         return method.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMethodAttribute");
     }
 
     private static bool HasImplementationBody(IMethodSymbol method, System.Threading.CancellationToken ct)
@@ -1187,7 +1092,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     private static int GetEnumMappingStrategy(AttributeData? attr)
     {
         if (attr is null) return 0;
-        var namedArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "EnumMappingStrategy");
+        var namedArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "MappingStrategy");
         if (namedArg.Value.Value is int val)
             return val;
         return 0; // Cast

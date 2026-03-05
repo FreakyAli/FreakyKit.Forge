@@ -21,7 +21,7 @@ public sealed class EnumMappingTests : AnalyzerTestBase
                 public class Source { public SourceStatus Status { get; set; } }
                 public class Dest   { public DestStatus   Status { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -42,7 +42,7 @@ public sealed class EnumMappingTests : AnalyzerTestBase
                 public class Source { public SourceStatus Status { get; set; } }
                 public class Dest   { public string       Status { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -63,7 +63,7 @@ public sealed class EnumMappingTests : AnalyzerTestBase
                 public class Source { public int        Status { get; set; } }
                 public class Dest   { public DestStatus Status { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

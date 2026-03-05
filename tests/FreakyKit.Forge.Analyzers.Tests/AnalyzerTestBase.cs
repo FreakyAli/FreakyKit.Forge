@@ -34,7 +34,7 @@ public abstract class AnalyzerTestBase
         if (File.Exists(netstandard))
             refs.Add(MetadataReference.CreateFromFile(netstandard));
 
-        refs.Add(MetadataReference.CreateFromFile(typeof(ForgeClassAttribute).Assembly.Location));
+        refs.Add(MetadataReference.CreateFromFile(typeof(ForgeAttribute).Assembly.Location));
 
         return refs;
     }

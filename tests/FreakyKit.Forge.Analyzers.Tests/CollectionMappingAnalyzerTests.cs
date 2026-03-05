@@ -15,7 +15,7 @@ public sealed class CollectionMappingAnalyzerTests : AnalyzerTestBase
                 public class Source { public List<string> Tags { get; set; } = new(); }
                 public class Dest   { public List<string> Tags { get; set; } = new(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -37,7 +37,7 @@ public sealed class CollectionMappingAnalyzerTests : AnalyzerTestBase
                 public class Source { public List<int> Values { get; set; } = new(); }
                 public class Dest   { public int[] Values { get; set; } = System.Array.Empty<int>(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

@@ -5,7 +5,7 @@ namespace FreakyKit.Forge.Samples;
 /// Update methods: void return with two parameters (source, existing).
 /// Instead of creating a new object, they update an existing destination in-place.
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class UpdateForges
 {
     public static partial void UpdatePerson(Person source, PersonMutableDto existing);

@@ -3,7 +3,7 @@ using Xunit;
 namespace FreakyKit.Forge.Generator.Tests;
 
 /// <summary>
-/// Tests for ForgeMode.Explicit: only [Forge]-decorated methods generate code.
+/// Tests for ForgeMode.Explicit: only [ForgeMethod]-decorated methods generate code.
 /// Non-attributed methods are skipped by the generator (no generated body for them).
 /// </summary>
 public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
@@ -18,10 +18,10 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -38,7 +38,7 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
     [Fact]
     public void ExplicitMode_NonAttributedMethod_NoGeneratedBody()
     {
-        // In explicit mode, a properly-shaped method without [Forge] is skipped.
+        // In explicit mode, a properly-shaped method without [ForgeMethod] is skipped.
         // The generator still emits the class wrapper, but no method body is generated.
         const string source = """
             using FreakyKit.Forge;
@@ -47,7 +47,7 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -64,7 +64,7 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
     [Fact]
     public void ExplicitMode_MixedMethods_OnlyAttributedGenerated()
     {
-        // Two methods, only one has [Forge]. Only that one should appear in generated code.
+        // Two methods, only one has [ForgeMethod]. Only that one should appear in generated code.
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
@@ -74,10 +74,10 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
                 public class B    { public int Y { get; set; } }
                 public class BDto { public int Y { get; set; } }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial ADto ToADto(A source);
 
                     public static partial BDto ToBDto(B source);
@@ -91,7 +91,7 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("ADto ToADto(A source)", generated);
         Assert.Contains("__result.X = source.X", generated);
-        // ToBDto should NOT be generated since it lacks [Forge] in explicit mode
+        // ToBDto should NOT be generated since it lacks [ForgeMethod] in explicit mode
         Assert.DoesNotContain("ToBDto", generated);
     }
 
@@ -107,13 +107,13 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
                 public class B    { public int Y { get; set; } }
                 public class BDto { public int Y { get; set; } }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial ADto ToADto(A source);
 
-                    [Forge]
+                    [ForgeMethod]
                     public static partial BDto ToBDto(B source);
                 }
             }
@@ -138,7 +138,7 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
                 public class A    { public string X { get; set; } = ""; }
                 public class ADto { public string X { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial ADto ToADto(A source);

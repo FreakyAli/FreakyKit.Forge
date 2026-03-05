@@ -24,7 +24,7 @@ public sealed class ConstructorErrorTests : GeneratorTestBase
                     private Dest() { }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -54,7 +54,7 @@ public sealed class ConstructorErrorTests : GeneratorTestBase
                     public Dest(double z) { }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -88,7 +88,7 @@ public sealed class ConstructorErrorTests : GeneratorTestBase
                     public Dest(int age) { Age = age; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -117,7 +117,7 @@ public sealed class ConstructorErrorTests : GeneratorTestBase
                     public Dest(string name, int code) { Name = name; Code = code; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -145,7 +145,7 @@ public sealed class ConstructorErrorTests : GeneratorTestBase
                     public Dest(int age) { Age = age; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

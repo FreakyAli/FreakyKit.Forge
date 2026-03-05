@@ -18,7 +18,7 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -50,7 +50,7 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                     public Dest() { }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -81,7 +81,7 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                     public Dest(string name, int age) { Name = name; Age = age; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -108,12 +108,12 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                 public class Source     { public string Name { get; set; } = ""; public Address    Addr { get; set; } = new(); }
                 public class Dest       { public string Name { get; set; } = ""; public AddressDto Addr { get; set; } = new(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial AddressDto ToAddressDto(Address source);
 
-                    [Forge(AllowNestedForging = true)]
+                    [ForgeMethod(AllowNestedForging = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -137,10 +137,10 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                 public class Source { public string Tag; public string Name { get; set; } = ""; }
                 public class Dest   { public string Tag; public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(IncludeFields = true)]
+                    [ForgeMethod(ShouldIncludeFields = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -164,7 +164,7 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                 public class Source { public int    Value { get; set; } }
                 public class Dest   { public string Value { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -189,13 +189,13 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                 public class B    { public string Y { get; set; } = ""; }
                 public class BDto { public string Y { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class AForges
                 {
                     public static partial ADto ToDto(A source);
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class BForges
                 {
                     public static partial BDto ToDto(B source);
@@ -222,7 +222,7 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                     public Dest(string name) { Name = name; }
                 }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -251,7 +251,7 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
                 public class B    { public int Y { get; set; } }
                 public class BDto { public int Y { get; set; } }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial ADto MapA(A source);

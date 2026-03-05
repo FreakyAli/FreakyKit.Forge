@@ -15,7 +15,7 @@ public sealed class CollectionIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; public List<int> Values { get; set; } = new(); }
                 public class Dest   { public string Name { get; set; } = ""; public int[] Values { get; set; } = System.Array.Empty<int>(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -45,10 +45,10 @@ public sealed class CollectionIntegrationTests : IntegrationTestBase
                 public class Source  { public List<Item> Items { get; set; } = new(); }
                 public class Dest    { public List<ItemDto> Items { get; set; } = new(); }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
-                    [Forge(AllowNestedForging = true)]
+                    [ForgeMethod(AllowNestedForging = true)]
                     public static partial Dest ToDest(Source source);
                     public static partial ItemDto ToItemDto(Item source);
                 }

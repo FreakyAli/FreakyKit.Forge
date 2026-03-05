@@ -2,11 +2,11 @@
 namespace FreakyKit.Forge.Samples;
 
 /// <summary>
-/// By default only properties are mapped. Set IncludeFields = true to also map public fields.
+/// By default only properties are mapped. Set ShouldIncludeFields = true to also map public fields.
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class FieldMappingForges
 {
-    [Forge(IncludeFields = true)]
+    [ForgeMethod(ShouldIncludeFields = true)]
     public static partial MeasurementDto ToMeasurementDto(Measurement source);
 }

@@ -5,7 +5,7 @@ namespace FreakyKit.Forge.Samples;
 /// [ForgeIgnore] excludes a member from mapping entirely.
 /// Here we use a wrapper source type where InternalNotes is ignored.
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class ForgeIgnoreForges
 {
     public static partial PersonPublicDto ToPublicDto(PersonIgnored source);

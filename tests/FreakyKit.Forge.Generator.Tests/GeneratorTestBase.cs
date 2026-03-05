@@ -33,7 +33,7 @@ public abstract class GeneratorTestBase
             refs.Add(MetadataReference.CreateFromFile(netstandard));
 
         // FreakyKit.Forge attributes
-        refs.Add(MetadataReference.CreateFromFile(typeof(ForgeClassAttribute).Assembly.Location));
+        refs.Add(MetadataReference.CreateFromFile(typeof(ForgeAttribute).Assembly.Location));
 
         return refs;
     }

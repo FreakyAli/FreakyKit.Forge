@@ -18,7 +18,7 @@ public sealed class TypeSafetyAndNestedTests : AnalyzerTestBase
             {
                 public class Source { public int    Value { get; set; } }
                 public class Dest   { public string Value { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -36,7 +36,7 @@ public sealed class TypeSafetyAndNestedTests : AnalyzerTestBase
             {
                 public class Source { public string Value { get; set; } = ""; }
                 public class Dest   { public string Value { get; set; } = ""; }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -57,7 +57,7 @@ public sealed class TypeSafetyAndNestedTests : AnalyzerTestBase
                 public class AddressDto { public string City { get; set; } = ""; }
                 public class Source     { public Address    Addr { get; set; } = new(); }
                 public class Dest       { public AddressDto Addr { get; set; } = new(); }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial AddressDto ToAddressDto(Address source);
@@ -79,11 +79,11 @@ public sealed class TypeSafetyAndNestedTests : AnalyzerTestBase
                 public class AddressDto { public string City { get; set; } = ""; }
                 public class Source     { public Address    Addr { get; set; } = new(); }
                 public class Dest       { public AddressDto Addr { get; set; } = new(); }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial AddressDto ToAddressDto(Address source);
-                    [Forge(AllowNestedForging = true)]
+                    [ForgeMethod(AllowNestedForging = true)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -100,7 +100,7 @@ public sealed class TypeSafetyAndNestedTests : AnalyzerTestBase
                 public class AddressDto { public string City { get; set; } = ""; }
                 public class Source     { public Address    Addr { get; set; } = new(); }
                 public class Dest       { public AddressDto Addr { get; set; } = new(); }
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

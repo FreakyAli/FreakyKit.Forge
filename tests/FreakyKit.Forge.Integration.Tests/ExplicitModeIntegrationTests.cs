@@ -17,10 +17,10 @@ public sealed class ExplicitModeIntegrationTests : IntegrationTestBase
                 public class DestA  { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class DestB  { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial DestA ToDestA(Source source);
 
                     public static partial DestB ToDestB(Source source);
@@ -49,10 +49,10 @@ public sealed class ExplicitModeIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
-                    [Forge]
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -78,7 +78,7 @@ public sealed class ExplicitModeIntegrationTests : IntegrationTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass(Mode = ForgeMode.Explicit)]
+                [Forge(Mode = ForgeMode.Explicit)]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

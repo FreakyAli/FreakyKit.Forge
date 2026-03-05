@@ -5,7 +5,7 @@ namespace FreakyKit.Forge.Samples;
 /// [ForgeConverter] methods resolve type mismatches between source and destination members.
 /// They must be static, non-void, with exactly one parameter, in the same forge class.
 /// </summary>
-[ForgeClass]
+[Forge]
 public static partial class ConverterForges
 {
     public static partial EventDto ToEventDto(Event source);

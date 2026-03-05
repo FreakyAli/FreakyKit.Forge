@@ -15,7 +15,7 @@ public sealed class ForgeMapTests : AnalyzerTestBase
                 public class Source { [ForgeMap("Name")] public string FirstName { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -38,7 +38,7 @@ public sealed class ForgeMapTests : AnalyzerTestBase
                 public class Source { public string FirstName { get; set; } = ""; }
                 public class Dest   { [ForgeMap("FirstName")] public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -61,7 +61,7 @@ public sealed class ForgeMapTests : AnalyzerTestBase
                 public class Source { [ForgeMap("CommonKey")] public string SrcName { get; set; } = ""; }
                 public class Dest   { [ForgeMap("CommonKey")] public string DstName { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -88,7 +88,7 @@ public sealed class ForgeMapTests : AnalyzerTestBase
                 }
                 public class Dest { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);
@@ -109,7 +109,7 @@ public sealed class ForgeMapTests : AnalyzerTestBase
                 public class Source { [ForgeMap("Name")] public int Count { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; }
 
-                [ForgeClass]
+                [Forge]
                 public static partial class MyForges
                 {
                     public static partial Dest ToDest(Source source);

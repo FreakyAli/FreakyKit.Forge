@@ -21,41 +21,41 @@ public static class ForgeDiagnostics
 
     /// <summary>
     /// FKF001 (Info): Explicit method selection mode is active on this forge class.
-    /// Only methods with [Forge] will be treated as forge methods.
+    /// Only methods with [ForgeMethod] will be treated as forge methods.
     /// </summary>
     public static readonly DiagnosticDescriptor ExplicitModeActivated = new(
         id: "FKF001",
         title: "Explicit mode activated",
-        messageFormat: "Forge class '{0}' uses explicit method selection mode. Only methods decorated with [Forge] will be treated as forge methods.",
+        messageFormat: "Forge class '{0}' uses explicit method selection mode. Only methods decorated with [ForgeMethod] will be treated as forge methods.",
         category: Category_Mode,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
-        description: "The forge class is configured with ForgeMode.Explicit. Methods without [Forge] will be ignored and emit FKF002.");
+        description: "The forge class is configured with ForgeMode.Explicit. Methods without [ForgeMethod] will be ignored and emit FKF002.");
 
     /// <summary>
     /// FKF002 (Warning): A candidate forge method is ignored because the class uses explicit mode
-    /// and the method lacks a [Forge] attribute.
+    /// and the method lacks a [ForgeMethod] attribute.
     /// </summary>
     public static readonly DiagnosticDescriptor MethodIgnoredInExplicitMode = new(
         id: "FKF002",
         title: "Method ignored in explicit mode",
-        messageFormat: "Method '{0}' in forge class '{1}' is ignored because explicit mode is active. Add [Forge] to include this method.",
+        messageFormat: "Method '{0}' in forge class '{1}' is ignored because explicit mode is active. Add [ForgeMethod] to include this method.",
         category: Category_Mode,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "In explicit mode (ForgeMode.Explicit), only methods decorated with [Forge] are treated as forge methods. This method matches the forge shape but lacks the attribute.");
+        description: "In explicit mode (ForgeMode.Explicit), only methods decorated with [ForgeMethod] are treated as forge methods. This method matches the forge shape but lacks the attribute.");
 
     /// <summary>
-    /// FKF010 (Warning): A private forge method is ignored because IncludePrivateMethods is false.
+    /// FKF010 (Warning): A private forge method is ignored because ShouldIncludePrivate is false.
     /// </summary>
     public static readonly DiagnosticDescriptor PrivateMethodIgnored = new(
         id: "FKF010",
         title: "Private forge method ignored",
-        messageFormat: "Private method '{0}' in forge class '{1}' is ignored. Set IncludePrivateMethods = true on [ForgeClass] to include private methods.",
+        messageFormat: "Private method '{0}' in forge class '{1}' is ignored. Set ShouldIncludePrivate = true on [Forge] to include private methods.",
         category: Category_Mode,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Private forge methods are ignored unless IncludePrivateMethods is enabled on the containing [ForgeClass].");
+        description: "Private forge methods are ignored unless ShouldIncludePrivate is enabled on the containing [Forge].");
 
     /// <summary>
     /// FKF011 (Info): Private method inclusion is enabled on this forge class.
@@ -63,7 +63,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor PrivateVisibilityEnabled = new(
         id: "FKF011",
         title: "Private visibility enabled",
-        messageFormat: "Forge class '{0}' has IncludePrivateMethods = true. Private forge methods will be included.",
+        messageFormat: "Forge class '{0}' has ShouldIncludePrivate = true. Private forge methods will be included.",
         category: Category_Mode,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -145,32 +145,20 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "A partial method named OnAfter{MethodName} was found. It will be called after the mapping assignments.");
 
-    /// <summary>
-    /// FKF060 (Info): A reverse mapping method was generated.
-    /// </summary>
-    public static readonly DiagnosticDescriptor ReverseMethodGenerated = new(
-        id: "FKF060",
-        title: "Reverse method generated",
-        messageFormat: "Reverse mapping method '{0}' generated for forge method '{1}'",
-        category: Category_MethodShape,
-        defaultSeverity: DiagnosticSeverity.Info,
-        isEnabledByDefault: true,
-        description: "The GenerateReverse option is enabled, so an additional method was generated that maps from destination back to source.");
-
     // ─── Member Discovery ─────────────────────────────────────────────────────
 
     /// <summary>
     /// FKF400 (Warning): A field in the source or destination type was ignored because
-    /// IncludeFields is false on the forge method.
+    /// ShouldIncludeFields is false on the forge method.
     /// </summary>
     public static readonly DiagnosticDescriptor FieldIgnored = new(
         id: "FKF400",
         title: "Field ignored",
-        messageFormat: "Field '{0}' on type '{1}' is ignored because IncludeFields is false. Set IncludeFields = true on [Forge] to include fields.",
+        messageFormat: "Field '{0}' on type '{1}' is ignored because ShouldIncludeFields is false. Set ShouldIncludeFields = true on [ForgeMethod] to include fields.",
         category: Category_MemberDiscovery,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Fields are excluded from member discovery by default. Set IncludeFields = true on the [Forge] attribute to include them.");
+        description: "Fields are excluded from member discovery by default. Set ShouldIncludeFields = true on the [ForgeMethod] attribute to include them.");
 
     /// <summary>
     /// FKF401 (Info): Fields are enabled for this forge method.
@@ -178,7 +166,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor FieldsEnabled = new(
         id: "FKF401",
         title: "Fields enabled",
-        messageFormat: "Forge method '{0}' has IncludeFields = true. Fields will be included in member discovery.",
+        messageFormat: "Forge method '{0}' has ShouldIncludeFields = true. Fields will be included in member discovery.",
         category: Category_MemberDiscovery,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -368,7 +356,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor NestedForgingDisabled = new(
         id: "FKF300",
         title: "Nested forging disabled",
-        messageFormat: "Member '{0}': source type '{1}' differs from destination type '{2}'. A forge method exists for this conversion but AllowNestedForging is false. Set AllowNestedForging = true on [Forge] to enable nested forging, or the member will be skipped.",
+        messageFormat: "Member '{0}': source type '{1}' differs from destination type '{2}'. A forge method exists for this conversion but AllowNestedForging is false. Set AllowNestedForging = true on [ForgeMethod] to enable nested forging, or the member will be skipped.",
         category: Category_Nested,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,

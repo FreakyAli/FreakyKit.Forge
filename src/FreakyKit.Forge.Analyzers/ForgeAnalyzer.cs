@@ -48,8 +48,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.BeforeHookDetected,
             ForgeDiagnostics.AfterHookDetected,
             ForgeDiagnostics.CollectionMapping,
-            ForgeDiagnostics.ConverterUsed,
-            ForgeDiagnostics.ReverseMethodGenerated
+            ForgeDiagnostics.ConverterUsed
         );
 
     public override void Initialize(AnalysisContext context)
@@ -63,7 +62,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     {
         var type = (INamedTypeSymbol)context.Symbol;
 
-        // Only analyze static partial classes with [ForgeClass]
+        // Only analyze static partial classes with [Forge]
         if (!type.IsStatic) return;
         if (!IsPartialClass(type, context.CancellationToken)) return;
 
@@ -298,7 +297,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
 
         var forgeAttr = GetForgeAttribute(method);
-        bool includeFields = forgeAttr != null && GetBoolProperty(forgeAttr, "IncludeFields");
+        bool includeFields = forgeAttr != null && GetBoolProperty(forgeAttr, "ShouldIncludeFields");
         bool allowNested = forgeAttr != null && GetBoolProperty(forgeAttr, "AllowNestedForging");
         bool allowFlattening = forgeAttr != null && GetBoolProperty(forgeAttr, "AllowFlattening");
 
@@ -847,15 +846,15 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     private static AttributeData? GetForgeClassAttribute(INamedTypeSymbol type)
     {
         return type.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeClassAttribute" ||
-                                 a.AttributeClass?.Name == "ForgeClass");
+            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeAttribute" ||
+                                 a.AttributeClass?.Name == "Forge");
     }
 
     private static AttributeData? GetForgeAttribute(IMethodSymbol method)
     {
         return method.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeAttribute" ||
-                                 a.AttributeClass?.Name == "Forge");
+            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeMethodAttribute" ||
+                                 a.AttributeClass?.Name == "ForgeMethod");
     }
 
     private static bool HasForgeAttribute(IMethodSymbol method)
@@ -890,7 +889,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
 
     private static bool GetIncludePrivateMethods(AttributeData attr)
     {
-        var namedArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "IncludePrivateMethods");
+        var namedArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "ShouldIncludePrivate");
         if (namedArg.Value.Value is bool val)
             return val;
         return false;
