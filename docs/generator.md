@@ -214,6 +214,32 @@ For each forge class, the generator produces a single `.g.cs` file containing:
 
 The file is named `{FullyQualifiedClassName}.Forge.g.cs` (with `.`, `<`, and `>` replaced by underscores).
 
+### Nested Type Support
+
+Forge classes can be nested inside other types. The generator will emit the correct containing type chain so the partial declaration matches the original nesting structure:
+
+```csharp
+public partial class Outer
+{
+    [Forge]
+    public static partial class InnerForges
+    {
+        public static partial PersonDto ToDto(Person source);
+    }
+}
+
+// Generated:
+partial class Outer
+{
+    public static partial class InnerForges
+    {
+        public static partial PersonDto ToDto(Person source) { ... }
+    }
+}
+```
+
+Containing types must be declared `partial` in user code so the generated partial declaration can extend them.
+
 ## Error Handling
 
 The generator follows a strict **no partial output** policy:

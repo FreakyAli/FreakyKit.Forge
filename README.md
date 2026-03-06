@@ -1,10 +1,12 @@
-# FreakyKit.Forge
-
 <p align="center">
   <img src="forge.png" alt="FreakyKit.Forge" width="600" />
 </p>
 
+# FreakyKit.Forge
+
 <div>
+   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/ci.yml?branch=master&logo=github&label=build"></a>
+   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/ci.yml?branch=master&logo=dotnet&label=tests"></a>
    <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget"></a>
    <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge.svg"></a>
    <a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge"></a>
@@ -118,13 +120,13 @@ Benchmarks coming soon. Forge generates plain C# assignments at compile time wit
 
 ## The Forge Ecosystem
 
-| Package | Description |
-|---------|-------------|
-| [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | Core attributes and enums (`[Forge]`, `[ForgeMethod]`, `[ForgeMap]`, etc.) |
-| [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | Roslyn source generator — writes mapping method bodies at compile time |
-| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | Roslyn analyzer — 31 diagnostics to validate your declarations at build time |
-| [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | Shared diagnostic descriptors for custom Roslyn tooling |
-| [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | Optional naming convention helpers |
+| Package | Downloads | Description |
+|---------|:---------:|-------------|
+| [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.svg) | Core attributes and enums (`[Forge]`, `[ForgeMethod]`, `[ForgeMap]`, etc.) |
+| [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Generator.svg) | Roslyn source generator — writes mapping method bodies at compile time |
+| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers.svg) | Roslyn analyzer — 31 diagnostics to validate your declarations at build time |
+| [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Diagnostics.svg) | Shared diagnostic descriptors for custom Roslyn tooling |
+| [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Conventions.svg) | Optional naming convention helpers |
 
 ## How It Works
 

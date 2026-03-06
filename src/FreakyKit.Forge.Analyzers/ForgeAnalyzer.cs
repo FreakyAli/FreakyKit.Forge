@@ -326,32 +326,36 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             bool hasSettable = false;
             foreach (var kvp in destMembers)
             {
-                if (kvp.Value.IsField)
-                {
-                    hasSettable = true;
-                    break;
-                }
+                bool isWritable = false;
 
-                // Find the actual property by resolving its effective key (respecting ForgeMap)
-                bool isReadOnly = false;
                 foreach (var member in destType.GetMembers())
                 {
-                    if (member is IPropertySymbol prop &&
-                        !prop.IsStatic &&
-                        !prop.IsIndexer &&
-                        member.DeclaredAccessibility != Accessibility.Private)
+                    if (member.IsStatic) continue;
+                    if (member.DeclaredAccessibility == Accessibility.Private) continue;
+
+                    if (kvp.Value.IsField && member is IFieldSymbol field)
+                    {
+                        var mapName = GetForgeMapName(field);
+                        var effectiveKey = (mapName ?? field.Name).ToLowerInvariant();
+                        if (effectiveKey == kvp.Key)
+                        {
+                            isWritable = !field.IsReadOnly && !field.IsConst;
+                            break;
+                        }
+                    }
+                    else if (!kvp.Value.IsField && member is IPropertySymbol prop && !prop.IsIndexer)
                     {
                         var mapName = GetForgeMapName(prop);
                         var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
                         if (effectiveKey == kvp.Key)
                         {
-                            if (prop.SetMethod == null)
-                                isReadOnly = true;
+                            isWritable = prop.SetMethod != null && !prop.SetMethod.IsInitOnly;
                             break;
                         }
                     }
                 }
-                if (!isReadOnly)
+
+                if (isWritable)
                 {
                     hasSettable = true;
                     break;
@@ -500,6 +504,10 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         {
             var key = destKvp.Key;
             var destMember = destKvp.Value;
+
+            // Skip read-only destination members — the generator never assigns them
+            if (IsReadOnlyDestMember(destType, key))
+                continue;
 
             if (!sourceMembers.TryGetValue(key, out var srcMember))
             {
@@ -751,6 +759,31 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             // Also check the type itself (e.g. IEnumerable<T>)
             if (named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>")
                 return true;
+        }
+        return false;
+    }
+
+    private static bool IsReadOnlyDestMember(INamedTypeSymbol destType, string keyLower)
+    {
+        foreach (var member in destType.GetMembers())
+        {
+            if (member.IsStatic) continue;
+            if (member.DeclaredAccessibility == Accessibility.Private) continue;
+
+            if (member is IPropertySymbol prop && !prop.IsIndexer)
+            {
+                var mapName = GetForgeMapName(prop);
+                var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
+                if (effectiveKey == keyLower)
+                    return prop.SetMethod == null || prop.SetMethod.IsInitOnly;
+            }
+            else if (member is IFieldSymbol field)
+            {
+                var mapName = GetForgeMapName(field);
+                var effectiveKey = (mapName ?? field.Name).ToLowerInvariant();
+                if (effectiveKey == keyLower)
+                    return field.IsReadOnly || field.IsConst;
+            }
         }
         return false;
     }

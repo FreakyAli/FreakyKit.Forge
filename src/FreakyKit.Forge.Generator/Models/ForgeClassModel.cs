@@ -15,13 +15,20 @@ internal sealed class ForgeClassModel
     public bool HasErrors { get; }
     public IReadOnlyList<ForgeMethodModel> Methods { get; }
 
+    /// <summary>
+    /// Containing type declarations from outermost to innermost, each as (accessibility, keyword, name).
+    /// Empty for top-level classes.
+    /// </summary>
+    public IReadOnlyList<ContainingTypeInfo> ContainingTypes { get; }
+
     public ForgeClassModel(
         string @namespace,
         string className,
         string accessibility,
         string fullyQualifiedName,
         bool hasErrors,
-        IReadOnlyList<ForgeMethodModel> methods)
+        IReadOnlyList<ForgeMethodModel> methods,
+        IReadOnlyList<ContainingTypeInfo>? containingTypes = null)
     {
         Namespace = @namespace;
         ClassName = className;
@@ -29,5 +36,6 @@ internal sealed class ForgeClassModel
         FullyQualifiedName = fullyQualifiedName;
         HasErrors = hasErrors;
         Methods = methods;
+        ContainingTypes = containingTypes ?? System.Array.Empty<ContainingTypeInfo>();
     }
 }

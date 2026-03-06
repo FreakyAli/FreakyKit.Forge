@@ -1,7 +1,7 @@
 namespace FreakyKit.Forge.Samples;
 
 /// <summary>
-/// Collection mapping: List → array uses .ToArray(), others use .ToList().
+/// Collection mapping: destination arrays use .ToArray(), HashSet&lt;T&gt; uses .ToHashSet(), other collections use .ToList().
 /// For different element types, combine with AllowNestedForging.
 /// </summary>
 [Forge]

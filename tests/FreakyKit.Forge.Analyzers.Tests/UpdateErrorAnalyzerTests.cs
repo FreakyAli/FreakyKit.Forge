@@ -110,4 +110,120 @@ public sealed class UpdateErrorAnalyzerTests : AnalyzerTestBase
         // FKF041 only applies to update shape, not create shape
         AssertNotContainsDiagnostic(source, "FKF041");
     }
+
+    [Fact]
+    public void FKF041_DestHasOnlyReadonlyFields_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string Name = ""; }
+                public class Dest   { public readonly string Name = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(ShouldIncludeFields = true)]
+                    public static partial void Update(Source source, Dest existing);
+                }
+            }
+            """;
+
+        AssertContainsDiagnostic(source, "FKF041");
+    }
+
+    [Fact]
+    public void FKF041_DestHasOnlyConstFields_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string Name = ""; }
+                public class Dest   { public const string Name = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(ShouldIncludeFields = true)]
+                    public static partial void Update(Source source, Dest existing);
+                }
+            }
+            """;
+
+        AssertContainsDiagnostic(source, "FKF041");
+    }
+
+    [Fact]
+    public void FKF041_DestHasWritableField_NoError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string Name = ""; }
+                public class Dest   { public string Name = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(ShouldIncludeFields = true)]
+                    public static partial void Update(Source source, Dest existing);
+                }
+            }
+            """;
+
+        AssertNotContainsDiagnostic(source, "FKF041");
+    }
+
+    [Fact]
+    public void FKF041_DestHasOnlyInitOnlyProperties_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string Name { get; set; } = ""; }
+                public class Dest   { public string Name { get; init; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial void Update(Source source, Dest existing);
+                }
+            }
+            """;
+
+        AssertContainsDiagnostic(source, "FKF041");
+    }
+
+    [Fact]
+    public void FKF041_DestHasMixedInitAndSettable_NoError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source
+                {
+                    public string Name { get; set; } = "";
+                    public int Age { get; set; }
+                }
+                public class Dest
+                {
+                    public string Name { get; init; } = "";
+                    public int Age { get; set; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial void Update(Source source, Dest existing);
+                }
+            }
+            """;
+
+        AssertNotContainsDiagnostic(source, "FKF041");
+    }
 }

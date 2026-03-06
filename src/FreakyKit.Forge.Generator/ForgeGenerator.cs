@@ -162,13 +162,17 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         var classAccessibility = AccessibilityToString(type.DeclaredAccessibility);
 
+        // Build containing type chain (outermost first) for nested classes
+        var containingTypes = BuildContainingTypeChain(type);
+
         var classModel = new ForgeClassModel(
             @namespace: ns,
             className: type.Name,
             accessibility: classAccessibility,
             fullyQualifiedName: type.ToDisplayString(),
             hasErrors: false,
-            methods: methodModels);
+            methods: methodModels,
+            containingTypes: containingTypes);
 
         return new ForgeClassResult(classModel, diagnostics, hasErrors: false);
     }
@@ -706,15 +710,34 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             sb.AppendLine("{");
         }
 
-        sb.AppendLine($"    {model.Accessibility} static partial class {model.ClassName}");
-        sb.AppendLine("    {");
+        // Base indent: "    " when inside a namespace, "" otherwise
+        var baseIndent = hasNamespace ? "    " : "";
 
-        foreach (var method in model.Methods)
+        // Emit containing type declarations (for nested classes)
+        foreach (var ct in model.ContainingTypes)
         {
-            GenerateMethodBody(sb, method, indent: "        ");
+            sb.AppendLine($"{baseIndent}partial {ct.Keyword} {ct.Name}");
+            sb.AppendLine($"{baseIndent}{{");
+            baseIndent += "    ";
         }
 
-        sb.AppendLine("    }");
+        sb.AppendLine($"{baseIndent}{model.Accessibility} static partial class {model.ClassName}");
+        sb.AppendLine($"{baseIndent}{{");
+
+        var methodIndent = baseIndent + "    ";
+        foreach (var method in model.Methods)
+        {
+            GenerateMethodBody(sb, method, indent: methodIndent);
+        }
+
+        sb.AppendLine($"{baseIndent}}}");
+
+        // Close containing type declarations (innermost first)
+        for (int i = model.ContainingTypes.Count - 1; i >= 0; i--)
+        {
+            baseIndent = baseIndent.Substring(4);
+            sb.AppendLine($"{baseIndent}}}");
+        }
 
         if (hasNamespace)
         {
@@ -963,7 +986,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 var mapName = GetForgeMapName(prop);
                 var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
                 if (effectiveKey == keyLower)
-                    return prop.SetMethod == null;
+                    return prop.SetMethod == null || prop.SetMethod.IsInitOnly;
             }
             else if (member is IFieldSymbol field)
             {
@@ -1274,6 +1297,25 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         Accessibility.ProtectedAndInternal => "private protected",
         _ => "public"
     };
+
+    private static List<ContainingTypeInfo> BuildContainingTypeChain(INamedTypeSymbol type)
+    {
+        var chain = new List<ContainingTypeInfo>();
+        var current = type.ContainingType;
+        while (current != null)
+        {
+            var keyword = current.IsRecord
+                ? (current.IsValueType ? "record struct" : "record class")
+                : (current.IsValueType ? "struct" : "class");
+            chain.Add(new ContainingTypeInfo(
+                AccessibilityToString(current.DeclaredAccessibility),
+                keyword,
+                current.Name));
+            current = current.ContainingType;
+        }
+        chain.Reverse(); // outermost first
+        return chain;
+    }
 
     // ─── Nullable Helpers ─────────────────────────────────────────────────────
 

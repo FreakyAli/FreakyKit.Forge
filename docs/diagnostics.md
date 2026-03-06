@@ -124,6 +124,15 @@ public static partial void Update(Person source, PersonDto existing);
 
 The destination type of an update forge method has no settable properties or fields. There is nothing to update.
 
+A member is considered **non-settable** if it is:
+
+- A property with no setter (get-only)
+- A property with an `init`-only setter (`{ get; init; }`)
+- A `readonly` field
+- A `const` field
+
+If every matching destination member falls into one of these categories, FKF041 is emitted.
+
 ### FKF050 — Before hook detected
 
 | | |
@@ -199,6 +208,8 @@ Informational. Emitted when `ShouldIncludeFields = true` is set on a `[ForgeMeth
 | **Message** | Destination member '{0}.{1}' has no matching member in source type '{2}'. It will be left at its default value. |
 
 A property (or field) exists on the destination type but no member with a matching name was found on the source type. The member will be left at its default value. This is a warning, not an error — generation proceeds.
+
+> **Note:** Read-only destination members (get-only properties, init-only properties, readonly fields, const fields) are excluded from this check because the generator never assigns them. No FKF100 is emitted for members that cannot be written to.
 
 ### FKF101 — Source member unused
 
