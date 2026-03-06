@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>FreakyKit.Forge.Analyzers</RootNamespace>
+    <AssemblyName>FreakyKit.Forge.Analyzers</AssemblyName>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+
+    <!-- NuGet packaging -->
+    <PackageId>FreakyKit.Forge.Analyzers</PackageId>
+    <Description>Roslyn diagnostic analyzer for FreakyKit.Forge. Validates forge declarations and reports warnings and errors at build time.</Description>
+
+    <!-- Analyzer DLL goes in analyzers/dotnet/cs, not lib/ -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Diagnostics: bundled physically in analyzers folder, not a NuGet dependency -->
+    <ProjectReference Include="..\FreakyKit.Forge.Diagnostics\FreakyKit.Forge.Diagnostics.csproj"
+                      PrivateAssets="all" />
+
+    <!-- Core attributes: creates a NuGet dependency so consumers get the attributes -->
+    <ProjectReference Include="..\FreakyKit.Forge\FreakyKit.Forge.csproj" />
+  </ItemGroup>
+
+  <!-- Pack analyzer + diagnostics DLLs into analyzers/dotnet/cs/ -->
+  <ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+    <None Include="$(OutputPath)\FreakyKit.Forge.Diagnostics.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+  </ItemGroup>
+
+</Project>

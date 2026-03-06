@@ -1,0 +1,68 @@
+name: Create a release on NuGet
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-pre"
+
+env:
+  DOTNET_VERSION: '9.0.x'
+
+jobs:
+  release-nuget:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Verify commit exists in origin/master
+        shell: pwsh
+        run: |
+          git fetch --no-tags --prune --depth=1 origin +refs/heads/*:refs/remotes/origin/*
+          if (-not (git branch --remote --contains | Select-String "origin/master")) {
+            throw "Tag is not on origin/master. Aborting release."
+          }
+
+      - name: Get version information from tag
+        id: get_version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          echo "version_without_v=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build
+        run: dotnet build -c Release -p:Version=${{ steps.get_version.outputs.version_without_v }}
+
+      - name: Test
+        run: dotnet test -c Release --no-build
+
+      - name: Pack NuGet packages
+        run: |
+          dotnet pack src/FreakyKit.Forge/FreakyKit.Forge.csproj -c Release --no-build -p:Version=${{ steps.get_version.outputs.version_without_v }}
+          dotnet pack src/FreakyKit.Forge.Diagnostics/FreakyKit.Forge.Diagnostics.csproj -c Release --no-build -p:Version=${{ steps.get_version.outputs.version_without_v }}
+          dotnet pack src/FreakyKit.Forge.Generator/FreakyKit.Forge.Generator.csproj -c Release --no-build -p:Version=${{ steps.get_version.outputs.version_without_v }}
+          dotnet pack src/FreakyKit.Forge.Analyzers/FreakyKit.Forge.Analyzers.csproj -c Release --no-build -p:Version=${{ steps.get_version.outputs.version_without_v }}
+          dotnet pack src/FreakyKit.Forge.Conventions/FreakyKit.Forge.Conventions.csproj -c Release --no-build -p:Version=${{ steps.get_version.outputs.version_without_v }}
+
+      - name: Push NuGet packages
+        shell: pwsh
+        run: |
+          $version = "${{ steps.get_version.outputs.version_without_v }}"
+          $nupkgs = Get-ChildItem -Recurse -Filter *.nupkg | Where-Object {
+            $_.FullName -like "*$version*" -and $_.FullName -notlike "*.symbols.nupkg"
+          }
+
+          if ($nupkgs.Count -ne 5) {
+            throw "Expected exactly 5 matching .nupkg files, found $($nupkgs.Count). Aborting to prevent version discrepancies."
+          }
+
+          foreach ($nupkg in $nupkgs) {
+            Write-Host "Pushing: $($nupkg.FullName)"
+            dotnet nuget push $nupkg.FullName -s https://api.nuget.org/v3/index.json -k ${{ secrets.NUGET_API_KEY }}
+          }

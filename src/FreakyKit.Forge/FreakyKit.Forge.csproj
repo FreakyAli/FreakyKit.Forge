@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>FreakyKit.Forge</RootNamespace>
+    <AssemblyName>FreakyKit.Forge</AssemblyName>
+
+    <!-- NuGet packaging -->
+    <PackageId>FreakyKit.Forge</PackageId>
+    <Description>Compile-time object mapping for C# powered by Roslyn source generators. Zero reflection, zero runtime overhead. This package provides the core attributes and enums.</Description>
+    <PackageTags>mapping;source-generator;roslyn;codegen</PackageTags>
+
+    <!-- Attributes DLL goes to lib/netstandard2.0/ (default) -->
+    <IncludeBuildOutput>true</IncludeBuildOutput>
+  </PropertyGroup>
+
+</Project>
