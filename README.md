@@ -3,11 +3,12 @@
 </p>
 
 <div>
-   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/ci.yml?branch=master&logo=github&label=build"></a>
-   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/ci.yml?branch=master&logo=dotnet&label=tests"></a>
-   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget"></a>
-   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge.svg"></a>
-   <a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge"></a>
+   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/test.yml"><img src="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/test.yml/badge.svg" alt="Test"></a>
+   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/release-nuget.yml"><img src="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/release-nuget.yml/badge.svg" alt="CD"></a>
+   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget" alt="NuGet"></a>
+   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge.svg" alt="Downloads"></a>
+   <a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge" alt="License"></a>
 </div>
 
 # FreakyKit.Forge

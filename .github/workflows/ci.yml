@@ -6,16 +6,11 @@ on:
   pull_request:
     branches: [master, main]
 
-permissions:
-  contents: read
-  checks: write
-  pull-requests: write
-
 env:
   DOTNET_VERSION: '9.0.x'
 
 jobs:
-  build-and-test:
+  build:
     runs-on: windows-latest
 
     steps:
@@ -31,12 +26,3 @@ jobs:
 
       - name: Build
         run: dotnet build -c Release --no-restore
-
-      - name: Test
-        run: dotnet test -c Release --no-build --no-restore --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
-
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action/windows@v2
-        if: always()
-        with:
-          files: ./TestResults/**/*.trx
