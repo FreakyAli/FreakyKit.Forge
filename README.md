@@ -2,8 +2,6 @@
   <img src="forge.png" alt="FreakyKit.Forge" width="600" />
 </p>
 
-# FreakyKit.Forge
-
 <div>
    <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/ci.yml?branch=master&logo=github&label=build"></a>
    <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/ci.yml?branch=master&logo=dotnet&label=tests"></a>
@@ -11,6 +9,8 @@
    <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge.svg"></a>
    <a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge"></a>
 </div>
+
+# FreakyKit.Forge
 
 A compile-time object mapping library for C# powered by Roslyn source generators. Define your mappings as partial method declarations and Forge generates the implementations at build time — zero reflection, zero runtime overhead.
 
