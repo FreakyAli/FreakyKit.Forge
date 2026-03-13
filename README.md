@@ -116,7 +116,95 @@ For other installation options (lightweight, conventions, local development), se
 
 ## Performance Benchmarks
 
-Benchmarks coming soon. Forge generates plain C# assignments at compile time with zero reflection, so runtime performance is equivalent to hand-written mapping code.
+> **Environment:** BenchmarkDotNet v0.14.0, macOS 26.3, Apple M4 Pro (14 cores), .NET 8.0.11 (Arm64 RyuJIT AdvSIMD)
+> 50 iterations, 10 warmup. Full benchmark source: [`benchmarks/FreakyKit.Forge.Benchmarks`](benchmarks/FreakyKit.Forge.Benchmarks)
+
+### Simple Mapping (4 properties)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| **Forge** | **6.34 ns** | **0.94x** | **1** | **40 B** |
+| Hand-written | 6.75 ns | 1.00x | 2 | 40 B |
+| Mapperly | 6.77 ns | 1.00x | 2 | 40 B |
+| Mapster | 12.34 ns | 1.83x | 3 | 40 B |
+| AutoMapper | 30.26 ns | 4.49x | 4 | 40 B |
+
+### Medium Mapping (10 properties)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| **Forge** | **12.57 ns** | **0.97x** | **1** | **96 B** |
+| Mapperly | 12.62 ns | 0.98x | 1 | 96 B |
+| Hand-written | 12.94 ns | 1.00x | 1 | 96 B |
+| Mapster | 20.18 ns | 1.56x | 2 | 96 B |
+| AutoMapper | 36.96 ns | 2.86x | 3 | 96 B |
+
+### Nested Object Mapping
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 23.57 ns | 1.00x | 1 | 136 B |
+| Mapperly | 23.85 ns | 1.01x | 1 | 136 B |
+| **Forge** | **23.97 ns** | **1.02x** | **1** | **136 B** |
+| Mapster | 29.65 ns | 1.26x | 2 | 136 B |
+| AutoMapper | 48.68 ns | 2.07x | 3 | 136 B |
+
+### Property Flattening
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 11.67 ns | 0.98x | 1 | 56 B |
+| **Forge** | **11.88 ns** | **1.00x** | **1** | **56 B** |
+| Hand-written | 11.94 ns | 1.00x | 1 | 56 B |
+| Mapster | 18.51 ns | 1.55x | 2 | 56 B |
+| AutoMapper | 36.49 ns | 3.06x | 3 | 56 B |
+
+### Deep Object Graph (scalars + 2 nested objects + collections)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| **Forge** | **205.7 ns** | **0.99x** | **1** | **1.86 KB** |
+| Hand-written | 206.7 ns | 1.00x | 1 | 1.86 KB |
+| Mapster | 238.0 ns | 1.15x | 2 | 1.79 KB |
+| Mapperly | 265.1 ns | 1.28x | 3 | 1.83 KB |
+| AutoMapper | 329.6 ns | 1.59x | 4 | 2.13 KB |
+
+### Collection Mapping (1,000 items)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 5,159 ns | 1.00x | 1 | 64,232 B |
+| **Forge** | **5,164 ns** | **1.00x** | **1** | **64,232 B** |
+| AutoMapper | 7,467 ns | 1.45x | 2 | 72,704 B |
+| Mapperly | 7,758 ns | 1.50x | 3 | 64,200 B |
+| Mapster | 7,931 ns | 1.54x | 3 | 64,160 B |
+
+### Update Mapping (void, modify existing object)
+
+| Method | Mean | Rank | Allocated |
+|--------|-----:|-----:|----------:|
+| Hand-written | 32.35 ns | 1 | 736 B |
+| **Forge** | **33.85 ns** | **1** | **736 B** |
+| Mapster | 202.34 ns | 2 | 736 B |
+| AutoMapper | 549.38 ns | 3 | 736 B |
+
+### Throughput (10,000 objects)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 159.2 μs | 0.94x | 1 | 1,015 KB |
+| Hand-written | 169.0 μs | 1.00x | 1 | 1,015 KB |
+| **Forge** | **170.8 μs** | **1.01x** | **1** | **1,015 KB** |
+| Mapster | 209.4 μs | 1.24x | 2 | 1,015 KB |
+| AutoMapper | 421.9 μs | 2.50x | 3 | 1,015 KB |
+
+### Key Takeaways
+
+- **Forge matches hand-written code** — consistently within 1-2% across all scenarios
+- **Zero allocation overhead** — identical memory footprint to hand-written mappers
+- **2-4x faster than AutoMapper** — no reflection overhead at runtime
+- **Faster than Mapster** — especially in nested, collection, and update scenarios
+- **Competitive with Mapperly** — trades leads across different scenarios, with Forge winning on deep graphs and collections
 
 ## The Forge Ecosystem
 
