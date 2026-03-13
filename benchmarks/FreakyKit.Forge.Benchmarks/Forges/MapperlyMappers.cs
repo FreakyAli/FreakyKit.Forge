@@ -24,4 +24,10 @@ public static partial class MapperlyMappers
     [MapProperty(nameof(FlatteningSource.HomeAddress) + "." + nameof(Address.State), nameof(FlatteningDestination.HomeAddressState))]
     [MapProperty(nameof(FlatteningSource.HomeAddress) + "." + nameof(Address.ZipCode), nameof(FlatteningDestination.HomeAddressZipCode))]
     public static partial FlatteningDestination MapFlattening(FlatteningSource source);
+
+    public static partial CustomerDto MapCustomer(CustomerEntity source);
+    public static partial LineItemDto MapLineItem(LineItemEntity source);
+    public static partial OrderDto MapOrder(OrderEntity source);
+
+    public static partial NullableUserDto MapNullableUser(NullableUserEntity source);
 }

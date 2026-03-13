@@ -198,9 +198,41 @@ For other installation options (lightweight, conventions, local development), se
 | Mapster | 209.4 μs | 1.24x | 2 | 1,015 KB |
 | AutoMapper | 421.9 μs | 2.50x | 3 | 1,015 KB |
 
+### Real-World: E-Commerce Order (enums + nested customer + line items + addresses)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapster | 159.3 ns | 0.92x | 1 | 1.05 KB |
+| **Forge** | **159.6 ns** | **0.92x** | **1** | **1.13 KB** |
+| Mapperly | 168.4 ns | 0.97x | 2 | 1.09 KB |
+| Hand-written | 173.2 ns | 1.00x | 2 | 1.13 KB |
+| AutoMapper | 203.4 ns | 1.18x | 3 | 1.13 KB |
+
+### Real-World: Nullable Database Entity (16 nullable columns)
+
+**Fully populated (all values present):**
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 11.37 ns | 1.00x | 1 | 168 B |
+| **Forge** | **11.47 ns** | **1.01x** | **1** | **168 B** |
+| Mapperly | 12.24 ns | 1.08x | 2 | 168 B |
+| Mapster | 17.60 ns | 1.55x | 3 | 168 B |
+| AutoMapper | 37.25 ns | 3.28x | 4 | 168 B |
+
+**Sparse (many nulls — new/incomplete accounts):**
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 11.59 ns | 0.92x | 1 | 168 B |
+| **Forge** | **12.14 ns** | **0.96x** | **2** | **168 B** |
+| Hand-written | 12.67 ns | 1.00x | 2 | 168 B |
+| Mapster | 18.63 ns | 1.47x | 3 | 168 B |
+| AutoMapper | 36.38 ns | 2.87x | 4 | 168 B |
+
 ### Key Takeaways
 
-- **Forge matches hand-written code** — consistently within 1-2% across all scenarios
+- **Forge matches hand-written code** — consistently within 1-2% across all scenarios, including real-world models with enums, nullables, and nested graphs
 - **Zero allocation overhead** — identical memory footprint to hand-written mappers
 - **2-4x faster than AutoMapper** — no reflection overhead at runtime
 - **Faster than Mapster** — especially in nested, collection, and update scenarios

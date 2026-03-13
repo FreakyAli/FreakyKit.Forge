@@ -105,4 +105,73 @@ public static class HandWrittenMappers
         existing.Age = source.Age;
         existing.Email = source.Email;
     }
+
+    public static CustomerDto MapCustomer(CustomerEntity source)
+    {
+        var result = new CustomerDto();
+        result.Id = source.Id;
+        result.FirstName = source.FirstName;
+        result.LastName = source.LastName;
+        result.Email = source.Email;
+        result.Phone = source.Phone;
+        result.BillingAddress = MapAddress(source.BillingAddress);
+        return result;
+    }
+
+    public static LineItemDto MapLineItem(LineItemEntity source)
+    {
+        var result = new LineItemDto();
+        result.ProductId = source.ProductId;
+        result.ProductName = source.ProductName;
+        result.Sku = source.Sku;
+        result.Quantity = source.Quantity;
+        result.UnitPrice = source.UnitPrice;
+        result.Discount = source.Discount;
+        return result;
+    }
+
+    public static OrderDto MapOrder(OrderEntity source)
+    {
+        var result = new OrderDto();
+        result.Id = source.Id;
+        result.OrderNumber = source.OrderNumber;
+        result.Status = source.Status;
+        result.Payment = source.Payment;
+        result.CreatedAt = source.CreatedAt;
+        result.ShippedAt = source.ShippedAt;
+        result.DeliveredAt = source.DeliveredAt;
+        result.Subtotal = source.Subtotal;
+        result.Tax = source.Tax;
+        result.Total = source.Total;
+        result.Currency = source.Currency;
+        result.Notes = source.Notes;
+        result.IsGift = source.IsGift;
+        result.Customer = MapCustomer(source.Customer);
+        result.ShippingAddress = MapAddress(source.ShippingAddress);
+        result.LineItems = source.LineItems.Select(x => MapLineItem(x)).ToList();
+        result.Tags = source.Tags.ToArray();
+        return result;
+    }
+
+    public static NullableUserDto MapNullableUser(NullableUserEntity source)
+    {
+        var result = new NullableUserDto();
+        result.Id = source.Id;
+        result.Username = source.Username;
+        result.DisplayName = source.DisplayName;
+        result.Email = source.Email;
+        result.AvatarUrl = source.AvatarUrl;
+        result.Bio = source.Bio;
+        result.Age = source.Age;
+        result.DateOfBirth = source.DateOfBirth;
+        result.LastLoginAt = source.LastLoginAt;
+        result.CreatedAt = source.CreatedAt;
+        result.IsVerified = source.IsVerified;
+        result.IsAdmin = source.IsAdmin;
+        result.AccountBalance = source.AccountBalance;
+        result.LoginCount = source.LoginCount;
+        result.Timezone = source.Timezone;
+        result.Locale = source.Locale;
+        return result;
+    }
 }

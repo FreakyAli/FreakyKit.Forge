@@ -52,3 +52,22 @@ public static partial class UpdateForges
 {
     public static partial void Update(SimpleSource source, SimpleDestination existing);
 }
+
+[global::FreakyKit.Forge.Forge]
+public static partial class EcommerceForges
+{
+    public static partial AddressDto MapAddress(Address source);
+    public static partial LineItemDto MapLineItem(LineItemEntity source);
+
+    [global::FreakyKit.Forge.ForgeMethod(AllowNestedForging = true)]
+    public static partial CustomerDto MapCustomer(CustomerEntity source);
+
+    [global::FreakyKit.Forge.ForgeMethod(AllowNestedForging = true)]
+    public static partial OrderDto MapOrder(OrderEntity source);
+}
+
+[global::FreakyKit.Forge.Forge]
+public static partial class NullableForges
+{
+    public static partial NullableUserDto Map(NullableUserEntity source);
+}

@@ -23,6 +23,14 @@ public class BenchmarkProfile : Profile
             .ForMember(d => d.HomeAddressCity, o => o.MapFrom(s => s.HomeAddress.City))
             .ForMember(d => d.HomeAddressState, o => o.MapFrom(s => s.HomeAddress.State))
             .ForMember(d => d.HomeAddressZipCode, o => o.MapFrom(s => s.HomeAddress.ZipCode));
+
+        // E-Commerce Order
+        CreateMap<CustomerEntity, CustomerDto>();
+        CreateMap<LineItemEntity, LineItemDto>();
+        CreateMap<OrderEntity, OrderDto>();
+
+        // Nullable User
+        CreateMap<NullableUserEntity, NullableUserDto>();
     }
 }
 

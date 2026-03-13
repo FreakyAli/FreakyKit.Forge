@@ -78,3 +78,72 @@ public class FlatteningDestination
     public string HomeAddressState { get; set; } = "";
     public string HomeAddressZipCode { get; set; } = "";
 }
+
+// ──────────────────────────────────────────────────────────────
+//  E-Commerce Order DTOs — API response models
+// ──────────────────────────────────────────────────────────────
+
+public class CustomerDto
+{
+    public int Id { get; set; }
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Phone { get; set; } = "";
+    public AddressDto BillingAddress { get; set; } = new();
+}
+
+public class LineItemDto
+{
+    public int ProductId { get; set; }
+    public string ProductName { get; set; } = "";
+    public string Sku { get; set; } = "";
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal Discount { get; set; }
+}
+
+public class OrderDto
+{
+    public int Id { get; set; }
+    public string OrderNumber { get; set; } = "";
+    public OrderStatus Status { get; set; }
+    public PaymentMethod Payment { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? ShippedAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public decimal Subtotal { get; set; }
+    public decimal Tax { get; set; }
+    public decimal Total { get; set; }
+    public string Currency { get; set; } = "USD";
+    public string? Notes { get; set; }
+    public bool IsGift { get; set; }
+    public CustomerDto Customer { get; set; } = new();
+    public AddressDto ShippingAddress { get; set; } = new();
+    public List<LineItemDto> LineItems { get; set; } = [];
+    public string[] Tags { get; set; } = [];
+}
+
+// ──────────────────────────────────────────────────────────────
+//  Nullable User DTO — clean API model with non-null defaults
+// ──────────────────────────────────────────────────────────────
+
+public class NullableUserDto
+{
+    public int Id { get; set; }
+    public string? Username { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Email { get; set; }
+    public string? AvatarUrl { get; set; }
+    public string? Bio { get; set; }
+    public int? Age { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public DateTime? LastLoginAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public bool? IsVerified { get; set; }
+    public bool? IsAdmin { get; set; }
+    public decimal? AccountBalance { get; set; }
+    public int? LoginCount { get; set; }
+    public string? Timezone { get; set; }
+    public string? Locale { get; set; }
+}
