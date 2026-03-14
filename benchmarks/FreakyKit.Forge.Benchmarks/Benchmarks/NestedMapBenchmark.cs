@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -59,4 +60,8 @@ public class NestedMapBenchmark
     [Benchmark(Description = "Mapster")]
     [BenchmarkCategory("Nested")]
     public NestedDestination Mapster() => _source.Adapt<NestedDestination>();
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("Nested")]
+    public NestedFacetDto Facet() => _source.ToFacet<NestedSource, NestedFacetDto>();
 }

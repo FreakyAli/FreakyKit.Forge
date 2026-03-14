@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -77,4 +78,8 @@ public class DeepGraphMapBenchmark
     [Benchmark(Description = "Mapster")]
     [BenchmarkCategory("DeepGraph")]
     public DeepGraphDestination Mapster() => _source.Adapt<DeepGraphDestination>();
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("DeepGraph")]
+    public DeepGraphFacetDto Facet() => _source.ToFacet<DeepGraphSource, DeepGraphFacetDto>();
 }

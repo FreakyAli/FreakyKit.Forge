@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -92,6 +93,16 @@ public class ThroughputBenchmark
         var results = new MediumDestination[_sources.Length];
         for (var i = 0; i < _sources.Length; i++)
             results[i] = _sources[i].Adapt<MediumDestination>();
+        return results;
+    }
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("Throughput")]
+    public MediumFacetDto[] FacetBench()
+    {
+        var results = new MediumFacetDto[_sources.Length];
+        for (var i = 0; i < _sources.Length; i++)
+            results[i] = _sources[i].ToFacet<MediumSource, MediumFacetDto>();
         return results;
     }
 }

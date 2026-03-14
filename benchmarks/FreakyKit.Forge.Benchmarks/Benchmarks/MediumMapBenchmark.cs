@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -60,4 +61,8 @@ public class MediumMapBenchmark
     [Benchmark(Description = "Mapster")]
     [BenchmarkCategory("Medium")]
     public MediumDestination Mapster() => _source.Adapt<MediumDestination>();
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("Medium")]
+    public MediumFacetDto Facet() => _source.ToFacet<MediumSource, MediumFacetDto>();
 }

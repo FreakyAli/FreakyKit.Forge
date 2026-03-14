@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -65,4 +66,8 @@ public class CollectionMapBenchmark
     [Benchmark(Description = "Mapster")]
     [BenchmarkCategory("Collection")]
     public CollectionDestination Mapster() => _source.Adapt<CollectionDestination>();
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("Collection")]
+    public CollectionFacetDto Facet() => _source.ToFacet<CollectionSource, CollectionFacetDto>();
 }

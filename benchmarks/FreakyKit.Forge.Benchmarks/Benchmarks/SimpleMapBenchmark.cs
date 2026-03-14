@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -54,4 +55,8 @@ public class SimpleMapBenchmark
     [Benchmark(Description = "Mapster")]
     [BenchmarkCategory("Simple")]
     public SimpleDestination Mapster() => _source.Adapt<SimpleDestination>();
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("Simple")]
+    public SimpleFacetDto Facet() => _source.ToFacet<SimpleSource, SimpleFacetDto>();
 }

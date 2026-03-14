@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -97,4 +98,8 @@ public class EcommerceOrderBenchmark
     [Benchmark(Description = "Mapster")]
     [BenchmarkCategory("EcommerceOrder")]
     public OrderDto Mapster() => _order.Adapt<OrderDto>();
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("EcommerceOrder")]
+    public OrderFacetDto Facet() => _order.ToFacet<OrderEntity, OrderFacetDto>();
 }

@@ -2,6 +2,7 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
@@ -95,6 +96,10 @@ public class NullableEntityBenchmark
     [BenchmarkCategory("NullableFull")]
     public NullableUserDto MapsterFull() => _fullyPopulated.Adapt<NullableUserDto>();
 
+    [Benchmark(Description = "Facet (full)")]
+    [BenchmarkCategory("NullableFull")]
+    public NullableUserFacetDto FacetFull() => _fullyPopulated.ToFacet<NullableUserEntity, NullableUserFacetDto>();
+
     // ── Sparse (many nulls) ──────────────────────────────────
 
     [Benchmark(Baseline = true, Description = "Hand-written (sparse)")]
@@ -116,4 +121,8 @@ public class NullableEntityBenchmark
     [Benchmark(Description = "Mapster (sparse)")]
     [BenchmarkCategory("NullableSparse")]
     public NullableUserDto MapsterSparse() => _sparse.Adapt<NullableUserDto>();
+
+    [Benchmark(Description = "Facet (sparse)")]
+    [BenchmarkCategory("NullableSparse")]
+    public NullableUserFacetDto FacetSparse() => _sparse.ToFacet<NullableUserEntity, NullableUserFacetDto>();
 }
