@@ -72,18 +72,22 @@ For other installation options (lightweight, conventions, local development), se
 - **Zero reflection** — all mapping code is generated at compile time
 - **Zero runtime dependencies** — the generated code is plain C#
 - **Parameterized constructor support** — automatically selects the best constructor
-- **Nested forging** — compose mappings for complex object graphs
-- **Collection mapping** — automatic `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>` conversion with LINQ
+- **Init-only & record support** — init-only properties and records use object initializer syntax
+- **Nested forging** — compose mappings for complex object graphs with null-safe access
+- **Collection mapping** — automatic `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ReadOnlyCollection<T>`, `HashSet<T>` conversion with LINQ
+- **Null-safe nested access** — null guards on nested forge calls, flattened properties, and collection mappings
 - **Flattening** — map nested properties like `Address.City` to flat members like `AddressCity`
-- **Custom member mapping** — rename members with `[ForgeMap]`
-- **Ignore members** — exclude members with `[ForgeIgnore]`
-- **Type converters** — bridge incompatible types with `[ForgeConverter]`
+- **Custom member mapping** — rename members with `[ForgeMap]` on properties, fields, or constructor parameters
+- **Ignore members** — exclude members with `[ForgeIgnore]`; use `Side` to restrict exclusion to source or destination only
+- **Type converters** — bridge incompatible types with `[ForgeConverter]`; invalid converter signatures are caught by FKF221
 - **Nullable handling** — automatic `Nullable<T>` ↔ `T` conversion with optional default values
 - **Enum mapping** — cast or name-based enum-to-enum conversion
 - **Update mapping** — modify existing objects in place (void return, 2 parameters)
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
-- **Rich diagnostics** — 31 diagnostics across 7 categories guide you at build time
+- **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
+- **Rich diagnostics** — 34 diagnostics across 7 categories guide you at build time
+- **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
 - **Conditional mapping** — skip assignments when source is null with `IgnoreIfNull`
@@ -110,9 +114,17 @@ For other installation options (lightweight, conventions, local development), se
 | Before/after hooks | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Rich diagnostics | ✅ | ❌ | ✅ | ~ | ✅ |
 | Field support | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Init-only / record support | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Null-safe nested access | ✅ | ✅ | ✅ | ~ | ~ |
+| Immutable collection types | ✅ | ✅ | ✅ | ✅ | ~ |
+| Strict mapping (drift detection) | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Conditional mapping (ignore if null) | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Debugging friendly output | ✅ | N/A | ✅ | ~ | ✅ |
-| Implicit + explicit modes | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Implicit and explicit mapping modes | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Custom constructor parameter mapping | ✅ | ✅ | ✅ | ~ | ❌ |
+| Dedicated collection projection methods | ✅ | ✅ | ✅ | ✅ | ~ |
+| Side-specific member exclusion | ✅ | ~ | ❌ | ❌ | ❌ |
+| Type converter validation | ✅ | N/A | ✅ | N/A | N/A |
 
 ## Performance Benchmarks
 
@@ -254,7 +266,7 @@ For other installation options (lightweight, conventions, local development), se
 |---------|:---------:|-------------|
 | [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.svg) | Core attributes and enums (`[Forge]`, `[ForgeMethod]`, `[ForgeMap]`, etc.) |
 | [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Generator.svg) | Roslyn source generator — writes mapping method bodies at compile time |
-| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers.svg) | Roslyn analyzer — 31 diagnostics to validate your declarations at build time |
+| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers.svg) | Roslyn analyzer — 34 diagnostics to validate your declarations at build time |
 | [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Diagnostics.svg) | Shared diagnostic descriptors for custom Roslyn tooling |
 | [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Conventions.svg) | Optional naming convention helpers |
 
@@ -329,13 +341,27 @@ Without `AllowNestedForging = true`, a type mismatch where a forge method exists
 
 ## Collection Mapping
 
-Collections are automatically mapped when source and destination members are collection types. Supported types include `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, and any type implementing `IEnumerable<T>`:
+Collections are automatically mapped when source and destination members are collection types. Supported types include:
+
+- **Standard:** `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `HashSet<T>`
+- **Immutable:** `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`
+- **Read-only:** `ReadOnlyCollection<T>`
+- Any type implementing `IEnumerable<T>`
 
 ```csharp
 public class Source { public List<int> Values { get; set; } = new(); }
 public class Dest   { public int[] Values { get; set; } = Array.Empty<int>(); }
 
-// Generates: __result.Values = source.Values.ToArray();
+// Generates: __result.Values = source.Values != null ? source.Values.ToArray() : null;
+```
+
+Immutable collection example:
+
+```csharp
+public class Source { public List<int> Values { get; set; } = new(); }
+public class Dest   { public ImmutableArray<int> Values { get; set; } }
+
+// Generates: __result.Values = source.Values != null ? source.Values.ToImmutableArray() : default;
 ```
 
 When element types differ and a forge method exists, use `AllowNestedForging = true`:
@@ -345,7 +371,7 @@ When element types differ and a forge method exists, use `AllowNestedForging = t
 public static partial PersonDto ToDto(Person source);
 public static partial AddressDto ToAddressDto(Address source);
 
-// Generates: __result.Addresses = source.Addresses.Select(x => ToAddressDto(x)).ToList();
+// Generates: __result.Addresses = source.Addresses != null ? source.Addresses.Select(x => ToAddressDto(x)).ToList() : null;
 ```
 
 ## Flattening
@@ -367,7 +393,7 @@ One level of nesting is supported. The destination member name is matched by con
 
 ## Custom Member Mapping
 
-Use `[ForgeMap]` to map members with different names:
+Use `[ForgeMap]` to map members with different names. Can be placed on properties, fields, or constructor parameters:
 
 ```csharp
 // Source-side: "FirstName" maps to destination member "Name"
@@ -378,26 +404,41 @@ public class Dest   { public string Name { get; set; } }
 public class Source { public string FirstName { get; set; } }
 public class Dest   { [ForgeMap("FirstName")] public string Name { get; set; } }
 
-// Both sides with a common key
-public class Source { [ForgeMap("CommonKey")] public string SrcName { get; set; } }
-public class Dest   { [ForgeMap("CommonKey")] public string DstName { get; set; } }
+// Constructor parameter: redirect matching when the parameter name differs from the source member
+public class Dest
+{
+    public string Name { get; }
+    public Dest([ForgeMap("FullName")] string name) { Name = name; }
+}
+// Generates: var __result = new Dest(source.FullName);
 ```
 
 ## Ignore Members
 
-Use `[ForgeIgnore]` to exclude a member from mapping entirely:
+Use `[ForgeIgnore]` to exclude a member from mapping. By default both sides are excluded. Use `Side` to restrict to one side:
 
 ```csharp
 public class Source
 {
     public string Name { get; set; }
-    [ForgeIgnore] public string InternalId { get; set; }  // skipped, no warnings
+    [ForgeIgnore] public string InternalId { get; set; }  // skipped on both sides, no warnings
+
+    [ForgeIgnore(Side = ForgeIgnoreSide.Source)]
+    public string AuditField { get; set; }  // not mapped from source (suppresses FKF101)
+                                             // but dest can still map to it via [ForgeMap]
+}
+
+public class Dest
+{
+    public string Name { get; set; }
+    [ForgeIgnore(Side = ForgeIgnoreSide.Destination)]
+    public int ComputedScore { get; set; }  // not populated by forge (suppresses FKF100)
 }
 ```
 
 ## Type Converters
 
-Use `[ForgeConverter]` on a static method to bridge incompatible types:
+Use `[ForgeConverter]` on a static method to bridge incompatible types. The method must be non-void, non-generic, and take exactly one parameter — the analyzer emits FKF221 if the signature is invalid:
 
 ```csharp
 [Forge]
@@ -407,10 +448,11 @@ public static partial class MyForges
 
     [ForgeConverter]
     public static string ConvertDateTime(DateTime value) => value.ToString("yyyy-MM-dd");
-}
+    // Generates: __result.Birthday = ConvertDateTime(source.Birthday);
 
-// When source.Birthday (DateTime) maps to dest.Birthday (string):
-// Generates: __result.Birthday = ConvertDateTime(source.Birthday);
+    // Bad signature — FKF221 warning, converter will be ignored:
+    // [ForgeConverter] public static string Convert(DateTime v, string fmt) => v.ToString(fmt);
+}
 ```
 
 ## Nullable Handling
@@ -470,6 +512,67 @@ public class Source
 ```
 
 `IgnoreIfNull` can be placed on `[ForgeMap]` on either the source or destination member, or on `[ForgeMethod]` for method-wide behavior.
+
+## Init-Only & Record Support
+
+Properties with `init` setters and record types are automatically handled using C# object initializer syntax:
+
+```csharp
+public class Source { public int Id { get; set; } public string Name { get; set; } = ""; }
+public record Dest(int Id, string Name);
+
+// Generates:
+// var __result = new Dest(default, default)
+// {
+//     Id = source.Id,
+//     Name = source.Name
+// };
+```
+
+Init-only properties are placed in the object initializer block, while regular settable properties use standard assignment. In **update methods**, init-only properties are skipped since they cannot be reassigned after construction.
+
+## Null-Safe Nested Access
+
+Forge automatically generates null guards when accessing nested members through reference types:
+
+**Nested forge calls:**
+
+```csharp
+// Generates: __result.Address = source.Address != null ? ToAddressDto(source.Address) : null;
+```
+
+**Flattened properties:**
+
+```csharp
+// Generates: __result.AddressCity = source.Address?.City;
+```
+
+**Collection members:**
+
+```csharp
+// Generates: __result.Values = source.Values != null ? source.Values.ToArray() : null;
+```
+
+This prevents `NullReferenceException` at runtime when source members are null.
+
+## Strict Mapping (Drift Detection)
+
+Enable strict mapping to catch type drift at compile time. When source or destination types change (members added, removed, or renamed), strict mode escalates warnings to errors:
+
+```csharp
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(StrictMapping = true)]
+    public static partial PersonDto ToDto(Person source);
+}
+```
+
+With `StrictMapping = true`:
+- **FKF110** (Error): Every destination member must have a matching source member
+- **FKF111** (Error): Every source member must have a matching destination member or be excluded via `[ForgeIgnore]`
+
+Without strict mapping, these are reported as FKF100/FKF101 warnings. Strict mode is useful for critical mappings where silent drift could cause data loss.
 
 ## Enum Mapping
 
@@ -571,14 +674,19 @@ Applied to a `static partial` method. Required in explicit mode, optional in imp
 | `MappingStrategy` | `ForgeMapping` | `Cast` | How enum-to-enum mappings are generated |
 | `AllowFlattening` | `bool` | `false` | Flatten nested source properties into flat destination members |
 | `IgnoreIfNull` | `bool` | `false` | Wrap all assignments in null checks — skip when source is null |
+| `StrictMapping` | `bool` | `false` | Escalate unmapped/unused member warnings to errors (drift detection) |
 
 ### `[ForgeIgnore]`
 
-Applied to a property or field. Excludes the member from mapping entirely — no FKF100/FKF101 warnings.
+Applied to a property or field. Excludes the member from mapping — no FKF100/FKF101 warnings.
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `Side` | `ForgeIgnoreSide` | `Both` | Which side to exclude: `Both`, `Source` (suppresses FKF101 only), or `Destination` (suppresses FKF100 only) |
 
 ### `[ForgeMap("name")]`
 
-Applied to a property or field. Maps the member to a differently-named counterpart.
+Applied to a property, field, or constructor parameter. Maps the member to a differently-named counterpart.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -588,7 +696,7 @@ Applied to a property or field. Maps the member to a differently-named counterpa
 
 ### `[ForgeConverter]`
 
-Applied to a `static` method. Marks it as a type converter. The method must take one parameter (source type) and return a value (destination type).
+Applied to a `static` method. Marks it as a type converter. The method must be non-void, non-generic, and take exactly one parameter. Invalid signatures emit FKF221.
 
 ### `ForgeMode`
 
@@ -596,6 +704,14 @@ Applied to a `static` method. Marks it as a type converter. The method must take
 |-------|-------------|
 | `Implicit` | All properly-shaped partial methods are forge methods |
 | `Explicit` | Only `[ForgeMethod]`-decorated methods are forge methods |
+
+### `ForgeIgnoreSide`
+
+| Value | Description |
+|-------|-------------|
+| `Both` | Member excluded on both source and destination sides (default) |
+| `Source` | Excluded only on source side — suppresses FKF101 |
+| `Destination` | Excluded only on destination side — suppresses FKF100 |
 
 ### `ForgeMapping`
 
@@ -627,6 +743,8 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF104 | Error | ForgeMap target not found |
 | FKF105 | Warning | Duplicate ForgeMap target |
 | FKF106 | Info | Flattened mapping applied |
+| FKF110 | Error | Strict: destination member missing source |
+| FKF111 | Error | Strict: source member unused |
 | FKF200 | Error | Incompatible member types |
 | FKF201 | Warning | Nullable value type to non-nullable mapping |
 | FKF202 | Info | Nullable mapping applied |

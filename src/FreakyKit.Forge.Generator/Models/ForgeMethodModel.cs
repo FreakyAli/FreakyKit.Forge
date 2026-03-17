@@ -24,6 +24,11 @@ internal sealed class ForgeMethodModel
     public string? AfterHookName { get; }
     public string? SourceFilePath { get; }
     public int SourceLineNumber { get; }
+    /// <summary>
+    /// For CollectionProject methods: the full LINQ projection expression (everything after "return").
+    /// Null for Create and Update methods.
+    /// </summary>
+    public string? CollectionProjectExpression { get; }
 
     public ForgeMethodModel(
         string methodName,
@@ -41,7 +46,8 @@ internal sealed class ForgeMethodModel
         string? beforeHookName = null,
         string? afterHookName = null,
         string? sourceFilePath = null,
-        int sourceLineNumber = 0)
+        int sourceLineNumber = 0,
+        string? collectionProjectExpression = null)
     {
         MethodName = methodName;
         Accessibility = accessibility;
@@ -59,5 +65,6 @@ internal sealed class ForgeMethodModel
         AfterHookName = afterHookName;
         SourceFilePath = sourceFilePath;
         SourceLineNumber = sourceLineNumber;
+        CollectionProjectExpression = collectionProjectExpression;
     }
 }

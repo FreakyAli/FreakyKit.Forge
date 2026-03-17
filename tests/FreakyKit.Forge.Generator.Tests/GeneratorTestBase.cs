@@ -28,9 +28,24 @@ public abstract class GeneratorTestBase
         if (File.Exists(runtimeDll))
             refs.Add(MetadataReference.CreateFromFile(runtimeDll));
 
+        var collectionsDll = Path.Combine(runtimePath, "System.Collections.dll");
+        if (File.Exists(collectionsDll))
+            refs.Add(MetadataReference.CreateFromFile(collectionsDll));
+
         var netstandard = Path.Combine(runtimePath, "netstandard.dll");
         if (File.Exists(netstandard))
             refs.Add(MetadataReference.CreateFromFile(netstandard));
+
+        // System.Collections.Immutable (for ImmutableArray<T>, ImmutableList<T>, etc.)
+        refs.Add(MetadataReference.CreateFromFile(typeof(System.Collections.Immutable.ImmutableArray<>).Assembly.Location));
+
+        // System.Collections.ObjectModel (for ReadOnlyCollection<T>)
+        var objectModelDll = Path.Combine(runtimePath, "System.ObjectModel.dll");
+        if (File.Exists(objectModelDll))
+            refs.Add(MetadataReference.CreateFromFile(objectModelDll));
+
+        // System.Linq (for Select, ToList, etc.)
+        refs.Add(MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location));
 
         // FreakyKit.Forge attributes
         refs.Add(MetadataReference.CreateFromFile(typeof(ForgeAttribute).Assembly.Location));

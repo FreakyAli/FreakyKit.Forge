@@ -33,6 +33,22 @@ public static partial void Update(SourceType source, DestType existing);
 
 No construction or return statement is generated — members are assigned directly on the second parameter.
 
+### Collection Projection Method
+
+When both the parameter type and return type are collection types, the generator treats the method as a **collection projection** — it generates a single LINQ expression rather than member-by-member assignments.
+
+```csharp
+public static partial List<PersonDto> ToDtos(List<Person> source);
+// Generates: return source != null ? source.Select(x => ToDto(x)).ToList() : null;
+```
+
+Requirements:
+- A forge method that converts the source element type to the destination element type must exist in the same forge class
+- If element types are different but no such forge method exists, `FKF200` is emitted
+- If element types are the same, the collection is materialised directly without a `Select`
+
+Null safety follows the same rules as regular collection mappings: a null-guard is generated when the source collection is a reference type.
+
 ## Member Matching
 
 Members are matched between source and destination types by **name** (case-insensitive). Only public, non-static, instance members are considered:
@@ -65,6 +81,21 @@ Members with `[ForgeIgnore]` are completely excluded from matching on both sourc
 ### Read-Only Properties
 
 Read-only properties (no setter) on the destination type are skipped for property assignment. They can still be satisfied through constructor parameters.
+
+### Init-Only Properties
+
+Properties with `init` setters (including record positional parameters) are placed in an **object initializer** block rather than using standard assignment:
+
+```csharp
+var __result = new Dest()
+{
+    Id = source.Id,       // init-only → object initializer
+    Name = source.Name    // init-only → object initializer
+};
+__result.Age = source.Age; // regular setter → standard assignment
+```
+
+In **update methods** (void return, 2 parameters), init-only properties are skipped since they cannot be reassigned after construction.
 
 ## Constructor Selection
 
@@ -124,11 +155,25 @@ When both types are enums:
 
 ### Collection Mapping
 
-Supported collection types include `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, and any type implementing `IEnumerable<T>`.
+Supported collection types:
+
+- **Standard:** `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `HashSet<T>`
+- **Immutable:** `ImmutableArray<T>`, `ImmutableList<T>`, `IImmutableList<T>`, `ImmutableHashSet<T>`, `IImmutableSet<T>`
+- **Read-only:** `ReadOnlyCollection<T>`, `Collection<T>`
+- Any type implementing `IEnumerable<T>`
 
 Materialization rule:
-- If the **destination** is an array (`T[]`): `.ToArray()`
+- Array (`T[]`): `.ToArray()`
+- `HashSet<T>`: `.ToHashSet()`
+- `ImmutableArray<T>`: `.ToImmutableArray()`
+- `ImmutableList<T>` / `IImmutableList<T>`: `.ToImmutableList()`
+- `ImmutableHashSet<T>` / `IImmutableSet<T>`: `.ToImmutableHashSet()`
+- `ReadOnlyCollection<T>`: `.ToList().AsReadOnly()`
 - Otherwise: `.ToList()`
+
+**Null-safe access:** When the source collection is a reference type, a null guard is generated:
+- Reference type destination: `source.Values != null ? source.Values.ToList() : null`
+- Value type destination (e.g., `ImmutableArray<T>`): `source.Values != null ? source.Values.ToImmutableArray() : default`
 
 For different element types with a forge method available:
 - `.Select(x => ForgeMethod(x)).ToList()` or `.Select(x => ForgeMethod(x)).ToArray()` (requires `AllowNestedForging = true`)
@@ -147,9 +192,9 @@ When `AllowFlattening = true` and a destination member has no direct match, the 
 
 1. For each source member `S`, check if the destination key starts with `S`'s key
 2. If so, look for a **property** on `S`'s type whose name matches the remainder
-3. Generate: `__result.AddressCity = source.Address.City`
+3. Generate: `__result.AddressCity = source.Address?.City` (null-safe for reference type intermediates)
 
-Only one level of nesting is supported. Flattening only traverses **properties** on intermediate types — fields are not considered, even when `ShouldIncludeFields = true`.
+Only one level of nesting is supported. Flattening only traverses **properties** on intermediate types — fields are not considered, even when `ShouldIncludeFields = true`. When the intermediate type is a reference type, the null-conditional operator (`?.`) is used to prevent `NullReferenceException`.
 
 ## Nested Forging
 
@@ -158,7 +203,8 @@ When a source and destination member share a name but have different types, the 
 With `AllowNestedForging = true`:
 
 ```csharp
-__result.Home = ToAddressDto(source.Home);
+// Null-safe: guards against NullReferenceException when source member is null
+__result.Home = source.Home != null ? ToAddressDto(source.Home) : null;
 ```
 
 The nested forge method must:

@@ -33,6 +33,12 @@ public abstract class IntegrationTestBase
         if (File.Exists(netstandard))
             refs.Add(MetadataReference.CreateFromFile(netstandard));
 
+        // System.Collections.Immutable (generated code may use ImmutableArray, etc.)
+        refs.Add(MetadataReference.CreateFromFile(typeof(System.Collections.Immutable.ImmutableArray<>).Assembly.Location));
+
+        // System.Linq (generated code uses Select, ToList, etc.)
+        refs.Add(MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location));
+
         refs.Add(MetadataReference.CreateFromFile(typeof(ForgeAttribute).Assembly.Location));
 
         return refs;

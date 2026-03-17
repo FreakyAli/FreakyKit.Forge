@@ -266,5 +266,7 @@ public sealed class GeneratorSuccessTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("MapA(", generated);
         Assert.Contains("MapB(", generated);
+        Assert.Contains("__result.X = source.X", generated);
+        Assert.Contains("__result.Y = source.Y", generated);
     }
 }

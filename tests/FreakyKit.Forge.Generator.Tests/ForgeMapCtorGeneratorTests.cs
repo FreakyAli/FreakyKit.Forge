@@ -2,17 +2,21 @@ using Xunit;
 
 namespace FreakyKit.Forge.Generator.Tests;
 
-public sealed class ForgeMapGeneratorTests : GeneratorTestBase
+public sealed class ForgeMapCtorGeneratorTests : GeneratorTestBase
 {
     [Fact]
-    public void ForgeMap_SourceSide_GeneratesCorrectAssignment()
+    public void ForgeMap_OnCtorParam_RemapsSourceMember()
     {
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { [ForgeMap("Name")] public string FirstName { get; set; } = ""; }
-                public class Dest   { public string Name { get; set; } = ""; }
+                public class Source { public string FullName { get; set; } = ""; }
+                public class Dest
+                {
+                    public string Name { get; }
+                    public Dest([ForgeMap("FullName")] string name) { Name = name; }
+                }
 
                 [Forge]
                 public static partial class MyForges
@@ -25,19 +29,49 @@ public sealed class ForgeMapGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.Name = source.FirstName", generated);
-        Assert.DoesNotContain("__result.FirstName", generated);
+        Assert.Contains("new Dest(source.FullName)", generated);
+        Assert.DoesNotContain("FKF501", generated);
     }
 
     [Fact]
-    public void ForgeMap_DestSide_GeneratesCorrectAssignment()
+    public void ForgeMap_OnCtorParam_WithoutAttribute_FKF501()
     {
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { public string FirstName { get; set; } = ""; }
-                public class Dest   { [ForgeMap("FirstName")] public string Name { get; set; } = ""; }
+                public class Source { public string FullName { get; set; } = ""; }
+                public class Dest
+                {
+                    public string Name { get; }
+                    public Dest(string name) { Name = name; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertHasError(result, "FKF501");
+    }
+
+    [Fact]
+    public void ForgeMap_OnCtorParam_NullableSourceMember()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int? Score { get; set; } }
+                public class Dest
+                {
+                    public int Value { get; }
+                    public Dest([ForgeMap("Score")] int value) { Value = value; }
+                }
 
                 [Forge]
                 public static partial class MyForges
@@ -50,38 +84,12 @@ public sealed class ForgeMapGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.Name = source.FirstName", generated);
-        Assert.DoesNotContain("source.Name", generated);
+        Assert.Contains("source.Score.Value", generated);
+        Assert.DoesNotContain("FKF501", generated);
     }
 
     [Fact]
-    public void ForgeMap_BothSides_MeetInMiddle()
-    {
-        const string source = """
-            using FreakyKit.Forge;
-            namespace TestNs
-            {
-                public class Source { [ForgeMap("CommonKey")] public string SrcField { get; set; } = ""; }
-                public class Dest   { [ForgeMap("CommonKey")] public string DstField { get; set; } = ""; }
-
-                [Forge]
-                public static partial class MyForges
-                {
-                    public static partial Dest ToDest(Source source);
-                }
-            }
-            """;
-
-        var result = RunGenerator(source);
-        AssertNoErrors(result);
-        var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.DstField = source.SrcField", generated);
-        Assert.DoesNotContain("__result.SrcField", generated);
-        Assert.DoesNotContain("source.DstField", generated);
-    }
-
-    [Fact]
-    public void ForgeMap_WithRegularProps_MixedMapping()
+    public void ForgeMap_OnCtorParam_MixedWithDirectParams()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -89,13 +97,14 @@ public sealed class ForgeMapGeneratorTests : GeneratorTestBase
             {
                 public class Source
                 {
+                    public string FullName { get; set; } = "";
                     public int Age { get; set; }
-                    [ForgeMap("FullName")] public string FirstName { get; set; } = "";
                 }
                 public class Dest
                 {
-                    public int Age { get; set; }
-                    public string FullName { get; set; } = "";
+                    public string Name { get; }
+                    public int Age { get; }
+                    public Dest([ForgeMap("FullName")] string name, int age) { Name = name; Age = age; }
                 }
 
                 [Forge]
@@ -109,7 +118,7 @@ public sealed class ForgeMapGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.Age = source.Age", generated);
-        Assert.Contains("__result.FullName = source.FirstName", generated);
+        Assert.Contains("source.FullName", generated);
+        Assert.Contains("source.Age", generated);
     }
 }
