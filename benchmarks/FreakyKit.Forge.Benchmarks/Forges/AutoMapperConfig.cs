@@ -1,4 +1,5 @@
 using AutoMapper;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ForgeBenchmarks;
 
@@ -38,9 +39,10 @@ public static class AutoMapperSetup
 {
     private static readonly Lazy<IMapper> _mapper = new(() =>
     {
-        var config = new MapperConfiguration(cfg => cfg.AddProfile<BenchmarkProfile>());
-        config.AssertConfigurationIsValid();
-        return config.CreateMapper();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAutoMapper(cfg => cfg.AddProfile<BenchmarkProfile>());
+        return services.BuildServiceProvider().GetRequiredService<IMapper>();
     });
 
     public static IMapper Mapper => _mapper.Value;

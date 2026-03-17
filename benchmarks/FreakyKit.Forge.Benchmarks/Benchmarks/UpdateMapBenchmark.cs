@@ -8,7 +8,9 @@ namespace ForgeBenchmarks;
 
 /// <summary>
 /// Benchmarks update (void) mapping: assigns source props onto an existing object, no allocation.
-/// Compares Forge, hand-written, AutoMapper, and Mapster. Mapperly doesn't support void update out of the box.
+/// Compares Forge, hand-written, AutoMapper, and Mapster.
+/// Mapperly: excluded — doesn't support void update out of the box.
+/// Facet: excluded — creates new objects only, doesn't support in-place mutation.
 /// </summary>
 [MemoryDiagnoser(displayGenColumns: true)]
 [SimpleJob(RuntimeMoniker.Net80, iterationCount: 50, warmupCount: 10)]

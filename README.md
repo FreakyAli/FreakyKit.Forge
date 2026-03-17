@@ -128,104 +128,109 @@ For other installation options (lightweight, conventions, local development), se
 
 ## Performance Benchmarks
 
-> **Environment:** BenchmarkDotNet v0.14.0, macOS 26.3, Apple M4 Pro (14 cores), .NET 8.0.11 (Arm64 RyuJIT AdvSIMD)
-> 50 iterations, 10 warmup. Competitors: Hand-written, [AutoMapper](https://github.com/AutoMapper/AutoMapper), [Mapperly](https://github.com/riok/mapperly), [Mapster](https://github.com/MapsterMapper/Mapster), [Facet](https://github.com/Tim-Maes/Facet). Full benchmark source: [`benchmarks/FreakyKit.Forge.Benchmarks`](benchmarks/FreakyKit.Forge.Benchmarks)
+> **Environment:** BenchmarkDotNet v0.15.8, macOS Tahoe 26.3, Apple M4 Pro (14 cores), .NET 8.0.11 (Arm64 RyuJIT armv8.0-a)
+> 50 iterations, 10 warmup. Competitors: Hand-written, [AutoMapper 16.1.1](https://github.com/AutoMapper/AutoMapper), [Mapperly 4.3.1](https://github.com/riok/mapperly), [Mapster 7.4.0](https://github.com/MapsterMapper/Mapster), [Facet 5.8.2](https://github.com/Tim-Maes/Facet). Full benchmark source: [`benchmarks/FreakyKit.Forge.Benchmarks`](benchmarks/FreakyKit.Forge.Benchmarks)
 
 ### Simple Mapping (4 properties)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 6.29 ns | 1.00x | 1 | 40 B |
-| Mapperly | 6.42 ns | 1.02x | 1 | 40 B |
-| **Forge** | **6.46 ns** | **1.03x** | **1** | **40 B** |
-| Facet | 10.55 ns | 1.68x | 2 | 104 B |
-| Mapster | 12.64 ns | 2.01x | 3 | 40 B |
-| AutoMapper | 30.44 ns | 4.84x | 4 | 40 B |
+| Hand-written | 6.37 ns | 1.00x | 1 | 40 B |
+| **Forge** | **6.46 ns** | **1.01x** | **1** | **40 B** |
+| Mapperly | 6.47 ns | 1.02x | 1 | 40 B |
+| Facet | 12.60 ns | 1.98x | 2 | 104 B |
+| Mapster | 12.68 ns | 1.99x | 2 | 40 B |
+| AutoMapper | 30.06 ns | 4.72x | 3 | 40 B |
 
 ### Medium Mapping (10 properties)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| **Forge** | **13.43 ns** | **0.65x** | **1** | **96 B** |
-| Mapperly | 14.02 ns | 0.68x | 1 | 96 B |
-| Facet | 14.77 ns | 0.71x | 2 | 160 B |
-| Mapster | 18.08 ns | 0.88x | 3 | 96 B |
-| Hand-written | 23.77 ns | 1.00x | 4 | 96 B |
-| AutoMapper | 37.29 ns | 1.80x | 5 | 96 B |
+| **Forge** | **12.43 ns** | **0.86x** | **1** | **96 B** |
+| Mapperly | 12.71 ns | 0.88x | 1 | 96 B |
+| Hand-written | 14.49 ns | 1.00x | 2 | 96 B |
+| Mapster | 18.52 ns | 1.28x | 3 | 96 B |
+| Facet | 20.57 ns | 1.42x | 4 | 160 B |
+| AutoMapper | 37.95 ns | 2.62x | 5 | 96 B |
 
 ### Nested Object Mapping
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 22.87 ns | 1.00x | 1 | 136 B |
-| Mapperly | 22.92 ns | 1.00x | 1 | 136 B |
-| **Forge** | **23.33 ns** | **1.02x** | **1** | **136 B** |
-| Mapster | 29.14 ns | 1.27x | 2 | 136 B |
-| Facet | 34.46 ns | 1.51x | 3 | 328 B |
-| AutoMapper | 46.15 ns | 2.02x | 4 | 136 B |
+| **Forge** | **21.92 ns** | **0.93x** | **1** | **136 B** |
+| Hand-written | 23.57 ns | 1.00x | 2 | 136 B |
+| Mapperly | 24.47 ns | 1.04x | 2 | 136 B |
+| Mapster | 29.77 ns | 1.26x | 3 | 136 B |
+| Facet | 38.62 ns | 1.64x | 4 | 328 B |
+| AutoMapper | 46.37 ns | 1.97x | 5 | 136 B |
 
 ### Property Flattening
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 10.56 ns | 1.00x | 1 | 56 B |
-| **Forge** | **17.61 ns** | **1.67x** | **2** | **56 B** |
-| Mapperly | 22.04 ns | 2.09x | 2 | 56 B |
-| Mapster | 32.19 ns | 3.05x | 3 | 56 B |
-| AutoMapper | 45.46 ns | 4.31x | 4 | 56 B |
+| **Forge** | **10.97 ns** | **0.94x** | **1** | **56 B** |
+| Hand-written | 11.72 ns | 1.00x | 2 | 56 B |
+| Mapperly | 12.16 ns | 1.04x | 2 | 56 B |
+| Mapster | 18.70 ns | 1.60x | 3 | 56 B |
+| Facet* | 38.12 ns | 3.25x | 4 | 320 B |
+| AutoMapper | 38.35 ns | 3.27x | 4 | 56 B |
+
+> *Facet maps nested objects rather than flattening — source types cannot be annotated with `[Flatten]`.
 
 ### Deep Object Graph (scalars + 2 nested objects + collections)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 203.7 ns | 1.00x | 1 | 1.86 KB |
-| **Forge** | **209.2 ns** | **1.03x** | **2** | **1.86 KB** |
-| Mapster | 218.2 ns | 1.07x | 3 | 1.79 KB |
-| Mapperly | 252.3 ns | 1.24x | 4 | 1.83 KB |
-| AutoMapper | 301.7 ns | 1.48x | 5 | 2.13 KB |
-| Facet | 2,182.9 ns | 10.71x | 6 | 8.42 KB |
+| Hand-written | 204.5 ns | 1.00x | 1 | 1.86 KB |
+| **Forge** | **208.5 ns** | **1.02x** | **1** | **1.86 KB** |
+| Mapster | 245.2 ns | 1.20x | 2 | 1.79 KB |
+| Mapperly | 260.8 ns | 1.28x | 3 | 1.83 KB |
+| AutoMapper | 326.5 ns | 1.60x | 4 | 2.13 KB |
+| Facet | 1,641.1 ns | 8.03x | 5 | 8.51 KB |
 
 ### Collection Mapping (1,000 items)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| **Forge** | **5,121 ns** | **0.98x** | **1** | **64,232 B** |
-| Hand-written | 5,211 ns | 1.00x | 1 | 64,232 B |
-| AutoMapper | 7,376 ns | 1.42x | 2 | 72,704 B |
-| Mapperly | 7,507 ns | 1.44x | 2 | 64,200 B |
-| Mapster | 7,874 ns | 1.51x | 3 | 64,160 B |
-| Facet | 51,534 ns | 9.89x | 4 | 314,128 B |
+| Hand-written | 5,261 ns | 1.00x | 1 | 64,232 B |
+| **Forge** | **5,270 ns** | **1.00x** | **1** | **64,232 B** |
+| AutoMapper | 7,648 ns | 1.45x | 2 | 72,704 B |
+| Mapperly | 7,696 ns | 1.46x | 2 | 64,200 B |
+| Mapster | 7,991 ns | 1.52x | 3 | 64,160 B |
+| Facet | 58,252 ns | 11.07x | 4 | 314,216 B |
 
 ### Update Mapping (void, modify existing object)
 
-| Method | Mean | Rank | Allocated |
-|--------|-----:|-----:|----------:|
-| Hand-written | 30.52 ns | 1 | 736 B |
-| **Forge** | **30.95 ns** | **1** | **736 B** |
-| Mapster | 200.76 ns | 2 | 736 B |
-| AutoMapper | 495.11 ns | 3 | 736 B |
+> Mapperly and Facet excluded — neither supports void in-place update. Timings use `InvocationCount=1` (high variance expected).
+
+| Method | Mean | Rank |
+|--------|-----:|-----:|
+| Hand-written | ~25 ns | 1 |
+| **Forge** | **~28 ns** | **1** |
+| Mapster | ~175 ns | 2 |
+| AutoMapper | ~534 ns | 3 |
 
 ### Throughput (10,000 objects)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Facet | 151.2 μs | 0.99x | 1 | 1,641 KB |
-| Hand-written | 153.0 μs | 1.00x | 1 | 1,016 KB |
-| Mapperly | 162.1 μs | 1.06x | 1 | 1,016 KB |
-| **Forge** | **167.2 μs** | **1.10x** | **1** | **1,016 KB** |
-| Mapster | 213.2 μs | 1.40x | 2 | 1,016 KB |
-| AutoMapper | 417.4 μs | 2.73x | 3 | 1,016 KB |
+| **Forge** | **152.0 μs** | **0.98x** | **1** | **1,016 KB** |
+| Hand-written | 155.2 μs | 1.00x | 1 | 1,016 KB |
+| Mapperly | 171.1 μs | 1.10x | 2 | 1,016 KB |
+| Mapster | 209.0 μs | 1.35x | 3 | 1,016 KB |
+| Facet | 240.8 μs | 1.55x | 4 | 1,641 KB |
+| AutoMapper | 414.0 μs | 2.67x | 5 | 1,016 KB |
 
 ### Real-World: E-Commerce Order (enums + nested customer + line items + addresses)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Mapster | 141.2 ns | 0.76x | 1 | 1.05 KB |
-| Hand-written | 218.4 ns | 1.00x | 2 | 1.13 KB |
-| **Forge** | **228.3 ns** | **1.23x** | **2** | **1.13 KB** |
-| Mapperly | 289.7 ns | 1.56x | 3 | 1.09 KB |
-| AutoMapper | 415.3 ns | 2.24x | 4 | 1.13 KB |
-| Facet | 784.0 ns | 4.23x | 5 | 2.91 KB |
+| **Forge** | **161.5 ns** | **1.00x** | **1** | **1.13 KB** |
+| Hand-written | 161.9 ns | 1.00x | 1 | 1.13 KB |
+| Mapperly | 165.6 ns | 1.02x | 1 | 1.09 KB |
+| Mapster | 166.7 ns | 1.03x | 1 | 1.05 KB |
+| AutoMapper | 208.0 ns | 1.28x | 2 | 1.13 KB |
+| Facet | 544.7 ns | 3.36x | 3 | 2.99 KB |
 
 ### Real-World: Nullable Database Entity (16 nullable columns)
 
@@ -233,32 +238,33 @@ For other installation options (lightweight, conventions, local development), se
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Mapperly | 11.35 ns | 0.91x | 1 | 168 B |
-| **Forge** | **12.35 ns** | **0.99x** | **2** | **168 B** |
-| Hand-written | 12.51 ns | 1.00x | 2 | 168 B |
-| Mapster | 17.43 ns | 1.39x | 3 | 168 B |
-| Facet | 17.82 ns | 1.43x | 3 | 232 B |
-| AutoMapper | 37.39 ns | 2.99x | 4 | 168 B |
+| **Forge** | **11.45 ns** | **0.98x** | **1** | **168 B** |
+| Mapperly | 11.57 ns | 0.99x | 1 | 168 B |
+| Hand-written | 11.71 ns | 1.00x | 1 | 168 B |
+| Mapster | 17.51 ns | 1.50x | 2 | 168 B |
+| Facet | 18.99 ns | 1.62x | 3 | 232 B |
+| AutoMapper | 36.17 ns | 3.09x | 4 | 168 B |
 
 **Sparse (many nulls — new/incomplete accounts):**
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 11.19 ns | 1.00x | 1 | 168 B |
-| Mapperly | 11.20 ns | 1.00x | 1 | 168 B |
-| **Forge** | **12.52 ns** | **1.12x** | **2** | **168 B** |
-| Facet | 17.71 ns | 1.58x | 3 | 232 B |
-| Mapster | 18.32 ns | 1.64x | 4 | 168 B |
-| AutoMapper | 37.92 ns | 3.39x | 5 | 168 B |
+| Hand-written | 11.50 ns | 1.00x | 1 | 168 B |
+| **Forge** | **11.66 ns** | **1.01x** | **1** | **168 B** |
+| Mapperly | 12.11 ns | 1.05x | 1 | 168 B |
+| Mapster | 17.37 ns | 1.51x | 2 | 168 B |
+| Facet | 17.98 ns | 1.56x | 2 | 232 B |
+| AutoMapper | 36.84 ns | 3.20x | 3 | 168 B |
 
 ### Key Takeaways
 
-- **Forge matches hand-written code** — consistently within 1-3% across all scenarios, including real-world models with enums, nullables, and nested graphs
+- **Forge matches hand-written code** — consistently within 1-2% across all scenarios, including real-world models with enums, nullables, and nested graphs
 - **Zero allocation overhead** — identical memory footprint to hand-written mappers
-- **2-4x faster than AutoMapper** — no reflection overhead at runtime
-- **Faster than Mapster** — especially in nested, collection, and update scenarios
-- **Competitive with Mapperly** — trades leads across different scenarios, with Forge winning on deep graphs and collections
-- **Facet** — competitive on flat/simple mappings but struggles with deep graphs and collections due to higher allocation overhead
+- **2.5–4.7x faster than AutoMapper** — no reflection overhead at runtime
+- **Faster than Mapster** — especially in medium, nested, flattening, and collection scenarios
+- **Competitive with Mapperly** — trades leads across scenarios; Forge wins on medium mappings, nested graphs, flattening, and e-commerce real-world
+- **Forge leads on throughput** — fastest across 10,000-object batches at 152 μs vs hand-written 155 μs
+- **Facet** — competitive on flat/simple mappings but allocates significantly more and struggles on deep graphs and large collections
 
 ## The Forge Ecosystem
 

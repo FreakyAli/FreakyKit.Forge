@@ -2,13 +2,15 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;
+using Facet.Extensions;
 using Mapster;
 
 namespace ForgeBenchmarks;
 
 /// <summary>
 /// Benchmarks property flattening: source.HomeAddress.City -> dest.HomeAddressCity.
-/// Compares Forge, hand-written, AutoMapper, Mapperly, and Mapster.
+/// Compares Forge, hand-written, AutoMapper, Mapperly, Mapster, and Facet.
+/// Note: Facet maps nested objects (not flattened) since source models can't be modified.
 /// </summary>
 [MemoryDiagnoser(displayGenColumns: true)]
 [SimpleJob(RuntimeMoniker.Net80, iterationCount: 50, warmupCount: 10)]
@@ -58,4 +60,8 @@ public class FlatteningMapBenchmark
     [Benchmark(Description = "Mapster")]
     [BenchmarkCategory("Flattening")]
     public FlatteningDestination Mapster() => _source.Adapt<FlatteningDestination>();
+
+    [Benchmark(Description = "Facet")]
+    [BenchmarkCategory("Flattening")]
+    public FlatteningFacetDto Facet() => _source.ToFacet<FlatteningSource, FlatteningFacetDto>();
 }
