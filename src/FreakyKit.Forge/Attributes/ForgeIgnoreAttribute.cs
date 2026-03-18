@@ -9,9 +9,9 @@ public enum ForgeIgnoreSide
 {
     /// <summary>Exclude the member on both source and destination sides (default).</summary>
     Both = 0,
-    /// <summary>Exclude only when the member appears on the source side. Suppresses FKF101.</summary>
+    /// <summary>Exclude only when the member appears on the source side. Suppresses FKF101 (FKF111 in strict mode).</summary>
     Source = 1,
-    /// <summary>Exclude only when the member appears on the destination side. Suppresses FKF100.</summary>
+    /// <summary>Exclude only when the member appears on the destination side. Suppresses FKF100 (FKF110 in strict mode).</summary>
     Destination = 2
 }
 

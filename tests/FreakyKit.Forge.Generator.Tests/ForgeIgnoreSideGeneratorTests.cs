@@ -20,6 +20,7 @@ public sealed class ForgeIgnoreSideGeneratorTests : GeneratorTestBase
                 public class Dest
                 {
                     public string Name { get; set; } = "";
+                    public string Secret { get; set; } = "";
                 }
 
                 [Forge]
@@ -53,6 +54,7 @@ public sealed class ForgeIgnoreSideGeneratorTests : GeneratorTestBase
                 public class Dest
                 {
                     public string Name { get; set; } = "";
+                    public string InternalId { get; set; } = "";
                 }
 
                 [Forge]
@@ -77,7 +79,7 @@ public sealed class ForgeIgnoreSideGeneratorTests : GeneratorTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { public string Name { get; set; } = ""; }
+                public class Source { public string Name { get; set; } = ""; public int ComputedScore { get; set; } }
                 public class Dest
                 {
                     public string Name { get; set; } = "";
