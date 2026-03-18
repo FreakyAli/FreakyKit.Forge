@@ -86,7 +86,7 @@ For other installation options (lightweight, conventions, local development), se
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 34 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 35 diagnostics across 7 categories guide you at build time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
@@ -636,6 +636,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF211 | Info | Enum name-based mapping |
 | FKF212 | Warning | Enum member missing in destination |
 | FKF220 | Info | Type converter used |
+| FKF221 | Warning | Invalid converter signature |
 | FKF300 | Warning | Nested forging disabled |
 | FKF310 | Info | Collection mapping applied |
 | FKF400 | Warning | Field ignored |

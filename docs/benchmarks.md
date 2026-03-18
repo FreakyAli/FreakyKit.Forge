@@ -189,7 +189,7 @@ Source code: [`benchmarks/FreakyKit.Forge.Benchmarks`](../benchmarks/FreakyKit.F
 > Benchmarks for .NET 10 have not been run yet. When available, results will be added here in the same format as the .NET 8 section above.
 >
 > To run them: update `TargetFramework` in `benchmarks/FreakyKit.Forge.Benchmarks/FreakyKit.Forge.Benchmarks.csproj` to `net10.0`, then run:
-> ```
+> ```bash
 > dotnet run -c Release -- -f '*'
 > ```
 > and populate the tables below using the same structure as the .NET 8 section.
