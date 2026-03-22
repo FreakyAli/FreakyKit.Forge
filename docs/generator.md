@@ -38,7 +38,7 @@ No construction or return statement is generated — members are assigned direct
 When both the parameter type and return type are collection types, the generator treats the method as a **collection projection** — it generates a single LINQ expression rather than member-by-member assignments.
 
 ```csharp
-public static partial List<PersonDto> ToDtos(List<Person> source);
+public static partial List<PersonDto>? ToDtos(List<Person>? source);
 // Generates: return source != null ? source.Select(x => ToDto(x)).ToList() : null;
 ```
 

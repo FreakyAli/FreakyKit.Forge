@@ -124,7 +124,12 @@ public sealed class ForgeIgnoreSideTests : AnalyzerTestBase
                     [ForgeIgnore(Side = ForgeIgnoreSide.Both)]
                     public string Secret { get; set; } = "";
                 }
-                public class Dest { public string Name { get; set; } = ""; }
+                public class Dest
+                {
+                    public string Name { get; set; } = "";
+                    [ForgeIgnore(Side = ForgeIgnoreSide.Both)]
+                    public string InternalId { get; set; } = "";
+                }
 
                 [Forge]
                 public static partial class MyForges
