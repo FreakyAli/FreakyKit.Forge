@@ -36,7 +36,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
         // Update mode: assigns to target parameter directly
         Assert.Contains("void ApplyUpdate(Source source, Dest target)", generated);
         Assert.Contains("target.Name = source.Name", generated);
-        Assert.Contains("target.Values = source.Values.ToArray()", generated);
+        Assert.Contains("target.Values = source.Values != null ? source.Values.ToArray() : null", generated);
         // No construction or return in update mode
         Assert.DoesNotContain("var __result", generated);
         Assert.DoesNotContain("return ", generated);
@@ -169,7 +169,7 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
         Assert.Contains("__result.Title = source.Title", generated);
         Assert.Contains("__result.Count = source.Count", generated);
         // Collection with nested forge
-        Assert.Contains("__result.Items = source.Items.Select(x => ToItemDto(x)).ToList()", generated);
+        Assert.Contains("__result.Items = source.Items != null ? source.Items.Select(x => ToItemDto(x)).ToList() : null", generated);
     }
 
     [Fact]
@@ -273,6 +273,6 @@ public sealed class CrossFeatureGeneratorTests : GeneratorTestBase
         // Nullable unwrap
         Assert.Contains("__result.Score = source.Score.Value", generated);
         // Flattened mapping
-        Assert.Contains("__result.AddressCity = source.Address.City", generated);
+        Assert.Contains("__result.AddressCity = source.Address?.City", generated);
     }
 }

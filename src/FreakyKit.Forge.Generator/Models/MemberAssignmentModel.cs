@@ -9,12 +9,14 @@ internal sealed class MemberAssignmentModel
     public string SourceExpression { get; }
     public bool IgnoreIfNull { get; }
     public string? NullCheckExpression { get; }
+    public bool IsInitOnly { get; }
 
-    public MemberAssignmentModel(string destMemberName, string sourceExpression, bool ignoreIfNull = false, string? nullCheckExpression = null)
+    public MemberAssignmentModel(string destMemberName, string sourceExpression, bool ignoreIfNull = false, string? nullCheckExpression = null, bool isInitOnly = false)
     {
         DestMemberName = destMemberName;
         SourceExpression = sourceExpression;
         IgnoreIfNull = ignoreIfNull;
         NullCheckExpression = nullCheckExpression;
+        IsInitOnly = isInitOnly;
     }
 }

@@ -27,7 +27,7 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.AddressCity = source.Address.City", generated);
+        Assert.Contains("__result.AddressCity = source.Address?.City", generated);
     }
 
     [Fact]
@@ -52,6 +52,8 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         var generated = AssertSingleGeneratedFile(result);
         Assert.DoesNotContain("AddressCity", generated);
+        // The source Address member is unused (no dest match) — verify no flattened access was generated
+        Assert.DoesNotContain("source.Address?.", generated);
     }
 
     [Fact]
@@ -78,7 +80,7 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Name = source.Name", generated);
-        Assert.Contains("__result.AddressCity = source.Address.City", generated);
-        Assert.Contains("__result.AddressZip = source.Address.Zip", generated);
+        Assert.Contains("__result.AddressCity = source.Address?.City", generated);
+        Assert.Contains("__result.AddressZip = source.Address?.Zip", generated);
     }
 }
