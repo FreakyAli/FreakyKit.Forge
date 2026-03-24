@@ -259,6 +259,34 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "The destination member was matched by flattening a nested source property (e.g., AddressCity maps to Address.City).");
 
+    // ─── Strict Mapping (Drift Detection) ──────────────────────────────────────
+
+    /// <summary>
+    /// FKF110 (Error): Strict mode — a destination member has no matching source member.
+    /// Emitted instead of FKF100 when StrictMapping = true.
+    /// </summary>
+    public static readonly DiagnosticDescriptor StrictDestinationMemberMissing = new(
+        id: "FKF110",
+        title: "Strict: destination member missing source",
+        messageFormat: "Destination member '{0}.{1}' has no matching member in source type '{2}'. StrictMapping is enabled — all destination members must be mapped.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "StrictMapping is enabled on this forge method. Every destination member must have a corresponding source member. This catches mapping drift when types change.");
+
+    /// <summary>
+    /// FKF111 (Error): Strict mode — a source member has no matching destination member.
+    /// Emitted instead of FKF101 when StrictMapping = true.
+    /// </summary>
+    public static readonly DiagnosticDescriptor StrictSourceMemberUnused = new(
+        id: "FKF111",
+        title: "Strict: source member unused",
+        messageFormat: "Source member '{0}.{1}' has no matching member in destination type '{2}'. StrictMapping is enabled — all source members must be consumed or explicitly ignored.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "StrictMapping is enabled on this forge method. Every source member must have a corresponding destination member or be excluded via [ForgeIgnore]. This catches mapping drift when types change.");
+
     // ─── Type Safety ──────────────────────────────────────────────────────────
 
     /// <summary>
@@ -346,6 +374,18 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         description: "A method marked with [ForgeConverter] was used to bridge the type mismatch for this member.");
+
+    /// <summary>
+    /// FKF221 (Warning): A method marked with [ForgeConverter] has an invalid signature and will be ignored.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InvalidConverterSignature = new(
+        id: "FKF221",
+        title: "Invalid converter signature",
+        messageFormat: "Method '{0}' is marked with [ForgeConverter] but has an invalid signature: {1}. The converter will be ignored.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A [ForgeConverter] method must be static, non-void, non-generic, and take exactly one parameter. Methods that don't meet these requirements are silently ignored by the generator, which can cause unexpected FKF200 errors.");
 
     // ─── Nested / Collections ────────────────────────────────────────────────
 

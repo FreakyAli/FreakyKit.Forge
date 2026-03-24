@@ -200,5 +200,7 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         Assert.DoesNotContain(result.Diagnostics, d => d.Id == "FKF201");
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("source.Age ?? 0", generated);
     }
 }

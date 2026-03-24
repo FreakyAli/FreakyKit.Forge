@@ -44,4 +44,11 @@ public sealed class ForgeMethodAttribute : Attribute
     /// </summary>
     public bool IgnoreIfNull { get; set; } = false;
 
+    /// <summary>
+    /// When true, unmapped destination members (FKF110) and unused source members (FKF111)
+    /// are reported as errors instead of warnings, ensuring complete mapping coverage.
+    /// This catches mapping drift when source or destination types change.
+    /// </summary>
+    public bool StrictMapping { get; set; } = false;
+
 }

@@ -141,6 +141,25 @@ public static partial class MyForges
 }
 ```
 
+#### `StrictMapping` (`bool`, default: `false`)
+
+When true, unmapped destination members and unused source members are reported as **errors** instead of warnings, enabling compile-time drift detection. This ensures mappings stay in sync when source or destination types change.
+
+- Unmapped destination members emit **FKF110** (Error) instead of FKF100 (Warning)
+- Unused source members emit **FKF111** (Error) instead of FKF101 (Warning)
+
+Use `[ForgeIgnore]` to explicitly exclude members that are intentionally unmapped.
+
+```csharp
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(StrictMapping = true)]
+    public static partial PersonDto ToDto(Person source);
+    // Any unmapped or unused members will now cause a build error
+}
+```
+
 ---
 
 ## `[ForgeIgnore]`
@@ -148,13 +167,35 @@ public static partial class MyForges
 **Namespace:** `FreakyKit.Forge`
 **Target:** Property or Field
 
-Excludes a property or field from forge mapping entirely. Members marked with this attribute are skipped — no `FKF100`/`FKF101` warnings are emitted. Emits `FKF102` (info).
+Excludes a property or field from forge mapping. By default, the member is skipped on **both** sides — no `FKF100`/`FKF101` warnings are emitted.
+
+### Properties
+
+#### `Side` (`ForgeIgnoreSide`, default: `ForgeIgnoreSide.Both`)
+
+Controls which side of the mapping this ignore applies to.
+
+| Value | Effect |
+|-------|--------|
+| `ForgeIgnoreSide.Both` | Member excluded on both source and destination sides (default) |
+| `ForgeIgnoreSide.Source` | Member excluded only when it appears on the source side. Suppresses FKF101. The destination side still participates in matching. |
+| `ForgeIgnoreSide.Destination` | Member excluded only when it appears on the destination side. Suppresses FKF100. The source side still participates in matching. |
 
 ```csharp
 public class Source
 {
     public string Name { get; set; }
-    [ForgeIgnore] public string InternalId { get; set; }  // skipped entirely
+    [ForgeIgnore] public string InternalId { get; set; }  // skipped on both sides (default)
+
+    [ForgeIgnore(Side = ForgeIgnoreSide.Source)]
+    public string AuditField { get; set; }  // not mapped from source, but dest can still use [ForgeMap] to reach another source member
+}
+
+public class Dest
+{
+    public string Name { get; set; }
+    [ForgeIgnore(Side = ForgeIgnoreSide.Destination)]
+    public int ComputedScore { get; set; }  // not populated by forge, but source's ComputedScore still participates
 }
 ```
 
@@ -163,9 +204,9 @@ public class Source
 ## `[ForgeMap]`
 
 **Namespace:** `FreakyKit.Forge`
-**Target:** Property or Field
+**Target:** Property, Field, or Constructor Parameter
 
-Maps a property or field to a differently-named member on the counterpart type. The constructor parameter specifies the target member name.
+Maps a property, field, or constructor parameter to a differently-named member on the counterpart type. The constructor parameter specifies the target member name.
 
 ### Constructor
 
@@ -225,6 +266,20 @@ public class Dest   { [ForgeMap("CommonKey")] public string DstName { get; set; 
 // Generates: __result.DstName = source.SrcName;
 ```
 
+**Constructor parameter mapping:** When a destination constructor parameter has a different name from the source property, place `[ForgeMap]` on the parameter to redirect the match.
+
+```csharp
+public class Source { public string FullName { get; set; } }
+public class Dest
+{
+    public string Name { get; }
+    public Dest([ForgeMap("FullName")] string name) { Name = name; }
+}
+// Generates: var __result = new Dest(source.FullName);
+```
+
+Without `[ForgeMap]`, the generator looks for a source member named `name` and emits `FKF501` if none is found.
+
 ### Diagnostics
 
 - `FKF103` (Info) — custom mapping applied
@@ -246,7 +301,10 @@ The converter method must be:
 - `static`
 - Non-void return type (the destination type)
 - Exactly one parameter (the source type)
+- Non-generic (no type parameters)
 - In the same forge class
+
+Methods that violate these requirements are silently ignored by the generator and emit **FKF221** (Warning) from the analyzer. Without the warning, a misconfigured converter can silently fail to resolve a type mismatch, causing an unexpected FKF200 error.
 
 ```csharp
 [Forge]
@@ -264,6 +322,21 @@ public static partial class MyForges
 ### Diagnostics
 
 - `FKF220` (Info) — converter used for a member mapping
+- `FKF221` (Warning) — converter method has an invalid signature and will be ignored
+
+---
+
+## `ForgeIgnoreSide` (Enum)
+
+**Namespace:** `FreakyKit.Forge`
+
+Controls which side of the mapping a `[ForgeIgnore]` attribute applies to.
+
+| Value | Numeric Value | Description |
+|-------|---------------|-------------|
+| `Both` | `0` | Member excluded on both source and destination sides (default) |
+| `Source` | `1` | Excluded only on the source side — suppresses FKF101 |
+| `Destination` | `2` | Excluded only on the destination side — suppresses FKF100 |
 
 ---
 

@@ -149,7 +149,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             else if (methodModel != null)
             {
                 methodModels.Add(methodModel);
-
             }
         }
 
@@ -187,6 +186,23 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         // Detect update vs create shape
         bool isUpdate = IsUpdateMethodShape(method);
         var methodKind = isUpdate ? ForgeMethodKind.Update : ForgeMethodKind.Create;
+
+        var srcParamName = method.Parameters[0].Name;
+
+        // ── Collection projection detection (before INamedTypeSymbol cast) ────
+        // Handles both INamedTypeSymbol (List<T>) and IArrayTypeSymbol (T[]) source/dest.
+        if (!isUpdate)
+        {
+            var rawSrc = method.Parameters[0].Type;
+            var rawDest = method.ReturnType;
+            var srcElemType = GetCollectionElementType(rawSrc);
+            var destElemType = GetCollectionElementType(rawDest);
+            if (srcElemType != null && destElemType != null)
+            {
+                return ExtractCollectionProjectMethod(method, forgeClass, rawSrc, rawDest,
+                    srcElemType, destElemType, srcParamName, diagnostics);
+            }
+        }
 
         INamedTypeSymbol? sourceType;
         INamedTypeSymbol? destType;
@@ -230,10 +246,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         // Collect source members
-        var sourceMembers = CollectMembers(sourceType, includeFields, method, diagnostics);
+        var sourceMembers = CollectMembers(sourceType, includeFields, method, diagnostics, isSourceSide: true);
 
         // Collect dest members (no FKF400 for dest — only source triggers it)
-        var destMembers = CollectMembers(destType, includeFields, null, null);
+        var destMembers = CollectMembers(destType, includeFields, null, null, isSourceSide: false);
 
         // Determine construction (skip for update methods)
         ConstructionModel construction;
@@ -263,7 +279,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
         else
         {
-            var (ctorConstruction, ctorDiags) = DetermineConstruction(destType, sourceMembers, method);
+            var (ctorConstruction, ctorDiags) = DetermineConstruction(destType, sourceMembers, method, srcParamName, sourceType);
             construction = ctorConstruction;
             diagnostics.AddRange(ctorDiags);
 
@@ -294,21 +310,28 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (IsReadOnlyMember(destType, key))
                 continue;
 
+            // Check if this is an init-only property (needs object initializer syntax)
+            // Init-only properties cannot be assigned in update methods
+            bool initOnly = IsInitOnlyMember(destType, key);
+            if (initOnly && isUpdate)
+                continue;
+
             if (!sourceMembers.TryGetValue(key, out var srcMember))
             {
                 // Try flattening: dest "AddressCity" → source "Address.City"
-                if (allowFlattening && TryResolveFlattenedMapping(sourceType, key, destMember.Type, method, out var flattenExpr))
+                if (allowFlattening && TryResolveFlattenedMapping(sourceType, key, destMember.Type, srcParamName, out var flattenExpr))
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.FlattenedMapping,
                         method.Locations.FirstOrDefault(),
                         destMember.Name,
                         sourceType.Name,
-                        flattenExpr.Replace($"{method.Parameters[0].Name}.", "")));
+                        flattenExpr.Replace($"{srcParamName}.", "")));
 
                     assignments.Add(new MemberAssignmentModel(
                         destMemberName: destMember.Name,
-                        sourceExpression: flattenExpr));
+                        sourceExpression: flattenExpr,
+                        isInitOnly: initOnly));
                     continue;
                 }
 
@@ -324,21 +347,22 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             bool memberIgnoreIfNull = (srcSymbolForNull != null && GetForgeIgnoreIfNull(srcSymbolForNull))
                 || (destSymbolForNull != null && GetForgeIgnoreIfNull(destSymbolForNull))
                 || methodIgnoreIfNull;
-            string? nullCheckExpr = memberIgnoreIfNull ? $"{method.Parameters[0].Name}.{srcMember.Name}" : null;
+            string? nullCheckExpr = memberIgnoreIfNull ? $"{srcParamName}.{srcMember.Name}" : null;
 
             if (srcMember.Type.ToDisplayString() == destMember.Type.ToDisplayString())
             {
                 // Exact type match
                 assignments.Add(new MemberAssignmentModel(
                     destMemberName: destMember.Name,
-                    sourceExpression: $"{method.Parameters[0].Name}.{srcMember.Name}",
+                    sourceExpression: $"{srcParamName}.{srcMember.Name}",
                     ignoreIfNull: memberIgnoreIfNull,
-                    nullCheckExpression: nullCheckExpr));
+                    nullCheckExpression: nullCheckExpr,
+                    isInitOnly: initOnly));
             }
             else if (TryResolveNullableMapping(srcMember.Type, destMember.Type, out var nullableKind))
             {
                 // Nullable-compatible types
-                var paramName = method.Parameters[0].Name;
+                var paramName = srcParamName;
                 var srcSymbol = srcSymbolForNull;
                 var destSymbol = destSymbolForNull;
                 var defaultValue = (srcSymbol != null ? GetForgeDefaultValue(srcSymbol) : null)
@@ -369,12 +393,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     destMemberName: destMember.Name,
                     sourceExpression: sourceExpr,
                     ignoreIfNull: memberIgnoreIfNull,
-                    nullCheckExpression: nullCheckExpr));
+                    nullCheckExpression: nullCheckExpr,
+                    isInitOnly: initOnly));
             }
             else if (srcMember.Type.TypeKind == TypeKind.Enum && destMember.Type.TypeKind == TypeKind.Enum)
             {
                 // Enum-to-enum mapping
-                var paramName = method.Parameters[0].Name;
+                var paramName = srcParamName;
 
                 if (enumMappingStrategy == 1) // ByName
                 {
@@ -425,7 +450,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         destMemberName: destMember.Name,
                         sourceExpression: switchExpr,
                         ignoreIfNull: memberIgnoreIfNull,
-                        nullCheckExpression: nullCheckExpr));
+                        nullCheckExpression: nullCheckExpr,
+                        isInitOnly: initOnly));
                 }
                 else // Cast (default)
                 {
@@ -442,10 +468,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         destMemberName: destMember.Name,
                         sourceExpression: $"({destEnumType.Name}){paramName}.{srcMember.Name}",
                         ignoreIfNull: memberIgnoreIfNull,
-                        nullCheckExpression: nullCheckExpr));
+                        nullCheckExpression: nullCheckExpr,
+                        isInitOnly: initOnly));
                 }
             }
-            else if (TryResolveCollectionMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, method, srcMember.Name, out var collectionExpr))
+            else if (TryResolveCollectionMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var collectionExpr))
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.CollectionMapping,
@@ -458,7 +485,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     destMemberName: destMember.Name,
                     sourceExpression: collectionExpr,
                     ignoreIfNull: memberIgnoreIfNull,
-                    nullCheckExpression: nullCheckExpr));
+                    nullCheckExpression: nullCheckExpr,
+                    isInitOnly: initOnly));
             }
             else if (FindConverterMethod(forgeClass, srcMember.Type, destMember.Type, out var converterName))
             {
@@ -472,9 +500,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 assignments.Add(new MemberAssignmentModel(
                     destMemberName: destMember.Name,
-                    sourceExpression: $"{converterName}({method.Parameters[0].Name}.{srcMember.Name})",
+                    sourceExpression: $"{converterName}({srcParamName}.{srcMember.Name})",
                     ignoreIfNull: memberIgnoreIfNull,
-                    nullCheckExpression: nullCheckExpr));
+                    nullCheckExpression: nullCheckExpr,
+                    isInitOnly: initOnly));
             }
             else
             {
@@ -482,11 +511,24 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 if (nestedForgeExists && allowNested && nestedMethodName != null)
                 {
+                    var srcAccess = $"{srcParamName}.{srcMember.Name}";
+                    string nestedExpr;
+                    // Null-safe nested access: if source member is a reference type, guard against null
+                    if (srcMember.Type.IsReferenceType)
+                    {
+                        nestedExpr = $"{srcAccess} != null ? {nestedMethodName}({srcAccess}) : null";
+                    }
+                    else
+                    {
+                        nestedExpr = $"{nestedMethodName}({srcAccess})";
+                    }
+
                     assignments.Add(new MemberAssignmentModel(
                         destMemberName: destMember.Name,
-                        sourceExpression: $"{nestedMethodName}({method.Parameters[0].Name}.{srcMember.Name})",
+                        sourceExpression: nestedExpr,
                         ignoreIfNull: memberIgnoreIfNull,
-                        nullCheckExpression: nullCheckExpr));
+                        nullCheckExpression: nullCheckExpr,
+                        isInitOnly: initOnly));
                 }
                 else if (!nestedForgeExists)
                 {
@@ -549,7 +591,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             accessibility: accessibility,
             sourceTypeFqn: sourceType.ToDisplayString(),
             sourceTypeShortName: sourceType.Name,
-            sourceParameterName: method.Parameters[0].Name,
+            sourceParameterName: srcParamName,
             destTypeFqn: destType.ToDisplayString(),
             destTypeShortName: destType.Name,
             construction: construction,
@@ -565,13 +607,128 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return (methodModel, diagnostics);
     }
 
+    private static (ForgeMethodModel? Model, List<Diagnostic> Diagnostics) ExtractCollectionProjectMethod(
+        IMethodSymbol method,
+        INamedTypeSymbol forgeClass,
+        ITypeSymbol sourceCollType,
+        ITypeSymbol destCollType,
+        ITypeSymbol srcElemType,
+        ITypeSymbol destElemType,
+        string srcParamName,
+        List<Diagnostic> diagnostics)
+    {
+        var accessibility = AccessibilityToString(method.DeclaredAccessibility);
+        var srcShort = BuildShortTypeName(sourceCollType);
+        var destShort = BuildShortTypeName(destCollType);
+
+        string elementTransform;
+        var srcElemDisplay = srcElemType.ToDisplayString();
+        var destElemDisplay = destElemType.ToDisplayString();
+
+        if (srcElemDisplay == destElemDisplay)
+        {
+            // Same element type — identity projection
+            elementTransform = "x => x";
+        }
+        else
+        {
+            // Try to find a forge method that converts srcElem → destElem
+            if (FindNestedForgeMethod(forgeClass, srcElemType, destElemType, out var nestedName) && nestedName != null)
+            {
+                elementTransform = $"x => {nestedName}(x)";
+            }
+            else
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.IncompatibleMemberTypes,
+                    method.Locations.FirstOrDefault(),
+                    method.Name,
+                    srcElemDisplay,
+                    destElemDisplay));
+                return (null, diagnostics);
+            }
+        }
+
+        // Determine materialization suffix for the destination collection type
+        string suffix;
+        if (IsImmutableArrayType(destCollType))
+            suffix = ".ToImmutableArray()";
+        else if (IsImmutableListType(destCollType))
+            suffix = ".ToImmutableList()";
+        else if (IsImmutableHashSetType(destCollType))
+            suffix = ".ToImmutableHashSet()";
+        else if (IsReadOnlyCollectionType(destCollType))
+            suffix = ".ToList().AsReadOnly()";
+        else if (destCollType is IArrayTypeSymbol || destCollType.OriginalDefinition.ToDisplayString() == "T[]"
+                 || (destCollType.Name == "Array"))
+            suffix = ".ToArray()";
+        else if (IsHashSetType(destCollType))
+            suffix = ".ToHashSet()";
+        else
+            suffix = ".ToList()";
+
+        string projExpr = elementTransform == "x => x"
+            ? $"{srcParamName}{suffix}"  // direct materialisation (no transform needed)
+            : $"{srcParamName}.Select({elementTransform}){suffix}";
+
+        // Null-safe guard when source collection is a reference type
+        bool srcIsRefType = sourceCollType.IsReferenceType;
+        string fullExpr;
+        if (srcIsRefType)
+        {
+            // ImmutableArray<T> is a struct — use default for null case
+            if (IsImmutableArrayType(destCollType))
+                fullExpr = $"{srcParamName} != null ? {projExpr} : default";
+            else
+                fullExpr = $"{srcParamName} != null ? {projExpr} : null";
+        }
+        else
+        {
+            fullExpr = projExpr;
+        }
+
+        var location = method.Locations.FirstOrDefault();
+        var model = new ForgeMethodModel(
+            methodName: method.Name,
+            accessibility: accessibility,
+            sourceTypeFqn: sourceCollType.ToDisplayString(),
+            sourceTypeShortName: srcShort,
+            sourceParameterName: srcParamName,
+            destTypeFqn: destCollType.ToDisplayString(),
+            destTypeShortName: destShort,
+            construction: new ConstructionModel(ConstructionKind.Parameterless, new System.Collections.Generic.List<ConstructorArgModel>()),
+            assignments: new System.Collections.Generic.List<MemberAssignmentModel>(),
+            nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
+            methodKind: ForgeMethodKind.CollectionProject,
+            sourceFilePath: location?.SourceTree?.FilePath,
+            sourceLineNumber: location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0,
+            collectionProjectExpression: fullExpr);
+
+        return (model, diagnostics);
+    }
+
+    /// <summary>Builds a short, unqualified name for a type, handling arrays and generic collections.</summary>
+    private static string BuildShortTypeName(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol arr)
+            return $"{arr.ElementType.Name}[]";
+        if (type is INamedTypeSymbol named && named.IsGenericType)
+        {
+            var args = string.Join(", ", named.TypeArguments.Select(t => t.Name));
+            return $"{named.Name}<{args}>";
+        }
+        return type.Name;
+    }
+
     private static (ConstructionModel Construction, List<Diagnostic> Diagnostics) DetermineConstruction(
         INamedTypeSymbol destType,
         Dictionary<string, (ITypeSymbol Type, string Name, bool IsField)> sourceMembers,
-        IMethodSymbol forgeMethod)
+        IMethodSymbol forgeMethod,
+        string srcParamName,
+        INamedTypeSymbol sourceType)
     {
         var diagnostics = new List<Diagnostic>();
-        var sourceName = forgeMethod.Parameters[0].Type.Name;
+        var sourceName = sourceType.Name;
 
         var publicCtors = destType.InstanceConstructors
             .Where(c => c.DeclaredAccessibility == Accessibility.Public)
@@ -604,24 +761,26 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             foreach (var param in ctor.Parameters)
             {
-                var key = param.Name.ToLowerInvariant();
+                // Check [ForgeMap] on the constructor parameter first, then fall back to param name
+                var forgeMapName = GetForgeMapName(param);
+                var key = (forgeMapName ?? param.Name).ToLowerInvariant();
                 if (sourceMembers.TryGetValue(key, out var src))
                 {
                     if (src.Type.ToDisplayString() == param.Type.ToDisplayString())
                     {
-                        args.Add(new ConstructorArgModel(param.Name, $"{forgeMethod.Parameters[0].Name}.{src.Name}"));
+                        args.Add(new ConstructorArgModel(param.Name, $"{srcParamName}.{src.Name}"));
                     }
                     else if (TryResolveNullableMapping(src.Type, param.Type, out var nk))
                     {
-                        var srcSymbol = forgeMethod.Parameters[0].Type.GetMembers().FirstOrDefault(m => m.Name == src.Name);
+                        var srcSymbol = sourceType.GetMembers().FirstOrDefault(m => m.Name == src.Name);
                         var defaultVal = srcSymbol != null ? GetForgeDefaultValue(srcSymbol) : null;
                         string expr;
                         if (nk == NullableConversionKind.UnwrapValue && defaultVal != null)
-                            expr = $"{forgeMethod.Parameters[0].Name}.{src.Name} ?? {FormatLiteral(defaultVal)}";
+                            expr = $"{srcParamName}.{src.Name} ?? {FormatLiteral(defaultVal)}";
                         else if (nk == NullableConversionKind.UnwrapValue)
-                            expr = $"{forgeMethod.Parameters[0].Name}.{src.Name}.Value";
+                            expr = $"{srcParamName}.{src.Name}.Value";
                         else
-                            expr = $"{forgeMethod.Parameters[0].Name}.{src.Name}";
+                            expr = $"{srcParamName}.{src.Name}";
                         args.Add(new ConstructorArgModel(param.Name, expr));
                     }
                     else
@@ -661,7 +820,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             var ctor = publicCtors[0];
             foreach (var param in ctor.Parameters)
             {
-                var key = param.Name.ToLowerInvariant();
+                var forgeMapName501 = GetForgeMapName(param);
+                var key = (forgeMapName501 ?? param.Name).ToLowerInvariant();
                 var typesMatch = sourceMembers.TryGetValue(key, out var src) &&
                     (src.Type.ToDisplayString() == param.Type.ToDisplayString() ||
                      TryResolveNullableMapping(src.Type, param.Type, out _));
@@ -699,6 +859,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("using System;");
         sb.AppendLine("using System.CodeDom.Compiler;");
+        sb.AppendLine("using System.Collections.Generic;");
+        sb.AppendLine("using System.Collections.Immutable;");
         sb.AppendLine("using System.Diagnostics;");
         sb.AppendLine("using System.Linq;");
         sb.AppendLine();
@@ -749,6 +911,22 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
     private static void GenerateMethodBody(StringBuilder sb, ForgeMethodModel method, string indent)
     {
+        if (method.MethodKind == ForgeMethodKind.CollectionProject)
+        {
+            sb.AppendLine($"{indent}/// <summary>Projects each element of <paramref name=\"{method.SourceParameterName}\"/> to <see cref=\"{method.DestTypeShortName}\"/>. Auto-generated by FreakyKit.Forge.</summary>");
+            sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
+            sb.AppendLine($"{indent}[DebuggerStepThrough]");
+            if (!string.IsNullOrEmpty(method.SourceFilePath) && method.SourceLineNumber > 0)
+                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath}\"");
+            sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
+            sb.AppendLine($"{indent}#line default");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    return {method.CollectionProjectExpression};");
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine();
+            return;
+        }
+
         // XML doc comment
         if (method.MethodKind == ForgeMethodKind.Update)
             sb.AppendLine($"{indent}/// <summary>Updates <paramref name=\"{method.DestParameterName}\"/> from <paramref name=\"{method.SourceParameterName}\"/>. Auto-generated by FreakyKit.Forge.</summary>");
@@ -799,6 +977,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Create method: non-void return, 1 parameter
             // Use short names: the generated file is placed in the same namespace as the forge class,
             // so both source and dest types are accessible by their unqualified names.
+
             sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
             sb.AppendLine($"{indent}#line default");
             sb.AppendLine($"{indent}{{");
@@ -807,19 +986,42 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (method.BeforeHookName != null)
                 sb.AppendLine($"{indent}    {method.BeforeHookName}({method.SourceParameterName});");
 
-            // Construction
-            if (method.Construction.Kind == ConstructionKind.Parameterless)
+            // Separate init-only assignments (must go in object initializer) from regular assignments
+            var initOnlyAssignments = method.Assignments.Where(a => a.IsInitOnly && !a.IgnoreIfNull).ToList();
+            var regularAssignments = method.Assignments.Where(a => !a.IsInitOnly).ToList();
+            // IgnoreIfNull init-only assignments cannot use object initializer (need if-check), so skip them
+            var skippedInitOnly = method.Assignments.Where(a => a.IsInitOnly && a.IgnoreIfNull).ToList();
+
+            // Construction with optional object initializer for init-only properties
+            string ctorArgs = "";
+            if (method.Construction.Kind == ConstructionKind.Parameterized)
+                ctorArgs = string.Join(", ", method.Construction.ConstructorArgs.Select(a => a.SourceExpression));
+
+            if (initOnlyAssignments.Count > 0)
+            {
+                // Object initializer syntax: new Dest(args) { InitProp = expr, ... };
+                sb.Append($"{indent}    var __result = new {method.DestTypeShortName}({ctorArgs})");
+                sb.AppendLine();
+                sb.AppendLine($"{indent}    {{");
+                for (int i = 0; i < initOnlyAssignments.Count; i++)
+                {
+                    var a = initOnlyAssignments[i];
+                    var comma = i < initOnlyAssignments.Count - 1 ? "," : "";
+                    sb.AppendLine($"{indent}        {a.DestMemberName} = {a.SourceExpression}{comma}");
+                }
+                sb.AppendLine($"{indent}    }};");
+            }
+            else if (method.Construction.Kind == ConstructionKind.Parameterless)
             {
                 sb.AppendLine($"{indent}    var __result = new {method.DestTypeShortName}();");
             }
             else if (method.Construction.Kind == ConstructionKind.Parameterized)
             {
-                var args = string.Join(", ", method.Construction.ConstructorArgs.Select(a => a.SourceExpression));
-                sb.AppendLine($"{indent}    var __result = new {method.DestTypeShortName}({args});");
+                sb.AppendLine($"{indent}    var __result = new {method.DestTypeShortName}({ctorArgs});");
             }
 
-            // Property assignments
-            foreach (var assignment in method.Assignments)
+            // Regular property assignments (non-init-only)
+            foreach (var assignment in regularAssignments)
             {
                 if (assignment.IgnoreIfNull && assignment.NullCheckExpression != null)
                 {
@@ -847,7 +1049,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         INamedTypeSymbol type,
         bool includeFields,
         IMethodSymbol? forgeMethod,
-        List<Diagnostic>? diagnostics)
+        List<Diagnostic>? diagnostics,
+        bool isSourceSide = true)
     {
         var result = new Dictionary<string, (ITypeSymbol, string, bool)>();
 
@@ -859,7 +1062,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (member is IPropertySymbol prop)
             {
                 if (prop.IsIndexer) continue;
-                if (HasForgeIgnoreAttribute(prop)) continue;
+                if (ShouldIgnoreMember(prop, isSourceSide)) continue;
                 var mapName = GetForgeMapName(prop);
                 var key = (mapName ?? prop.Name).ToLowerInvariant();
                 if (result.ContainsKey(key))
@@ -879,7 +1082,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             }
             else if (member is IFieldSymbol field)
             {
-                if (HasForgeIgnoreAttribute(field)) continue;
+                if (ShouldIgnoreMember(field, isSourceSide)) continue;
                 if (!includeFields)
                 {
                     if (forgeMethod != null && diagnostics != null)
@@ -923,11 +1126,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         INamedTypeSymbol sourceType,
         string destKeyLower,
         ITypeSymbol destMemberType,
-        IMethodSymbol forgeMethod,
+        string sourceParamName,
         out string flattenExpression)
     {
         flattenExpression = "";
-        var paramName = forgeMethod.Parameters[0].Name;
+        var paramName = sourceParamName;
 
         // Try each source member as a prefix
         foreach (var member in sourceType.GetMembers())
@@ -963,7 +1166,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         if (nestedProp.Name.ToLowerInvariant() == remainder &&
                             nestedProp.Type.ToDisplayString() == destMemberType.ToDisplayString())
                         {
-                            flattenExpression = $"{paramName}.{memberName}.{nestedProp.Name}";
+                            // Null-safe flattened access: use ?. if the intermediate member is a reference type
+                            if (memberType.IsReferenceType)
+                                flattenExpression = $"{paramName}.{memberName}?.{nestedProp.Name}";
+                            else
+                                flattenExpression = $"{paramName}.{memberName}.{nestedProp.Name}";
                             return true;
                         }
                     }
@@ -986,7 +1193,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 var mapName = GetForgeMapName(prop);
                 var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
                 if (effectiveKey == keyLower)
-                    return prop.SetMethod == null || prop.SetMethod.IsInitOnly;
+                    return prop.SetMethod == null; // init-only is NOT read-only — handled via object initializer
             }
             else if (member is IFieldSymbol field)
             {
@@ -994,6 +1201,25 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 var effectiveKey = (mapName ?? field.Name).ToLowerInvariant();
                 if (effectiveKey == keyLower)
                     return field.IsReadOnly || field.IsConst;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsInitOnlyMember(INamedTypeSymbol type, string keyLower)
+    {
+        foreach (var member in type.GetMembers())
+        {
+            if (member.IsStatic) continue;
+            if (member.DeclaredAccessibility == Accessibility.Private) continue;
+
+            if (member is IPropertySymbol prop)
+            {
+                if (prop.IsIndexer) continue;
+                var mapName = GetForgeMapName(prop);
+                var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
+                if (effectiveKey == keyLower)
+                    return prop.SetMethod != null && prop.SetMethod.IsInitOnly;
             }
         }
         return false;
@@ -1084,11 +1310,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     private static bool TryResolveCollectionMapping(
         ITypeSymbol srcType, ITypeSymbol destType,
         INamedTypeSymbol forgeClass, bool allowNested,
-        IMethodSymbol forgeMethod, string srcMemberName,
+        string sourceParamName, string srcMemberName,
         out string expression)
     {
         expression = "";
-        var paramName = forgeMethod.Parameters[0].Name;
+        var paramName = sourceParamName;
 
         var srcElem = GetCollectionElementType(srcType);
         var destElem = GetCollectionElementType(destType);
@@ -1102,20 +1328,38 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             suffix = ".ToArray()";
         else if (IsHashSetType(destType))
             suffix = ".ToHashSet()";
+        else if (IsImmutableArrayType(destType))
+            suffix = ".ToImmutableArray()";
+        else if (IsImmutableListType(destType))
+            suffix = ".ToImmutableList()";
+        else if (IsImmutableHashSetType(destType))
+            suffix = ".ToImmutableHashSet()";
+        else if (IsReadOnlyCollectionType(destType))
+            suffix = ".ToList().AsReadOnly()";
         else
             suffix = ".ToList()";
+
+        // Null-safe collection mapping: if source collection is a reference type, guard against null
+        bool srcIsRefType = srcType.IsReferenceType;
+        var nullFallback = destType.IsValueType ? "default" : "null";
 
         if (srcElem.ToDisplayString() == destElem.ToDisplayString())
         {
             // Same element type: just materialize
-            expression = $"{srcAccessor}{suffix}";
+            if (srcIsRefType)
+                expression = $"{srcAccessor} != null ? {srcAccessor}{suffix} : {nullFallback}";
+            else
+                expression = $"{srcAccessor}{suffix}";
             return true;
         }
 
         // Different element types: check for nested forge
         if (allowNested && FindNestedForgeMethod(forgeClass, srcElem, destElem, out var nestedName) && nestedName != null)
         {
-            expression = $"{srcAccessor}.Select(x => {nestedName}(x)){suffix}";
+            if (srcIsRefType)
+                expression = $"{srcAccessor} != null ? {srcAccessor}.Select(x => {nestedName}(x)){suffix} : {nullFallback}";
+            else
+                expression = $"{srcAccessor}.Select(x => {nestedName}(x)){suffix}";
             return true;
         }
 
@@ -1128,17 +1372,27 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         if (type is IArrayTypeSymbol arrayType)
             return arrayType.ElementType;
 
-        // Named generic types: List<T>, IList<T>, IEnumerable<T>, ICollection<T>, IReadOnlyList<T>, etc.
+        // Named generic types: List<T>, IList<T>, IEnumerable<T>, ICollection<T>, IReadOnlyList<T>,
+        // ImmutableArray<T>, ImmutableList<T>, ReadOnlyCollection<T>, etc.
         if (type is INamedTypeSymbol named && named.IsGenericType && named.TypeArguments.Length == 1)
         {
             var def = named.OriginalDefinition.ToDisplayString();
             if (def.StartsWith("System.Collections.Generic.") ||
+                def.StartsWith("System.Collections.Immutable.") ||
+                def.StartsWith("System.Collections.ObjectModel.") ||
                 def == "System.Collections.Generic.List<T>" ||
                 def == "System.Collections.Generic.IList<T>" ||
                 def == "System.Collections.Generic.IEnumerable<T>" ||
                 def == "System.Collections.Generic.ICollection<T>" ||
                 def == "System.Collections.Generic.IReadOnlyList<T>" ||
-                def == "System.Collections.Generic.IReadOnlyCollection<T>")
+                def == "System.Collections.Generic.IReadOnlyCollection<T>" ||
+                def == "System.Collections.Immutable.ImmutableArray<T>" ||
+                def == "System.Collections.Immutable.ImmutableList<T>" ||
+                def == "System.Collections.Immutable.IImmutableList<T>" ||
+                def == "System.Collections.Immutable.ImmutableHashSet<T>" ||
+                def == "System.Collections.Immutable.IImmutableSet<T>" ||
+                def == "System.Collections.ObjectModel.ReadOnlyCollection<T>" ||
+                def == "System.Collections.ObjectModel.Collection<T>")
             {
                 return named.TypeArguments[0];
             }
@@ -1172,10 +1426,65 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static bool HasForgeIgnoreAttribute(ISymbol member)
+    private static bool IsImmutableArrayType(ITypeSymbol type)
     {
-        return member.GetAttributes()
-            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeIgnoreAttribute");
+        if (type is INamedTypeSymbol named && named.IsGenericType)
+        {
+            var def = named.OriginalDefinition.ToDisplayString();
+            return def == "System.Collections.Immutable.ImmutableArray<T>";
+        }
+        return false;
+    }
+
+    private static bool IsImmutableListType(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol named && named.IsGenericType)
+        {
+            var def = named.OriginalDefinition.ToDisplayString();
+            return def == "System.Collections.Immutable.ImmutableList<T>" ||
+                   def == "System.Collections.Immutable.IImmutableList<T>";
+        }
+        return false;
+    }
+
+    private static bool IsImmutableHashSetType(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol named && named.IsGenericType)
+        {
+            var def = named.OriginalDefinition.ToDisplayString();
+            return def == "System.Collections.Immutable.ImmutableHashSet<T>" ||
+                   def == "System.Collections.Immutable.IImmutableSet<T>";
+        }
+        return false;
+    }
+
+    private static bool IsReadOnlyCollectionType(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol named && named.IsGenericType)
+        {
+            var def = named.OriginalDefinition.ToDisplayString();
+            return def == "System.Collections.ObjectModel.ReadOnlyCollection<T>";
+        }
+        return false;
+    }
+
+    private static bool HasForgeIgnoreAttribute(ISymbol member)
+        => ShouldIgnoreMember(member, isSourceSide: true) || ShouldIgnoreMember(member, isSourceSide: false);
+
+    private static bool ShouldIgnoreMember(ISymbol member, bool isSourceSide)
+    {
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeIgnoreAttribute");
+        if (attr == null) return false;
+
+        // Read the Side named argument (default = Both = 0)
+        var sideArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Side");
+        int side = sideArg.Key != null && sideArg.Value.Value is int sv ? sv : 0;
+
+        // Both(0): always ignore; Source(1): ignore only on source side; Destination(2): ignore only on dest side
+        return side == 0
+            || (side == 1 && isSourceSide)
+            || (side == 2 && !isSourceSide);
     }
 
     private static string? GetForgeMapName(ISymbol member)

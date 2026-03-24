@@ -30,6 +30,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.FieldsEnabled,
             ForgeDiagnostics.DestinationMemberMissing,
             ForgeDiagnostics.SourceMemberUnused,
+            ForgeDiagnostics.StrictDestinationMemberMissing,
+            ForgeDiagnostics.StrictSourceMemberUnused,
             ForgeDiagnostics.IncompatibleMemberTypes,
             ForgeDiagnostics.NestedForgingDisabled,
             ForgeDiagnostics.ConstructorAmbiguity,
@@ -48,7 +50,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.BeforeHookDetected,
             ForgeDiagnostics.AfterHookDetected,
             ForgeDiagnostics.CollectionMapping,
-            ForgeDiagnostics.ConverterUsed
+            ForgeDiagnostics.ConverterUsed,
+            ForgeDiagnostics.InvalidConverterSignature
         );
 
     public override void Initialize(AnalysisContext context)
@@ -153,6 +156,38 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     ForgeDiagnostics.ForgeMethodDeclaresBody,
                     loc,
                     impl.Name));
+            }
+        }
+
+        // FKF221: validate [ForgeConverter] method signatures
+        foreach (var member in type.GetMembers().OfType<IMethodSymbol>())
+        {
+            bool hasConverterAttr = member.GetAttributes()
+                .Any(a => a.AttributeClass?.Name == "ForgeConverterAttribute" ||
+                           a.AttributeClass?.Name == "ForgeConverter");
+            if (!hasConverterAttr) continue;
+
+            string? reason = null;
+            if (!member.IsStatic)
+                reason = "must be static";
+            else if (member.ReturnsVoid)
+                reason = "must have a non-void return type";
+            else if (member.TypeParameters.Length > 0)
+                reason = "must not be generic";
+            else if (member.Parameters.Length != 1)
+                reason = $"must have exactly one parameter (found {member.Parameters.Length})";
+
+            if (reason != null)
+            {
+                var loc = member.Locations.FirstOrDefault();
+                if (loc != null)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ForgeDiagnostics.InvalidConverterSignature,
+                        loc,
+                        member.Name,
+                        reason));
+                }
             }
         }
 
@@ -300,6 +335,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         bool includeFields = forgeAttr != null && GetBoolProperty(forgeAttr, "ShouldIncludeFields");
         bool allowNested = forgeAttr != null && GetBoolProperty(forgeAttr, "AllowNestedForging");
         bool allowFlattening = forgeAttr != null && GetBoolProperty(forgeAttr, "AllowFlattening");
+        bool strictMapping = forgeAttr != null && GetBoolProperty(forgeAttr, "StrictMapping");
 
         // FKF401: fields enabled
         if (includeFields)
@@ -315,10 +351,10 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
 
         // Collect source members
-        var sourceMembers = CollectMembers(sourceType, includeFields, context, method);
+        var sourceMembers = CollectMembers(sourceType, includeFields, context, method, isSourceSide: true);
 
         // Collect dest members
-        var destMembers = CollectMembers(destType, includeFields, context, method);
+        var destMembers = CollectMembers(destType, includeFields, context, method, isSourceSide: false);
 
         if (isUpdate)
         {
@@ -385,7 +421,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
 
         // Analyze member matching
-        AnalyzeMemberMatching(context, method, sourceType, destType, sourceMembers, destMembers, allowNested, allowFlattening, forgeClass);
+        AnalyzeMemberMatching(context, method, sourceType, destType, sourceMembers, destMembers, allowNested, allowFlattening, forgeClass, isUpdate, strictMapping);
     }
 
     private static void AnalyzeConstruction(
@@ -496,7 +532,9 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         Dictionary<string, (ITypeSymbol Type, bool IsField)> destMembers,
         bool allowNested,
         bool allowFlattening,
-        INamedTypeSymbol forgeClass)
+        INamedTypeSymbol forgeClass,
+        bool isUpdate = false,
+        bool strictMapping = false)
     {
         var matchedSourceKeys = new HashSet<string>();
 
@@ -506,7 +544,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             var destMember = destKvp.Value;
 
             // Skip read-only destination members — the generator never assigns them
-            if (IsReadOnlyDestMember(destType, key))
+            // For create methods, init-only properties ARE assignable (via object initializer)
+            if (IsReadOnlyDestMember(destType, key, isUpdate))
                 continue;
 
             if (!sourceMembers.TryGetValue(key, out var srcMember))
@@ -515,12 +554,15 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 if (allowFlattening && CanFlatten(sourceType, key, destMember.Type))
                     continue;
 
-                // FKF100: destination member has no source counterpart
+                // FKF100 (warning) or FKF110 (error in strict mode)
                 var loc = forgeMethod.Locations.FirstOrDefault();
                 if (loc != null)
                 {
+                    var descriptor = strictMapping
+                        ? ForgeDiagnostics.StrictDestinationMemberMissing
+                        : ForgeDiagnostics.DestinationMemberMissing;
                     context.ReportDiagnostic(Diagnostic.Create(
-                        ForgeDiagnostics.DestinationMemberMissing,
+                        descriptor,
                         loc,
                         destType.Name,
                         key,
@@ -601,7 +643,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             // else: nested forging is allowed and available — OK
         }
 
-        // FKF101: source members with no destination counterpart
+        // FKF101 (warning) or FKF111 (error in strict mode)
         foreach (var srcKey in sourceMembers.Keys)
         {
             var key = srcKey;
@@ -610,8 +652,11 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 var loc = forgeMethod.Locations.FirstOrDefault();
                 if (loc != null)
                 {
+                    var descriptor = strictMapping
+                        ? ForgeDiagnostics.StrictSourceMemberUnused
+                        : ForgeDiagnostics.SourceMemberUnused;
                     context.ReportDiagnostic(Diagnostic.Create(
-                        ForgeDiagnostics.SourceMemberUnused,
+                        descriptor,
                         loc,
                         sourceType.Name,
                         key,
@@ -627,7 +672,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         INamedTypeSymbol type,
         bool includeFields,
         SymbolAnalysisContext context,
-        IMethodSymbol forgeMethod)
+        IMethodSymbol forgeMethod,
+        bool isSourceSide = true)
     {
         var result = new Dictionary<string, (ITypeSymbol, bool)>();
 
@@ -639,7 +685,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             if (member is IPropertySymbol prop)
             {
                 if (prop.IsIndexer) continue;
-                if (HasForgeIgnoreAttribute(prop)) continue;
+                if (ShouldIgnoreMember(prop, isSourceSide)) continue;
                 var mapName = GetForgeMapName(prop);
                 var keyLower = (mapName ?? prop.Name).ToLowerInvariant();
                 if (result.ContainsKey(keyLower))
@@ -660,7 +706,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             }
             else if (member is IFieldSymbol field)
             {
-                if (HasForgeIgnoreAttribute(field)) continue;
+                if (ShouldIgnoreMember(field, isSourceSide)) continue;
                 if (!includeFields)
                 {
                     // FKF400: field ignored
@@ -763,7 +809,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsReadOnlyDestMember(INamedTypeSymbol destType, string keyLower)
+    private static bool IsReadOnlyDestMember(INamedTypeSymbol destType, string keyLower, bool isUpdate = false)
     {
         foreach (var member in destType.GetMembers())
         {
@@ -775,7 +821,12 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 var mapName = GetForgeMapName(prop);
                 var effectiveKey = (mapName ?? prop.Name).ToLowerInvariant();
                 if (effectiveKey == keyLower)
-                    return prop.SetMethod == null || prop.SetMethod.IsInitOnly;
+                {
+                    if (prop.SetMethod == null) return true;
+                    // Init-only: read-only for update methods, writable for create methods (via object initializer)
+                    if (prop.SetMethod.IsInitOnly) return isUpdate;
+                    return false;
+                }
             }
             else if (member is IFieldSymbol field)
             {
@@ -895,10 +946,21 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool HasForgeIgnoreAttribute(ISymbol member)
+        => ShouldIgnoreMember(member, isSourceSide: true) || ShouldIgnoreMember(member, isSourceSide: false);
+
+    private static bool ShouldIgnoreMember(ISymbol member, bool isSourceSide)
     {
-        return member.GetAttributes()
-            .Any(a => a.AttributeClass?.Name == "ForgeIgnoreAttribute" ||
-                       a.AttributeClass?.Name == "ForgeIgnore");
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeIgnoreAttribute" ||
+                                  a.AttributeClass?.Name == "ForgeIgnore");
+        if (attr == null) return false;
+
+        var sideArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Side");
+        int side = sideArg.Key != null && sideArg.Value.Value is int sv ? sv : 0;
+
+        return side == 0
+            || (side == 1 && isSourceSide)
+            || (side == 2 && !isSourceSide);
     }
 
     private static string? GetForgeMapName(ISymbol member)

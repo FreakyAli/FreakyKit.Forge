@@ -19,6 +19,8 @@ FKF103 | FreakyKit.Forge.MemberMatching | Info |
 FKF104 | FreakyKit.Forge.MemberMatching | Error |
 FKF105 | FreakyKit.Forge.MemberMatching | Warning |
 FKF106 | FreakyKit.Forge.MemberMatching | Info |
+FKF110 | FreakyKit.Forge.MemberMatching | Error |
+FKF111 | FreakyKit.Forge.MemberMatching | Error |
 FKF200 | FreakyKit.Forge.TypeSafety | Error |
 FKF201 | FreakyKit.Forge.TypeSafety | Warning |
 FKF202 | FreakyKit.Forge.TypeSafety | Info |
@@ -26,6 +28,7 @@ FKF210 | FreakyKit.Forge.TypeSafety | Info |
 FKF211 | FreakyKit.Forge.TypeSafety | Info |
 FKF212 | FreakyKit.Forge.TypeSafety | Warning |
 FKF220 | FreakyKit.Forge.TypeSafety | Info |
+FKF221 | FreakyKit.Forge.TypeSafety | Warning |
 FKF300 | FreakyKit.Forge.Nested | Warning |
 FKF310 | FreakyKit.Forge.Nested | Info |
 FKF400 | FreakyKit.Forge.MemberDiscovery | Warning |

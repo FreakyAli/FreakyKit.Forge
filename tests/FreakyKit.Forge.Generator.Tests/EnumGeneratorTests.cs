@@ -32,6 +32,7 @@ public sealed class EnumGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("(DestStatus)source.Status", generated);
+        Assert.DoesNotContain("source.Status switch", generated);
     }
 
     [Fact]
@@ -61,6 +62,7 @@ public sealed class EnumGeneratorTests : GeneratorTestBase
         Assert.Contains("source.Status switch", generated);
         Assert.Contains("SourceStatus.Active => DestStatus.Active", generated);
         Assert.Contains("SourceStatus.Inactive => DestStatus.Inactive", generated);
+        Assert.DoesNotContain("(DestStatus)source.Status", generated);
     }
 
     [Fact]

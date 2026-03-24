@@ -26,6 +26,7 @@ public sealed class ForgeMapGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Name = source.FirstName", generated);
+        Assert.DoesNotContain("__result.FirstName", generated);
     }
 
     [Fact]
@@ -50,6 +51,7 @@ public sealed class ForgeMapGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Name = source.FirstName", generated);
+        Assert.DoesNotContain("source.Name", generated);
     }
 
     [Fact]
@@ -74,6 +76,8 @@ public sealed class ForgeMapGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.DstField = source.SrcField", generated);
+        Assert.DoesNotContain("__result.SrcField", generated);
+        Assert.DoesNotContain("source.DstField", generated);
     }
 
     [Fact]

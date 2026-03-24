@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 31 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 34 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -306,6 +306,52 @@ public static partial Dest ToDest(Source source);
 
 ---
 
+## Strict Mapping (Drift Detection)
+
+### FKF110 — Strict: destination member missing source
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}.{1}' has no matching member in source type '{2}'. StrictMapping is enabled — all destination members must be mapped. |
+
+Emitted instead of FKF100 when `StrictMapping = true` on the `[ForgeMethod]`. Every destination member must have a corresponding source member. This catches mapping drift when destination types gain new members that the source doesn't satisfy.
+
+To fix:
+- Add a matching member to the source type
+- Exclude the destination member with `[ForgeIgnore]`
+- Remove `StrictMapping = true` to downgrade to a warning
+
+```csharp
+[ForgeMethod(StrictMapping = true)]
+public static partial Dest ToDest(Source source);
+// FKF110 if Dest has a member not present in Source
+```
+
+### FKF111 — Strict: source member unused
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Source member '{0}.{1}' has no matching member in destination type '{2}'. StrictMapping is enabled — all source members must be consumed or explicitly ignored. |
+
+Emitted instead of FKF101 when `StrictMapping = true` on the `[ForgeMethod]`. Every source member must have a corresponding destination member or be excluded with `[ForgeIgnore]`. This catches mapping drift when source types gain new members that aren't being mapped.
+
+To fix:
+- Add a matching member to the destination type
+- Exclude the source member with `[ForgeIgnore]`
+- Remove `StrictMapping = true` to downgrade to a warning
+
+```csharp
+[ForgeMethod(StrictMapping = true)]
+public static partial Dest ToDest(Source source);
+// FKF111 if Source has a member not present in Dest
+```
+
+---
+
 ## Type Safety
 
 ### FKF200 — Incompatible member types
@@ -404,6 +450,32 @@ A method marked with `[ForgeConverter]` was used to bridge the type mismatch for
 [ForgeConverter]
 public static string ConvertDateTime(DateTime value) => value.ToString("yyyy-MM-dd");
 // FKF220: Birthday converter used from DateTime to string
+```
+
+### FKF221 — Invalid converter signature
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.TypeSafety |
+| **Message** | Method '{0}' is marked with [ForgeConverter] but has an invalid signature: {1}. The converter will be ignored. |
+
+A method marked with `[ForgeConverter]` does not meet the requirements and will be silently ignored by the generator. This can cause an unexpected FKF200 error when users assume the converter is registered.
+
+A valid converter must be: `static`, non-void, non-generic, and take exactly one parameter.
+
+```csharp
+// Wrong — two parameters (FKF221)
+[ForgeConverter]
+public static string ConvertDate(DateTime value, string format) => value.ToString(format);
+
+// Wrong — void return (FKF221)
+[ForgeConverter]
+public static void ConvertDate(DateTime value) { }
+
+// Correct
+[ForgeConverter]
+public static string ConvertDate(DateTime value) => value.ToString("yyyy-MM-dd");
 ```
 
 ---

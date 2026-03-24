@@ -59,6 +59,8 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         // No method body generated for non-attributed method in explicit mode
         Assert.DoesNotContain("ToDest", generated);
+        // The class wrapper is still emitted even with no methods
+        Assert.Contains("MyForges", generated);
     }
 
     [Fact]
@@ -125,6 +127,8 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("ToADto(", generated);
         Assert.Contains("ToBDto(", generated);
+        Assert.Contains("__result.X = source.X", generated);
+        Assert.Contains("__result.Y = source.Y", generated);
     }
 
     [Fact]
@@ -151,5 +155,6 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
 
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("ADto ToADto(A source)", generated);
+        Assert.Contains("__result.X = source.X", generated);
     }
 }

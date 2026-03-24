@@ -7,7 +7,7 @@ namespace FreakyKit.Forge;
 /// When applied to a source member, the value specifies the destination member name.
 /// When applied to a destination member, the value specifies the source member name.
 /// </summary>
-[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false, Inherited = false)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field | AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
 public sealed class ForgeMapAttribute : Attribute
 {
     /// <summary>

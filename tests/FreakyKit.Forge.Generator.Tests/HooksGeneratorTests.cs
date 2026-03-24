@@ -112,5 +112,6 @@ public sealed class HooksGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.DoesNotContain("OnBefore", generated);
         Assert.DoesNotContain("OnAfter", generated);
+        Assert.Contains("__result.Name = source.Name", generated);
     }
 }

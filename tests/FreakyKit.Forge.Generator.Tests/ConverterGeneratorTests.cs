@@ -30,6 +30,7 @@ public sealed class ConverterGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Birthday = ConvertDateTime(source.Birthday)", generated);
+        Assert.DoesNotContain("__result.Birthday = source.Birthday;", generated);
     }
 
     [Fact]
@@ -57,6 +58,7 @@ public sealed class ConverterGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Code = IntToString(source.Code)", generated);
+        Assert.DoesNotContain("__result.Code = source.Code;", generated);
     }
 
     [Fact]
@@ -109,5 +111,6 @@ public sealed class ConverterGeneratorTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertHasError(result, "FKF200");
+        AssertNoGeneratedSource(result);
     }
 }

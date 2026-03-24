@@ -29,7 +29,7 @@ public sealed class CollectionIntegrationTests : IntegrationTestBase
         Assert.True(result.HasGeneratedSource);
 
         var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
-        Assert.Contains("__result.Values = source.Values.ToArray()", generated);
+        Assert.Contains("__result.Values = source.Values != null ? source.Values.ToArray() : null", generated);
     }
 
     [Fact]

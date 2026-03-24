@@ -28,6 +28,8 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Tags = source.Tags", generated);
+        Assert.DoesNotContain(".ToList()", generated);
+        Assert.DoesNotContain(".ToArray()", generated);
     }
 
     [Fact]
@@ -52,7 +54,7 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.Values = source.Values.ToArray()", generated);
+        Assert.Contains("__result.Values = source.Values != null ? source.Values.ToArray() : null", generated);
     }
 
     [Fact]
@@ -81,7 +83,7 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.Items = source.Items.Select(x => ToItemDto(x)).ToList()", generated);
+        Assert.Contains("__result.Items = source.Items != null ? source.Items.Select(x => ToItemDto(x)).ToList() : null", generated);
     }
 
     [Fact]
@@ -107,6 +109,6 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Name = source.Name", generated);
-        Assert.Contains("__result.Values = source.Values.ToArray()", generated);
+        Assert.Contains("__result.Values = source.Values != null ? source.Values.ToArray() : null", generated);
     }
 }
