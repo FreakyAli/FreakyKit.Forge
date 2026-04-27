@@ -160,6 +160,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 ## Performance Benchmarks
 
 > Benchmarked on .NET 8 using BenchmarkDotNet v0.15.8. The same benchmarks were also run against AutoMapper 16.1.1, Mapperly 4.3.1, Mapster 7.4.0, and Facet 5.8.2 — full per-library breakdown in [docs/benchmarks.md](docs/benchmarks.md).
+> Benchmark run: 2026-03-23 — commit: `6132259`
 
 Forge generates plain C# assignments — the same code you'd write by hand. It compiles to identical IL, so the JIT sees no difference. The numbers below confirm that: any variation from hand-written is measurement noise, not a real difference.
 

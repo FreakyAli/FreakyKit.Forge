@@ -87,6 +87,7 @@ public sealed class NewMemberDiagnosticsTests : AnalyzerTestBase
             }
             """;
         AssertNotContainsDiagnostic(source, "FKF042");
+        AssertNotContainsDiagnostic(source, "FKF101");
     }
 
     [Fact]
