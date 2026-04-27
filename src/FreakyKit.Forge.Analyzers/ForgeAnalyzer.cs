@@ -51,7 +51,11 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.AfterHookDetected,
             ForgeDiagnostics.CollectionMapping,
             ForgeDiagnostics.ConverterUsed,
-            ForgeDiagnostics.InvalidConverterSignature
+            ForgeDiagnostics.InvalidConverterSignature,
+            ForgeDiagnostics.ZeroMembersMapped,
+            ForgeDiagnostics.ReadOnlyDestinationMember,
+            ForgeDiagnostics.WriteOnlySourceMember,
+            ForgeDiagnostics.MemberBothIgnoredAndMapped
         );
 
     public override void Initialize(AnalysisContext context)
@@ -537,22 +541,35 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         bool strictMapping = false)
     {
         var matchedSourceKeys = new HashSet<string>();
+        bool isCollectionProjection = IsCollectionType(sourceType) && IsCollectionType(destType);
+        int matchedCount = 0;
 
         foreach (var destKvp in destMembers)
         {
             var key = destKvp.Key;
             var destMember = destKvp.Value;
 
-            // Skip read-only destination members — the generator never assigns them
-            // For create methods, init-only properties ARE assignable (via object initializer)
+            // FKF107: read-only destination member that has a matching source member
             if (IsReadOnlyDestMember(destType, key, isUpdate))
+            {
+                if (sourceMembers.ContainsKey(key))
+                {
+                    var loc107 = forgeMethod.Locations.FirstOrDefault();
+                    if (loc107 != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.ReadOnlyDestinationMember, loc107, destType.Name, key));
+                }
                 continue;
+            }
 
             if (!sourceMembers.TryGetValue(key, out var srcMember))
             {
                 // Try flattening before reporting FKF100
                 if (allowFlattening && CanFlatten(sourceType, key, destMember.Type))
+                {
+                    matchedCount++;
                     continue;
+                }
 
                 // FKF100 (warning) or FKF110 (error in strict mode)
                 var loc = forgeMethod.Locations.FirstOrDefault();
@@ -572,6 +589,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             }
 
             matchedSourceKeys.Add(key);
+            matchedCount++;
 
             if (SymbolEqualityComparer.Default.Equals(srcMember.Type, destMember.Type))
                 continue; // Exact type match — OK
@@ -664,6 +682,19 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 }
             }
         }
+
+        // FKF042: no members were matched at all (skip for collection projection methods)
+        if (matchedCount == 0 && !isCollectionProjection)
+        {
+            var loc = forgeMethod.Locations.FirstOrDefault();
+            if (loc != null)
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.ZeroMembersMapped,
+                    loc,
+                    forgeMethod.Name,
+                    sourceType.Name,
+                    destType.Name));
+        }
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -685,7 +716,28 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             if (member is IPropertySymbol prop)
             {
                 if (prop.IsIndexer) continue;
+
+                // FKF109: member has both [ForgeIgnore] and [ForgeMap]
+                if (HasIgnoreAttribute(prop) && GetForgeMapName(prop) != null)
+                {
+                    var loc = forgeMethod.Locations.FirstOrDefault();
+                    if (loc != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, prop.Name, type.Name));
+                }
+
                 if (ShouldIgnoreMember(prop, isSourceSide)) continue;
+
+                // FKF108: write-only source member (no getter — cannot be read)
+                if (isSourceSide && prop.GetMethod == null)
+                {
+                    var loc = forgeMethod.Locations.FirstOrDefault();
+                    if (loc != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.WriteOnlySourceMember, loc, type.Name, prop.Name));
+                    continue;
+                }
+
                 var mapName = GetForgeMapName(prop);
                 var keyLower = (mapName ?? prop.Name).ToLowerInvariant();
                 if (result.ContainsKey(keyLower))
@@ -944,6 +996,11 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     {
         return GetForgeAttribute(method) != null;
     }
+
+    private static bool HasIgnoreAttribute(ISymbol member)
+        => member.GetAttributes().Any(a =>
+            a.AttributeClass?.Name == "ForgeIgnoreAttribute" ||
+            a.AttributeClass?.Name == "ForgeIgnore");
 
     private static bool HasForgeIgnoreAttribute(ISymbol member)
         => ShouldIgnoreMember(member, isSourceSide: true) || ShouldIgnoreMember(member, isSourceSide: false);

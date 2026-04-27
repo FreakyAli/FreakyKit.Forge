@@ -10,6 +10,7 @@ FKF020 | FreakyKit.Forge.MethodShape | Error |
 FKF030 | FreakyKit.Forge.MethodShape | Error |
 FKF040 | FreakyKit.Forge.MethodShape | Info |
 FKF041 | FreakyKit.Forge.MethodShape | Error |
+FKF042 | FreakyKit.Forge.MethodShape | Warning |
 FKF050 | FreakyKit.Forge.MethodShape | Info |
 FKF051 | FreakyKit.Forge.MethodShape | Info |
 FKF100 | FreakyKit.Forge.MemberMatching | Warning |
@@ -19,6 +20,9 @@ FKF103 | FreakyKit.Forge.MemberMatching | Info |
 FKF104 | FreakyKit.Forge.MemberMatching | Error |
 FKF105 | FreakyKit.Forge.MemberMatching | Warning |
 FKF106 | FreakyKit.Forge.MemberMatching | Info |
+FKF107 | FreakyKit.Forge.MemberMatching | Info |
+FKF108 | FreakyKit.Forge.MemberMatching | Info |
+FKF109 | FreakyKit.Forge.MemberMatching | Warning |
 FKF110 | FreakyKit.Forge.MemberMatching | Error |
 FKF111 | FreakyKit.Forge.MemberMatching | Error |
 FKF200 | FreakyKit.Forge.TypeSafety | Error |

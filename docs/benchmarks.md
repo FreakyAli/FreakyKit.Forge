@@ -1,6 +1,6 @@
 # FreakyKit.Forge — Benchmark Results
 
-Full benchmark results comparing Forge against hand-written code and popular mapping libraries.
+Full benchmark results comparing Forge against popular mapping libraries. Hand-written code is included as a baseline — it compiles to identical IL as Forge, so any variation between the two is measurement noise.
 Source code: [`benchmarks/FreakyKit.Forge.Benchmarks`](../benchmarks/FreakyKit.Forge.Benchmarks)
 
 ---
@@ -174,12 +174,11 @@ Source code: [`benchmarks/FreakyKit.Forge.Benchmarks`](../benchmarks/FreakyKit.F
 
 ### Key Takeaways (.NET 8)
 
-- **Forge matches hand-written code** — consistently within 1–2% across all scenarios, including real-world models with enums, nullables, and nested graphs
+- **Forge is identical to hand-written code** — any variation is measurement noise; the generated code compiles to the same IL
 - **Zero allocation overhead** — identical memory footprint to hand-written mappers
 - **2.5–4.7x faster than AutoMapper** — no reflection overhead at runtime
 - **Faster than Mapster** — especially in medium, nested, flattening, and collection scenarios
-- **Competitive with Mapperly** — trades leads across scenarios; Forge wins on medium mappings, nested graphs, flattening, and e-commerce real-world
-- **Forge leads on throughput** — fastest across 10,000-object batches at 152 μs vs hand-written 155 μs
+- **Competitive with Mapperly** — trades leads across scenarios; both are source generators and perform similarly
 - **Facet** — competitive on flat/simple mappings but allocates significantly more and struggles on deep graphs and large collections
 
 ---

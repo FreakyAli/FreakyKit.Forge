@@ -110,6 +110,18 @@ public static class ForgeDiagnostics
         description: "The forge method uses the update mapping shape (void return, 2 parameters). The destination object's members will be overwritten in place.");
 
     /// <summary>
+    /// FKF042 (Warning): A forge method produces zero member assignments.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ZeroMembersMapped = new(
+        id: "FKF042",
+        title: "Zero members mapped",
+        messageFormat: "Forge method '{0}' produces no member assignments. Source type '{1}' and destination type '{2}' have no matchable members.",
+        category: Category_MethodShape,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "No members on the source and destination types share a matching name. The generated method will be empty. Check that the types are correct or that member names align.");
+
+    /// <summary>
     /// FKF041 (Error): Update forge method destination type has no settable members.
     /// </summary>
     public static readonly DiagnosticDescriptor UpdateDestinationNoSettableMembers = new(
@@ -258,6 +270,42 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         description: "The destination member was matched by flattening a nested source property (e.g., AddressCity maps to Address.City).");
+
+    /// <summary>
+    /// FKF107 (Info): A destination member matches a source member by name but is read-only and cannot be assigned.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ReadOnlyDestinationMember = new(
+        id: "FKF107",
+        title: "Read-only destination member skipped",
+        messageFormat: "Destination member '{0}.{1}' matches a source member but is read-only and cannot be assigned. Add a setter or exclude it with [ForgeIgnore].",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "The destination member has a matching source member but cannot be written to because it has no setter. The mapping is silently skipped.");
+
+    /// <summary>
+    /// FKF108 (Info): A source member has no getter and cannot be read from during mapping.
+    /// </summary>
+    public static readonly DiagnosticDescriptor WriteOnlySourceMember = new(
+        id: "FKF108",
+        title: "Write-only source member skipped",
+        messageFormat: "Source member '{0}.{1}' has no getter and cannot be read. It will not be mapped.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "The source member is write-only (setter only, no getter). It cannot be read during mapping and will be excluded from member discovery.");
+
+    /// <summary>
+    /// FKF109 (Warning): A member has both [ForgeIgnore] and [ForgeMap], which is a conflicting configuration.
+    /// </summary>
+    public static readonly DiagnosticDescriptor MemberBothIgnoredAndMapped = new(
+        id: "FKF109",
+        title: "Member both ignored and explicitly mapped",
+        messageFormat: "Member '{0}' on type '{1}' has both [ForgeIgnore] and [ForgeMap]. [ForgeIgnore] takes precedence — [ForgeMap] has no effect.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A member cannot be both excluded from mapping and explicitly mapped at the same time. [ForgeIgnore] wins — remove [ForgeMap] or remove [ForgeIgnore].");
 
     // ─── Strict Mapping (Drift Detection) ──────────────────────────────────────
 

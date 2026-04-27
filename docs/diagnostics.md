@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 34 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 39 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -113,6 +113,20 @@ Emitted when a forge method uses the update mapping shape: `void` return type wi
 public static partial void Update(Person source, PersonDto existing);
 // Generates: existing.Name = source.Name;
 ```
+
+### FKF042 — Zero members mapped
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MethodShape |
+| **Message** | Forge method '{0}' produces no member assignments. Source type '{1}' and destination type '{2}' have no matchable members. |
+
+Emitted when a forge method results in zero assignments — source and destination types share no matching member names. The generated method body will be effectively empty. This is almost always a mistake: check that the types are correct and that member names align (case-insensitive).
+
+Not emitted for collection projection methods (where both parameter and return type are collections) since those produce a LINQ expression rather than member assignments.
+
+---
 
 ### FKF041 — Update destination has no settable members
 
@@ -302,6 +316,51 @@ The destination member was matched by flattening a nested source property. For e
 [ForgeMethod(AllowFlattening = true)]
 public static partial Dest ToDest(Source source);
 // FKF106: AddressCity → Address.City
+```
+
+### FKF107 — Read-only destination member skipped
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}.{1}' matches a source member but is read-only and cannot be assigned. Add a setter or exclude it with [ForgeIgnore]. |
+
+Emitted when a destination member matches a source member by name but has no setter (get-only property or readonly field). The mapping is silently skipped. Either add a setter to the destination member, supply the value through a constructor parameter, or exclude the member with `[ForgeIgnore]` to suppress this diagnostic.
+
+### FKF108 — Write-only source member skipped
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Source member '{0}.{1}' has no getter and cannot be read. It will not be mapped. |
+
+Emitted when a source property has only a setter and no getter. Since the generator reads from the source, a write-only member cannot participate in mapping and is excluded from member discovery.
+
+### FKF109 — Member both ignored and explicitly mapped
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}' on type '{1}' has both [ForgeIgnore] and [ForgeMap]. [ForgeIgnore] takes precedence — [ForgeMap] has no effect. |
+
+A member has both `[ForgeIgnore]` and `[ForgeMap]` applied, which is a conflicting configuration. `[ForgeIgnore]` always wins — the member is excluded from mapping and the `[ForgeMap]` rename has no effect. Remove one of the attributes.
+
+```csharp
+// Wrong — conflicting attributes (FKF109)
+[ForgeIgnore]
+[ForgeMap("Name")]
+public string FirstName { get; set; }
+
+// Fix A: keep only [ForgeIgnore] to exclude the member
+[ForgeIgnore]
+public string FirstName { get; set; }
+
+// Fix B: keep only [ForgeMap] to rename the member
+[ForgeMap("Name")]
+public string FirstName { get; set; }
 ```
 
 ---
