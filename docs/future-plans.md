@@ -55,63 +55,123 @@ var dtos = dbContext.People
 
 ---
 
-## 2. Mapping Profiles / Inheritance
+## 2. Derived Type / Polymorphic Mapping
 
-**Goal:** Allow a forge class to reuse mappings defined in another forge class via an `[ForgeIncludes]` attribute.
+**Goal:** Map a base type to different destination DTOs based on a discriminator property, supporting EF Core / TPH inheritance hierarchies.
 
 ### Why
 
-Large projects often have shared base types (e.g., `BaseEntity` with `Id`, `CreatedAt`, `UpdatedAt`) mapped across many forge classes. Currently, each class must redeclare the base mapping or let the generator match by name independently. This leads to duplication and inconsistency.
+Applications using Entity Framework with Table-Per-Hierarchy (TPH) inheritance produce query results typed as the base entity. Mapping these to the correct derived DTO requires a runtime type check or discriminator switch. Currently, users must hand-write this dispatch logic.
 
 ### Design
 
 ```csharp
 [Forge]
-public static partial class BaseForges
+public static partial class AnimalForges
 {
-    public static partial BaseDto ToBaseDto(BaseEntity source);
-}
+    public static partial AnimalDto MapBase(Animal source);
+    public static partial DogDto MapDog(Dog source);
+    public static partial CatDto MapCat(Cat source);
 
-[Forge]
-[ForgeIncludes(typeof(BaseForges))]
-public static partial class PersonForges
-{
-    public static partial PersonDto ToDto(Person source);
-    // Person : BaseEntity, PersonDto : BaseDto
-    // The generator can call BaseForges.ToBaseDto or inline base mappings
+    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
+    public static partial AnimalDto MapAny(Animal source);
+    // Generates:
+    // return source switch
+    // {
+    //     Dog __dog => MapDog(__dog),
+    //     Cat __cat => MapCat(__cat),
+    //     _ => MapBase(source)
+    // };
 }
 ```
 
-**Option A — Delegate to included class:** Generate a call to the included forge method for the base type members. Simple but creates a runtime dependency between forge classes.
+### Variants
 
-**Option B — Inline included mappings:** Copy the base member assignments into the derived forge method. No runtime dependency but more generated code and harder to implement.
+- **Type-test dispatch** (above) — pattern match on `source is DerivedType`
+- **Discriminator dispatch** — switch on a property value: `[ForgePolymorphic(typeof(DogDto), DiscriminatorValue = "dog")]`
+- **Fallback behavior** — configurable: throw, return null, or map as base type
 
 ### Complexity
 
-**Medium-high.** The main challenge is cross-class symbol resolution during incremental generation:
+**Medium.** The core challenge is generating a switch expression with type patterns:
 
-- The incremental pipeline currently processes each `[Forge]` class independently
-- Including another class requires the pipeline to aggregate data across multiple forge classes
-- Need to handle: circular includes, diamond includes, version skew between classes
-- Must resolve the included class's forge methods during extraction, which means the included class must be processed first or discovered in the same pass
+- Need to verify that each derived type is actually assignable from the source parameter type
+- Need to verify that the referenced forge method exists and has the correct signature
+- Ordering matters: more-derived types must come before less-derived types
+- The fallback (default arm) needs a clear strategy
+- Must work with both create and update method shapes
 
 ### Files to Modify
 
-- New attribute: `ForgeIncludesAttribute.cs` in `FreakyKit.Forge/Attributes/`
-- `ForgeGenerator.cs` — modify `ExtractForgeClass` to look up included forge classes
-- `ForgeClassModel.cs` — add `IReadOnlyList<ForgeMethodModel> IncludedMethods`
-- Pipeline may need a `Collect()` + `SelectMany()` step to gather all forge classes before processing
+- New attribute: `ForgePolymorphicAttribute.cs` in `FreakyKit.Forge/Attributes/` (with `AllowMultiple = true`)
+- `ForgeGenerator.cs` — detect `[ForgePolymorphic]` on a method and generate switch expression instead of normal body
+- `ForgeMethodModel.cs` — add `IReadOnlyList<PolymorphicMapping> PolymorphicMappings`
+- New analyzer rules: validate derived types are assignable, validate referenced methods exist
 
 ### Suggested Approach
 
-1. Start with Option A (delegate) as it's simpler
-2. Only support one level of includes (no recursive includes in v1)
-3. Emit a diagnostic if circular includes are detected
-4. Later, add Option B as an opt-in for performance-sensitive scenarios
+1. Start with type-test dispatch (pattern matching) as it's the most common case
+2. Generate a switch expression with type patterns
+3. Default arm calls the base mapping method or throws `InvalidOperationException`
+4. Add discriminator-based dispatch as a later enhancement
+5. Add analyzer diagnostics for: unreachable patterns, missing derived types, invalid method references
 
 ---
 
-## 3. Dictionary Mapping
+## 3. Computed Properties via `[ForgeComputed]`
+
+**Goal:** Allow users to define computed destination properties using type-safe methods on the forge class, rather than string-based expressions.
+
+### Why
+
+Some destination properties don't map 1:1 from a source member — they're derived from multiple source members (e.g., `FullName = FirstName + " " + LastName`). Currently, users must use after-hooks or manually assign these after the forge call.
+
+### Design (Type-Safe Method Approach)
+
+```csharp
+[Forge]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+
+    [ForgeComputed(nameof(PersonDto.FullName))]
+    private static string ComputeFullName(Person source)
+        => source.FirstName + " " + source.LastName;
+}
+```
+
+The generator discovers `[ForgeComputed]` methods via Roslyn symbol analysis at compile time and emits a direct method call — no reflection, no string interpolation. The generated code becomes:
+
+```csharp
+__result.FullName = ComputeFullName(source);
+```
+
+### Why Not String Expressions
+
+A string-based approach like `[ForgeMap(Compute = "source.FirstName + ...")]` was considered but rejected because:
+- No IntelliSense or compile-time type checking on the expression
+- String escaping issues in attributes
+- Source parameter name coupling (dest attribute doesn't know the method's parameter name)
+- Facet uses string expressions because its `[Facet(typeof(Source))]` is on the dest type — Forge's architecture (separate forge class) doesn't have that context
+
+### Open Design Questions
+
+- Should the method parameter be the source type, or `(source, dest)` for post-assignment compute?
+- Should computed properties participate in constructor mapping?
+- How to handle computed properties in update methods?
+- Convention-based discovery (e.g., `Compute{PropertyName}`) vs attribute-based?
+
+### Suggested Approach
+
+1. New attribute: `[ForgeComputed]` with `string DestinationMember` constructor parameter
+2. Generator validates: return type matches dest property type, parameter is the source type
+3. Emit direct call in generated code, after construction but before return
+4. Analyzer diagnostic if dest property name doesn't exist or types mismatch
+
+---
+
+## 4. Dictionary Mapping
 
 **Goal:** Map between `Dictionary<string, T>` and typed objects by matching dictionary keys to member names.
 
@@ -184,141 +244,63 @@ public static partial class MyForges
 
 ---
 
-## 4. Derived Type / Polymorphic Mapping
+## 5. Mapping Profiles / Inheritance
 
-**Goal:** Map a base type to different destination DTOs based on a discriminator property, supporting EF Core / TPH inheritance hierarchies.
+**Goal:** Allow a forge class to reuse mappings defined in another forge class via an `[ForgeIncludes]` attribute.
 
 ### Why
 
-Applications using Entity Framework with Table-Per-Hierarchy (TPH) inheritance produce query results typed as the base entity. Mapping these to the correct derived DTO requires a runtime type check or discriminator switch. Currently, users must hand-write this dispatch logic.
+Large projects often have shared base types (e.g., `BaseEntity` with `Id`, `CreatedAt`, `UpdatedAt`) mapped across many forge classes. Currently, each class must redeclare the base mapping or let the generator match by name independently. This leads to duplication and inconsistency.
 
 ### Design
 
 ```csharp
 [Forge]
-public static partial class AnimalForges
+public static partial class BaseForges
 {
-    public static partial AnimalDto MapBase(Animal source);
-    public static partial DogDto MapDog(Dog source);
-    public static partial CatDto MapCat(Cat source);
-
-    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
-    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
-    public static partial AnimalDto MapAny(Animal source);
-    // Generates:
-    // return source switch
-    // {
-    //     Dog __dog => MapDog(__dog),
-    //     Cat __cat => MapCat(__cat),
-    //     _ => MapBase(source)
-    // };
+    public static partial BaseDto ToBaseDto(BaseEntity source);
 }
-```
 
-### Variants
-
-- **Type-test dispatch** (above) — pattern match on `source is DerivedType`
-- **Discriminator dispatch** — switch on a property value: `[ForgePolymorphic(typeof(DogDto), DiscriminatorValue = "dog")]`
-- **Fallback behavior** — configurable: throw, return null, or map as base type
-
-### Complexity
-
-**Medium.** The core challenge is generating a switch expression with type patterns:
-
-- Need to verify that each derived type is actually assignable from the source parameter type
-- Need to verify that the referenced forge method exists and has the correct signature
-- Ordering matters: more-derived types must come before less-derived types
-- The fallback (default arm) needs a clear strategy
-- Must work with both create and update method shapes
-
-### Files to Modify
-
-- New attribute: `ForgePolymorphicAttribute.cs` in `FreakyKit.Forge/Attributes/` (with `AllowMultiple = true`)
-- `ForgeGenerator.cs` — detect `[ForgePolymorphic]` on a method and generate switch expression instead of normal body
-- `ForgeMethodModel.cs` — add `IReadOnlyList<PolymorphicMapping> PolymorphicMappings`
-- New analyzer rules: validate derived types are assignable, validate referenced methods exist
-
-### Suggested Approach
-
-1. Start with type-test dispatch (pattern matching) as it's the most common case
-2. Generate a switch expression with type patterns
-3. Default arm calls the base mapping method or throws `InvalidOperationException`
-4. Add discriminator-based dispatch as a later enhancement
-5. Add analyzer diagnostics for: unreachable patterns, missing derived types, invalid method references
-
----
-
-## 5. Dictionary Element Conversion
-
-**Goal:** Map between `Dictionary<TKey, TSource>` and `Dictionary<TKey, TDest>` with automatic element conversion using existing forge methods.
-
-### Why
-
-Common in API responses, configuration systems, and caching layers where data is stored as keyed collections. For example, mapping `Dictionary<string, OrderEntity>` to `Dictionary<string, OrderDto>`.
-
-### Design
-
-```csharp
 [Forge]
-public static partial class MyForges
+[ForgeIncludes(typeof(BaseForges))]
+public static partial class PersonForges
 {
-    public static partial OrderDto MapOrder(OrderEntity source);
-
-    [ForgeMethod(AllowNestedForging = true)]
-    public static partial Dictionary<string, OrderDto> MapOrderDict(Dictionary<string, OrderEntity> source);
-    // Generates:
-    // var __result = new Dictionary<string, OrderDto>(source.Count);
-    // foreach (var __kvp in source)
-    //     __result[__kvp.Key] = MapOrder(__kvp.Value);
-    // return __result;
+    public static partial PersonDto ToDto(Person source);
+    // Person : BaseEntity, PersonDto : BaseDto
+    // The generator can call BaseForges.ToBaseDto or inline base mappings
 }
 ```
 
+**Option A — Delegate to included class:** Generate a call to the included forge method for the base type members. Simple but creates a runtime dependency between forge classes.
+
+**Option B — Inline included mappings:** Copy the base member assignments into the derived forge method. No runtime dependency but more generated code and harder to implement.
+
 ### Complexity
 
-**Low-medium.** Extends the existing collection mapping infrastructure:
+**Medium-high.** The main challenge is cross-class symbol resolution during incremental generation:
 
-- Detection: both source and dest are `Dictionary<TKey, TValue>` or `IDictionary<TKey, TValue>`
-- Key types must match (or have a forge method / implicit conversion)
-- Value mapping reuses the existing nested forging resolution
-- Capacity hint: `new Dictionary<K,V>(source.Count)` for performance
+- The incremental pipeline currently processes each `[Forge]` class independently
+- Including another class requires the pipeline to aggregate data across multiple forge classes
+- Need to handle: circular includes, diamond includes, version skew between classes
+- Must resolve the included class's forge methods during extraction, which means the included class must be processed first or discovered in the same pass
 
 ### Files to Modify
 
-- `ForgeGenerator.cs` — extend collection detection to recognize dictionary types
-- Generate `foreach` loop with key-value pair iteration instead of `.Select().ToList()`
-- Reuse existing nested forge method resolution for value conversion
-
----
-
-## 6. Snapshot / Approval Testing for Generated Code
-
-**Goal:** Add snapshot testing to the generator test suite so that any change in generated output is immediately caught, preventing tests from silently passing when behavior changes.
-
-### Why
-
-Negative-only assertions (`DoesNotContain`) can pass both before and after a behavioral change. This was observed with the init-only property feature — old tests used only negative assertions and continued to pass even though the generated code changed from skipping init-only properties entirely to placing them in object initializers. Snapshot tests compare the full generated output against a golden file, making any change visible.
-
-### Design
-
-- Each generator test scenario gets a corresponding `.verified.cs` golden file
-- Use a library like `Verify` (https://github.com/VerifyTests/Verify) or a simple custom approach:
-  1. Generate code via `RunGenerator`
-  2. Compare against stored golden file
-  3. On mismatch, fail with a diff
-  4. Developer reviews and accepts new output to update the golden file
+- New attribute: `ForgeIncludesAttribute.cs` in `FreakyKit.Forge/Attributes/`
+- `ForgeGenerator.cs` — modify `ExtractForgeClass` to look up included forge classes
+- `ForgeClassModel.cs` — add `IReadOnlyList<ForgeMethodModel> IncludedMethods`
+- Pipeline may need a `Collect()` + `SelectMany()` step to gather all forge classes before processing
 
 ### Suggested Approach
 
-1. Add `Verify.Xunit` NuGet package to `FreakyKit.Forge.Generator.Tests`
-2. Create a `Snapshots/` folder for `.verified.cs` golden files
-3. Convert key test scenarios (one per mapping feature) to snapshot tests
-4. Keep existing assertion-based tests for targeted checks — snapshots complement, not replace
-5. Add a CI step that fails if any `.received.cs` files are generated (unapproved changes)
+1. Start with Option A (delegate) as it's simpler
+2. Only support one level of includes (no recursive includes in v1)
+3. Emit a diagnostic if circular includes are detected
+4. Later, add Option B as an opt-in for performance-sensitive scenarios
 
 ---
 
-## 7. Reverse Mapping
+## 6. Reverse Mapping
 
 **Goal:** Automatically generate a reverse mapping method (Dest → Source) from an existing forward mapping (Source → Dest).
 
@@ -346,52 +328,51 @@ Many applications need bidirectional mapping — e.g., mapping an entity to a DT
 
 ---
 
-## 8. Computed Properties via `[ForgeComputed]`
+## 7. Snapshot / Approval Testing for Generated Code
 
-**Goal:** Allow users to define computed destination properties using type-safe methods on the forge class, rather than string-based expressions.
+**Goal:** Add snapshot testing to the generator test suite so that any change in generated output is immediately caught, preventing tests from silently passing when behavior changes.
 
 ### Why
 
-Some destination properties don't map 1:1 from a source member — they're derived from multiple source members (e.g., `FullName = FirstName + " " + LastName`). Currently, users must use after-hooks or manually assign these after the forge call.
+Negative-only assertions (`DoesNotContain`) can pass both before and after a behavioral change. This was observed with the init-only property feature — old tests used only negative assertions and continued to pass even though the generated code changed from skipping init-only properties entirely to placing them in object initializers. Snapshot tests compare the full generated output against a golden file, making any change visible.
 
-### Design (Type-Safe Method Approach)
+### Design
 
-```csharp
-[Forge]
-public static partial class PersonForges
-{
-    public static partial PersonDto ToDto(Person source);
-
-    [ForgeComputed(nameof(PersonDto.FullName))]
-    private static string ComputeFullName(Person source)
-        => source.FirstName + " " + source.LastName;
-}
-```
-
-The generator discovers `[ForgeComputed]` methods via Roslyn symbol analysis at compile time and emits a direct method call — no reflection, no string interpolation. The generated code becomes:
-
-```csharp
-__result.FullName = ComputeFullName(source);
-```
-
-### Why Not String Expressions
-
-A string-based approach like `[ForgeMap(Compute = "source.FirstName + ...")]` was considered but rejected because:
-- No IntelliSense or compile-time type checking on the expression
-- String escaping issues in attributes
-- Source parameter name coupling (dest attribute doesn't know the method's parameter name)
-- Facet uses string expressions because its `[Facet(typeof(Source))]` is on the dest type — Forge's architecture (separate forge class) doesn't have that context
-
-### Open Design Questions
-
-- Should the method parameter be the source type, or `(source, dest)` for post-assignment compute?
-- Should computed properties participate in constructor mapping?
-- How to handle computed properties in update methods?
-- Convention-based discovery (e.g., `Compute{PropertyName}`) vs attribute-based?
+- Each generator test scenario gets a corresponding `.verified.cs` golden file
+- Use a library like `Verify` (https://github.com/VerifyTests/Verify) or a simple custom approach:
+  1. Generate code via `RunGenerator`
+  2. Compare against stored golden file
+  3. On mismatch, fail with a diff
+  4. Developer reviews and accepts new output to update the golden file
 
 ### Suggested Approach
 
-1. New attribute: `[ForgeComputed]` with `string DestinationMember` constructor parameter
-2. Generator validates: return type matches dest property type, parameter is the source type
-3. Emit direct call in generated code, after construction but before return
-4. Analyzer diagnostic if dest property name doesn't exist or types mismatch
+1. Add `Verify.Xunit` NuGet package to `FreakyKit.Forge.Generator.Tests`
+2. Create a `Snapshots/` folder for `.verified.cs` golden files
+3. Convert key test scenarios (one per mapping feature) to snapshot tests
+4. Keep existing assertion-based tests for targeted checks — snapshots complement, not replace
+5. Add a CI step that fails if any `.received.cs` files are generated (unapproved changes)
+
+---
+
+## 8. Circular Forge Detection
+
+**Goal:** Emit a build-time error when two forge methods form a recursive cycle (A→B with AllowNestedForging calls B→A with AllowNestedForging, which calls A→B, and so on).
+
+### Why
+
+With `AllowNestedForging = true`, the generator inlines calls to other forge methods for nested member types. If two types mutually reference each other and both directions have forge methods, the generated code will call itself recursively and stack-overflow at runtime. Nothing currently detects this at compile time.
+
+### Design
+
+- Build a directed graph of forge methods: a directed edge from method M to method N exists if N handles a type conversion that M depends on (i.e., a nested member of M's source→dest pair matches N's signature)
+- Run DFS cycle detection over the graph
+- Emit a new diagnostic (e.g., FKF301) on each method involved in the cycle, listing the cycle path
+- Only trigger when `AllowNestedForging = true` on the methods involved — disabled nested forging cannot create cycles
+
+### Suggested Approach
+
+1. In the analyzer, after all forge methods are collected for a class, build the dependency graph
+2. Run Tarjan's or a simple DFS-based cycle detection algorithm
+3. Report the cycle with a message like: `"Circular nested forge detected: ToDto → ToAddressDto → ToDto. This will stack-overflow at runtime."`
+4. Add a diagnostic descriptor FKF301 (Error) in the Nested category

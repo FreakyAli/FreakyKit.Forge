@@ -4,5 +4,6 @@ internal enum ForgeMethodKind
 {
     Create,
     Update,
-    CollectionProject
+    CollectionProject,
+    DictionaryProject
 }

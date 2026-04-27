@@ -1,10 +1,8 @@
 # Installation
 
-FreakyKit.Forge is split into independent NuGet packages — install only what you need. Both `FreakyKit.Forge.Generator` and `FreakyKit.Forge.Analyzers` automatically pull in `FreakyKit.Forge` (core attributes), so you never need to add it separately.
+## The short version
 
-## Recommended: Code Generation + Build-Time Validation
-
-Install both the generator and the analyzer. The generator writes your mapping method bodies at compile time. The analyzer validates your declarations and reports 31 diagnostics (errors, warnings, and info messages) to catch mistakes before you run.
+Add two packages and you're done:
 
 ```xml
 <ItemGroup>
@@ -13,31 +11,77 @@ Install both the generator and the analyzer. The generator writes your mapping m
 </ItemGroup>
 ```
 
-## Lightweight: Code Generation Only
+`Generator` writes your mapping method bodies at compile time. `Analyzers` gives you 44 build-time diagnostics. Both automatically pull in `FreakyKit.Forge` (core attributes) as a transitive dependency — you never need to add it separately.
 
-Install just the generator if you want the mapping implementations without the analyzer diagnostics. You still get compile errors for invalid code, but you won't see Forge-specific warnings like "destination member has no source match" (`FKF100`) or "nested forging disabled" (`FKF300`).
+---
+
+## Package decision guide
+
+| Package | When to install |
+|---------|----------------|
+| `FreakyKit.Forge.Generator` | Always — this is what generates the code |
+| `FreakyKit.Forge.Analyzers` | Always — this is what tells you when something's wrong at build time |
+| `FreakyKit.Forge` | Never directly — it comes for free via Generator and Analyzers |
+| `FreakyKit.Forge.Conventions` | Only if you want naming convention helpers (see below) |
+| `FreakyKit.Forge.Diagnostics` | Only if you're building your own Roslyn analyzers or tools on top of Forge |
+
+---
+
+## Dependency graph
+
+```
+FreakyKit.Forge.Generator  ──┐
+                              ├──▶  FreakyKit.Forge          (core attributes)
+FreakyKit.Forge.Analyzers  ──┤
+                              └──▶  FreakyKit.Forge.Diagnostics  (diagnostic descriptors)
+```
+
+Both `Generator` and `Analyzers` reference `FreakyKit.Forge` and `FreakyKit.Forge.Diagnostics` directly. NuGet restores them as transitive dependencies. You never reference them in your project file.
+
+---
+
+## Generator only (no diagnostics)
+
+If you want the mapping implementations but don't need build-time validation:
 
 ```xml
 <PackageReference Include="FreakyKit.Forge.Generator" Version="1.0.0" />
 ```
 
-## Optional: Naming Conventions
+You'll still get compile errors for invalid C# in the generated output, but you won't see Forge-specific guidance like "destination member has no source match" (FKF100) or "nested forging disabled" (FKF300).
 
-Install the conventions package if you want advisory helpers for organizing forge classes and methods (e.g., `ForgeConventions.ForgeClassName("Person")` returns `"PersonForges"`). See [conventions.md](conventions.md) for details.
+---
+
+## Optional: naming conventions
+
+The conventions package provides advisory helpers for naming forge classes and methods:
 
 ```xml
 <PackageReference Include="FreakyKit.Forge.Conventions" Version="1.0.0" />
 ```
 
-## Advanced: Custom Tooling
+```csharp
+ForgeConventions.ForgeClassName("Person")      // → "PersonForges"
+ForgeConventions.ForgeMethodName("PersonDto")  // → "ToPersonDto"
+```
 
-Install the diagnostics package directly only if you are building your own Roslyn analyzers or tools that need to reference Forge diagnostic IDs. Most users do not need this — it is already bundled inside the Generator and Analyzers packages.
+This package has no dependency on `Generator` or `Analyzers` — it's a standalone utility with no build-time behaviour.
+
+---
+
+## Advanced: custom Roslyn tooling
+
+Install `FreakyKit.Forge.Diagnostics` directly only if you're writing your own Roslyn analyzer or source generator that needs to reference Forge's diagnostic IDs (FKF001–FKF503):
 
 ```xml
 <PackageReference Include="FreakyKit.Forge.Diagnostics" Version="1.0.0" />
 ```
 
-## Local Development (Without NuGet)
+Most users never need this — it's already bundled inside both `Generator` and `Analyzers`.
+
+---
+
+## Local development (without NuGet)
 
 If you're building from source instead of using the NuGet packages, add these project references:
 
@@ -53,4 +97,4 @@ If you're building from source instead of using the NuGet packages, add these pr
 </ItemGroup>
 ```
 
-The `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"` flags tell MSBuild to treat these as build-time tools rather than runtime dependencies.
+`OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"` tell MSBuild to treat these as build-time tools rather than runtime dependencies. You do not need to reference `FreakyKit.Forge.Diagnostics` separately — it is already referenced by the Analyzers and Generator projects.

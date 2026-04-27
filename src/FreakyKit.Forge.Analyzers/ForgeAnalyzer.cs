@@ -51,7 +51,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.AfterHookDetected,
             ForgeDiagnostics.CollectionMapping,
             ForgeDiagnostics.ConverterUsed,
-            ForgeDiagnostics.InvalidConverterSignature
+            ForgeDiagnostics.InvalidConverterSignature,
+            ForgeDiagnostics.ZeroMembersMapped,
+            ForgeDiagnostics.ReadOnlyDestinationMember,
+            ForgeDiagnostics.WriteOnlySourceMember,
+            ForgeDiagnostics.MemberBothIgnoredAndMapped,
+            ForgeDiagnostics.ForgeClassNotStatic,
+            ForgeDiagnostics.ForgeClassNotPartial,
+            ForgeDiagnostics.FlatteningEnabledNoMatchFound,
+            ForgeDiagnostics.ForgeMapSelfReference,
+            ForgeDiagnostics.DuplicateConverterForTypePair,
+            ForgeDiagnostics.DestinationTypeNotInstantiable
         );
 
     public override void Initialize(AnalysisContext context)
@@ -65,12 +75,29 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     {
         var type = (INamedTypeSymbol)context.Symbol;
 
-        // Only analyze static partial classes with [Forge]
-        if (!type.IsStatic) return;
-        if (!IsPartialClass(type, context.CancellationToken)) return;
+        // Only process classes (not structs, interfaces, enums, etc.)
+        if (type.TypeKind != TypeKind.Class) return;
 
         var forgeClassAttr = GetForgeClassAttribute(type);
         if (forgeClassAttr is null) return;
+
+        // FKF003: forge class must be static
+        if (!type.IsStatic)
+        {
+            var loc003 = type.Locations.FirstOrDefault();
+            if (loc003 != null)
+                context.ReportDiagnostic(Diagnostic.Create(ForgeDiagnostics.ForgeClassNotStatic, loc003, type.Name));
+            return;
+        }
+
+        // FKF004: forge class must be partial
+        if (!IsPartialClass(type, context.CancellationToken))
+        {
+            var loc004 = type.Locations.FirstOrDefault();
+            if (loc004 != null)
+                context.ReportDiagnostic(Diagnostic.Create(ForgeDiagnostics.ForgeClassNotPartial, loc004, type.Name));
+            return;
+        }
 
         var mode = GetForgeMode(forgeClassAttr);
         var includePrivate = GetIncludePrivateMethods(forgeClassAttr);
@@ -187,6 +214,44 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                         loc,
                         member.Name,
                         reason));
+                }
+            }
+        }
+
+        // FKF222: duplicate [ForgeConverter] for the same type pair
+        var convertersByTypePair = new Dictionary<(string, string), List<IMethodSymbol>>();
+        foreach (var member in type.GetMembers().OfType<IMethodSymbol>())
+        {
+            bool hasConverterAttr = member.GetAttributes()
+                .Any(a => a.AttributeClass?.Name == "ForgeConverterAttribute" ||
+                           a.AttributeClass?.Name == "ForgeConverter");
+            if (!hasConverterAttr) continue;
+            // Only count valid converters (invalid ones are already flagged by FKF221)
+            if (!member.IsStatic || member.ReturnsVoid || member.TypeParameters.Length > 0 || member.Parameters.Length != 1)
+                continue;
+
+            var pairKey = (member.Parameters[0].Type.ToDisplayString(), member.ReturnType.ToDisplayString());
+            if (!convertersByTypePair.TryGetValue(pairKey, out var bucket))
+            {
+                bucket = new List<IMethodSymbol>();
+                convertersByTypePair[pairKey] = bucket;
+            }
+            bucket.Add(member);
+        }
+        foreach (var kvp in convertersByTypePair)
+        {
+            if (kvp.Value.Count > 1)
+            {
+                foreach (var m in kvp.Value)
+                {
+                    var loc = m.Locations.FirstOrDefault();
+                    if (loc != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.DuplicateConverterForTypePair,
+                            loc,
+                            type.Name,
+                            kvp.Key.Item1,
+                            kvp.Key.Item2));
                 }
             }
         }
@@ -414,22 +479,47 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
 
             // Skip construction analysis for update methods
         }
+        HashSet<string> constructorBoundKeys;
+        if (isUpdate)
+        {
+            constructorBoundKeys = new HashSet<string>();
+            // Skip construction analysis for update methods
+        }
         else
         {
             // Analyze construction (only for create methods)
-            AnalyzeConstruction(context, method, destType, sourceMembers);
+            constructorBoundKeys = AnalyzeConstruction(context, method, destType, sourceMembers);
         }
 
         // Analyze member matching
-        AnalyzeMemberMatching(context, method, sourceType, destType, sourceMembers, destMembers, allowNested, allowFlattening, forgeClass, isUpdate, strictMapping);
+        AnalyzeMemberMatching(context, method, sourceType, destType, sourceMembers, destMembers, allowNested, allowFlattening, forgeClass, constructorBoundKeys, isUpdate, strictMapping);
     }
 
-    private static void AnalyzeConstruction(
+    private static HashSet<string> AnalyzeConstruction(
         SymbolAnalysisContext context,
         IMethodSymbol forgeMethod,
         INamedTypeSymbol destType,
         Dictionary<string, (ITypeSymbol Type, bool IsField)> sourceMembers)
     {
+        var none = new HashSet<string>();
+
+        // FKF503: abstract class, interface, or static class cannot be constructed
+        // Note: static classes have IsAbstract=false in Roslyn (the keyword is absent in source),
+        // so IsStatic must be checked separately.
+        if (destType.IsAbstract || destType.IsStatic)
+        {
+            var loc503 = forgeMethod.Locations.FirstOrDefault();
+            if (loc503 != null)
+            {
+                string kind = destType.IsStatic ? "a static class"
+                    : destType.TypeKind == TypeKind.Interface ? "an interface"
+                    : "abstract";
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.DestinationTypeNotInstantiable, loc503, destType.Name, kind));
+            }
+            return none;
+        }
+
         var publicCtors = destType.InstanceConstructors
             .Where(c => c.DeclaredAccessibility == Accessibility.Public)
             .ToList();
@@ -445,12 +535,12 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     destType.Name,
                     forgeMethod.Parameters[0].Type.Name));
             }
-            return;
+            return none;
         }
 
-        // Parameterless constructor always works
+        // Parameterless constructor always works — no constructor params bound
         var parameterlessCtor = publicCtors.FirstOrDefault(c => c.Parameters.Length == 0);
-        if (parameterlessCtor != null) return;
+        if (parameterlessCtor != null) return none;
 
         // Find viable parameterized constructors
         var viableCtors = new List<IMethodSymbol>();
@@ -485,10 +575,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     loc,
                     destType.Name));
             }
-            return;
+            return none;
         }
 
-        if (viableCtors.Count == 1) return; // Exactly one viable ctor — success
+        if (viableCtors.Count == 1)
+        {
+            // Return the parameter names the generator will bind via this constructor
+            var bound = new HashSet<string>();
+            foreach (var param in viableCtors[0].Parameters)
+                bound.Add(param.Name.ToLowerInvariant());
+            return bound;
+        }
 
         // No viable constructor: report FKF501 for each unsatisfied single-constructor scenario,
         // or FKF502 if all constructors have missing parameters.
@@ -521,6 +618,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     forgeMethod.Parameters[0].Type.Name));
             }
         }
+        return none;
     }
 
     private static void AnalyzeMemberMatching(
@@ -533,26 +631,53 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         bool allowNested,
         bool allowFlattening,
         INamedTypeSymbol forgeClass,
+        HashSet<string> constructorBoundKeys,
         bool isUpdate = false,
         bool strictMapping = false)
     {
         var matchedSourceKeys = new HashSet<string>();
+        bool isCollectionProjection = IsCollectionType(sourceType) && IsCollectionType(destType);
+        int matchedCount = 0;
+        int flattenedCount = 0;
 
         foreach (var destKvp in destMembers)
         {
             var key = destKvp.Key;
             var destMember = destKvp.Value;
 
-            // Skip read-only destination members — the generator never assigns them
-            // For create methods, init-only properties ARE assignable (via object initializer)
+            // FKF107: read-only destination member that has a matching source member
             if (IsReadOnlyDestMember(destType, key, isUpdate))
+            {
+                if (sourceMembers.ContainsKey(key))
+                {
+                    if (constructorBoundKeys.Contains(key))
+                    {
+                        // Member is handled via a constructor parameter — count it as matched
+                        matchedSourceKeys.Add(key);
+                        matchedCount++;
+                    }
+                    else
+                    {
+                        var loc107 = forgeMethod.Locations.FirstOrDefault();
+                        if (loc107 != null)
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                ForgeDiagnostics.ReadOnlyDestinationMember, loc107, destType.Name, key));
+                    }
+                }
                 continue;
+            }
 
             if (!sourceMembers.TryGetValue(key, out var srcMember))
             {
                 // Try flattening before reporting FKF100
-                if (allowFlattening && CanFlatten(sourceType, key, destMember.Type))
+                if (allowFlattening && CanFlatten(sourceType, key, destMember.Type, out var sourceNavKey))
+                {
+                    if (sourceNavKey != null)
+                        matchedSourceKeys.Add(sourceNavKey);
+                    matchedCount++;
+                    flattenedCount++;
                     continue;
+                }
 
                 // FKF100 (warning) or FKF110 (error in strict mode)
                 var loc = forgeMethod.Locations.FirstOrDefault();
@@ -572,6 +697,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             }
 
             matchedSourceKeys.Add(key);
+            matchedCount++;
 
             if (SymbolEqualityComparer.Default.Equals(srcMember.Type, destMember.Type))
                 continue; // Exact type match — OK
@@ -664,6 +790,30 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 }
             }
         }
+
+        // FKF042: no members were matched at all (skip for collection projection methods)
+        if (matchedCount == 0 && !isCollectionProjection)
+        {
+            var loc = forgeMethod.Locations.FirstOrDefault();
+            if (loc != null)
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.ZeroMembersMapped,
+                    loc,
+                    forgeMethod.Name,
+                    sourceType.Name,
+                    destType.Name));
+        }
+
+        // FKF043: AllowFlattening enabled but no members were matched via flattening
+        if (allowFlattening && flattenedCount == 0 && !isCollectionProjection)
+        {
+            var loc = forgeMethod.Locations.FirstOrDefault();
+            if (loc != null)
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.FlatteningEnabledNoMatchFound,
+                    loc,
+                    forgeMethod.Name));
+        }
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -685,8 +835,39 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             if (member is IPropertySymbol prop)
             {
                 if (prop.IsIndexer) continue;
+
+                // FKF109: member has both [ForgeIgnore] and [ForgeMap]
+                if (HasIgnoreAttribute(prop) && GetForgeMapName(prop) != null)
+                {
+                    var loc = forgeMethod.Locations.FirstOrDefault();
+                    if (loc != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, prop.Name, type.Name));
+                }
+
                 if (ShouldIgnoreMember(prop, isSourceSide)) continue;
+
+                // FKF108: source member getter absent or inaccessible to generated code
+                if (isSourceSide && !IsGetterAccessible(prop))
+                {
+                    var loc = forgeMethod.Locations.FirstOrDefault();
+                    if (loc != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.WriteOnlySourceMember, loc, type.Name, prop.Name));
+                    continue;
+                }
+
                 var mapName = GetForgeMapName(prop);
+
+                // FKF112: [ForgeMap] target is the member's own name — no-op
+                if (mapName != null && string.Equals(mapName, prop.Name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    var loc112 = forgeMethod.Locations.FirstOrDefault();
+                    if (loc112 != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.ForgeMapSelfReference, loc112, prop.Name, type.Name, mapName));
+                }
+
                 var keyLower = (mapName ?? prop.Name).ToLowerInvariant();
                 if (result.ContainsKey(keyLower))
                 {
@@ -706,6 +887,15 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             }
             else if (member is IFieldSymbol field)
             {
+                // FKF109: field has both [ForgeIgnore] and [ForgeMap]
+                if (HasIgnoreAttribute(field) && GetForgeMapName(field) != null)
+                {
+                    var loc = forgeMethod.Locations.FirstOrDefault();
+                    if (loc != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, field.Name, type.Name));
+                }
+
                 if (ShouldIgnoreMember(field, isSourceSide)) continue;
                 if (!includeFields)
                 {
@@ -722,6 +912,16 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     continue;
                 }
                 var mapName = GetForgeMapName(field);
+
+                // FKF112: [ForgeMap] target is the field's own name — no-op
+                if (mapName != null && string.Equals(mapName, field.Name, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    var loc112 = forgeMethod.Locations.FirstOrDefault();
+                    if (loc112 != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.ForgeMapSelfReference, loc112, field.Name, type.Name, mapName));
+                }
+
                 var keyLower = (mapName ?? field.Name).ToLowerInvariant();
                 if (result.ContainsKey(keyLower))
                 {
@@ -742,6 +942,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
 
         return result;
+    }
+
+    // Generated code lives in the same assembly but is not a subclass of the source type,
+    // so private/protected/private-protected getters are all off-limits.
+    private static bool IsGetterAccessible(IPropertySymbol prop)
+    {
+        if (prop.GetMethod == null) return false;
+        var acc = prop.GetMethod.DeclaredAccessibility;
+        return acc == Accessibility.Public
+            || acc == Accessibility.Internal
+            || acc == Accessibility.ProtectedOrInternal;
     }
 
     private static bool IsNullableValueType(ITypeSymbol type) =>
@@ -795,16 +1006,27 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     private static bool IsCollectionType(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol) return true;
-        if (type is INamedTypeSymbol named && named.IsGenericType && named.TypeArguments.Length == 1)
+        if (type is INamedTypeSymbol named && named.IsGenericType)
         {
-            foreach (var iface in named.AllInterfaces)
+            if (named.TypeArguments.Length == 1)
             {
-                if (iface.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>")
+                foreach (var iface in named.AllInterfaces)
+                {
+                    if (iface.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>")
+                        return true;
+                }
+                if (named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>")
                     return true;
             }
-            // Also check the type itself (e.g. IEnumerable<T>)
-            if (named.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.IEnumerable<T>")
-                return true;
+            // Dictionary types (2 type args) are also handled by the generator
+            if (named.TypeArguments.Length == 2)
+            {
+                var def = named.OriginalDefinition.ToDisplayString();
+                if (def == "System.Collections.Generic.Dictionary<TKey, TValue>" ||
+                    def == "System.Collections.Generic.IDictionary<TKey, TValue>" ||
+                    def == "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>")
+                    return true;
+            }
         }
         return false;
     }
@@ -839,8 +1061,9 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool CanFlatten(INamedTypeSymbol sourceType, string destKeyLower, ITypeSymbol destMemberType)
+    private static bool CanFlatten(INamedTypeSymbol sourceType, string destKeyLower, ITypeSymbol destMemberType, out string? sourceNavKey)
     {
+        sourceNavKey = null;
         foreach (var member in sourceType.GetMembers())
         {
             if (member.IsStatic || member.DeclaredAccessibility == Accessibility.Private) continue;
@@ -860,6 +1083,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                         nestedProp.Name.ToLowerInvariant() == remainder &&
                         SymbolEqualityComparer.Default.Equals(nestedProp.Type, destMemberType))
                     {
+                        sourceNavKey = prefixLower;
                         return true;
                     }
                 }
@@ -944,6 +1168,11 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     {
         return GetForgeAttribute(method) != null;
     }
+
+    private static bool HasIgnoreAttribute(ISymbol member)
+        => member.GetAttributes().Any(a =>
+            a.AttributeClass?.Name == "ForgeIgnoreAttribute" ||
+            a.AttributeClass?.Name == "ForgeIgnore");
 
     private static bool HasForgeIgnoreAttribute(ISymbol member)
         => ShouldIgnoreMember(member, isSourceSide: true) || ShouldIgnoreMember(member, isSourceSide: false);

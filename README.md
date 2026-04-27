@@ -1,18 +1,20 @@
-<p align="center">
-  <img src="forge.png" alt="FreakyKit.Forge" width="600" />
-</p>
+<div align="center">
 
-<div>
-   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-   <a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/test.yml"><img src="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/test.yml/badge.svg" alt="Test"></a>
-   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget" alt="NuGet"></a>
-   <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge.svg" alt="Downloads"></a>
-   <a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge" alt="License"></a>
-</div>
+<img src="forge.png" alt="FreakyKit.Forge" width="600" />
 
 # FreakyKit.Forge
 
-A compile-time object mapping library for C# powered by Roslyn source generators. Define your mappings as partial method declarations and Forge generates the implementations at build time — zero reflection, zero runtime overhead.
+**A compile-time object mapping library for C# powered by Roslyn source generators**
+
+<a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/ci.yml?label=CI&style=for-the-badge" alt="CI"></a>
+<a href="https://github.com/FreakyAli/FreakyKit.Forge/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/FreakyAli/FreakyKit.Forge/test.yml?label=Tests&style=for-the-badge" alt="Tests"></a>
+<a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget&style=for-the-badge" alt="NuGet"></a>
+<a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge?style=for-the-badge" alt="Downloads"></a>
+<a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge?style=for-the-badge" alt="License"></a>
+
+<br/>
+
+</div>
 
 ## Quick Start
 
@@ -50,13 +52,31 @@ Then just call it:
 var dto = PersonForges.ToDto(person);
 ```
 
-### Support the Project
+## Why Forge?
 
-If you find this project helpful, consider supporting its development:
+Reflection-based mappers like AutoMapper and Mapster are convenient but blind — wrong type, missing member, nullable mismatch and you find out at runtime. At some point that gets old enough that writing mappers by hand starts looking reasonable.
 
-[![](https://miro.medium.com/max/600/0*wrBJU05A3BULKcWA.gif)](https://www.buymeacoffee.com/FreakyAli)
+Source generators solve the runtime problem, but control is still coarse. Forge's differentiator is how explicitly you can express intent: **implicit mode** means zero ceremony for simple cases — declare the method signature, the generator fills in the body. **Explicit mode** locks that down for critical paths where nothing should be generated without intent. `ForgeIgnoreSide` lets you exclude a member from one side without hiding it on the other. These are the gaps that come up in real codebases, not just toy examples.
+
+### Forge vs Mapperly
+
+Both are Roslyn source generators with zero runtime overhead. Mapperly is a mature, feature-rich library — if it works for you, keep using it. The differences are at the control level:
+
+| | Forge | Mapperly |
+|---|:---:|:---:|
+| Implicit mapping mode (zero attribute ceremony) | ✅ | ❌ |
+| Side-specific member exclusion | ✅ | ❌ |
+| Strict mapping / drift detection | ✅ | ✅ |
+| Rich build-time diagnostics | ✅ | ✅ |
+| Nested forging | ✅ | ✅ |
+| Collection mapping | ✅ | ✅ |
+| Constructor mapping | ✅ | ✅ |
+
+If you want more explicit control over which methods get generated and how members are handled on each side, Forge is worth a look.
 
 ## Installation
+
+For most projects, add two packages:
 
 ```xml
 <ItemGroup>
@@ -65,7 +85,9 @@ If you find this project helpful, consider supporting its development:
 </ItemGroup>
 ```
 
-For other installation options (lightweight, conventions, local development), see the [full installation guide](docs/installation.md).
+`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 44 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
+
+See the [full installation guide](docs/installation.md) for lightweight setups, the optional conventions package, local development without NuGet, and custom Roslyn tooling.
 
 ## Features
 
@@ -75,6 +97,7 @@ For other installation options (lightweight, conventions, local development), se
 - **Init-only & record support** — init-only properties and records use object initializer syntax
 - **Nested forging** — compose mappings for complex object graphs with null-safe access
 - **Collection mapping** — automatic `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ReadOnlyCollection<T>`, `HashSet<T>` conversion with LINQ
+- **Dictionary mapping** — automatic `Dictionary<TKey, TValue>`, `IDictionary<TKey, TValue>`, `IReadOnlyDictionary<TKey, TValue>` element conversion with nested forging for value types
 - **Null-safe nested access** — null guards on nested forge calls, flattened properties, and collection mappings
 - **Flattening** — map nested properties like `Address.City` to flat members like `AddressCity`
 - **Custom member mapping** — rename members with `[ForgeMap]` on properties, fields, or constructor parameters
@@ -86,14 +109,20 @@ For other installation options (lightweight, conventions, local development), se
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 35 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 44 diagnostics across 7 categories guide you at build time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
+- **Top-level dictionary projection** — declare a `Dictionary<string, Dest> ToDict(Dictionary<string, Source> source)` method and the generator produces an efficient `foreach`-based conversion
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
 - **Conditional mapping** — skip assignments when source is null with `IgnoreIfNull`
 - **Debugging friendly** — generated code includes `[GeneratedCode]`, `[DebuggerStepThrough]`, `#line` directives, `#pragma warning disable`, and XML doc comments
 
 ## Comparison
+
+<details>
+<summary><strong>Forge vs AutoMapper, Mapperly, Mapster, Facet — full feature breakdown</strong></summary>
+
+<br>
 
 > **Note:** This comparison is based on publicly available documentation at the time of writing. If you spot an inaccuracy, please [open an issue](https://github.com/FreakyAli/FreakyKit.Forge/issues) and we'll correct it.
 
@@ -112,7 +141,7 @@ For other installation options (lightweight, conventions, local development), se
 | Enum mapping | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Update existing objects | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Before/after hooks | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Rich diagnostics | ✅ | ❌ | ✅ | ~ | ✅ |
+| Rich diagnostics | ✅ | ❌ | ✅ | ~ | ~ |
 | Field support | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Init-only / record support | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Null-safe nested access | ✅ | ✅ | ✅ | ~ | ~ |
@@ -126,33 +155,38 @@ For other installation options (lightweight, conventions, local development), se
 | Side-specific member exclusion | ✅ | ~ | ❌ | ❌ | ❌ |
 | Type converter validation | ✅ | N/A | ✅ | N/A | N/A |
 
+</details>
+
 ## Performance Benchmarks
 
-> Benchmarked on .NET 8 using BenchmarkDotNet v0.15.8. Numbers shown are for Forge alongside hand-written code. The same benchmarks were also run against AutoMapper 16.1.1, Mapperly 4.3.1, Mapster 7.4.0, and Facet 5.8.2 — full per-library breakdown in [docs/benchmarks.md](docs/benchmarks.md).
+> Benchmarked on .NET 8 using BenchmarkDotNet v0.15.8. The same benchmarks were also run against AutoMapper 16.1.1, Mapperly 4.3.1, Mapster 7.4.0, and Facet 5.8.2 — full per-library breakdown in [docs/benchmarks.md](docs/benchmarks.md).
+> Benchmark run: 2026-03-23 — commit: `6132259`
 
-| Scenario | Forge | Hand-written | Ratio |
-|----------|------:|-------------:|------:|
-| Simple mapping (4 props) | 6.46 ns | 6.37 ns | 1.01x |
-| Medium mapping (10 props) | 12.43 ns | 14.49 ns | **0.86x** |
-| Nested object | 21.92 ns | 23.57 ns | **0.93x** |
-| Property flattening | 10.97 ns | 11.72 ns | **0.94x** |
-| Deep object graph | 208.5 ns | 204.5 ns | 1.02x |
-| Collection (1,000 items) | 5,270 ns | 5,261 ns | 1.00x |
-| Throughput (10,000 objects) | 152.0 μs | 155.2 μs | **0.98x** |
-| Real-world e-commerce order | 161.5 ns | 161.9 ns | **1.00x** |
-| Nullable DB entity (populated) | 11.45 ns | 11.71 ns | **0.98x** |
+Forge generates plain C# assignments — the same code you'd write by hand. It compiles to identical IL, so the JIT sees no difference. The numbers below confirm that: any variation from hand-written is measurement noise, not a real difference.
 
-Forge consistently matches or beats hand-written code with zero allocation overhead. See [docs/benchmarks.md](docs/benchmarks.md) for full details.
+| Scenario | Forge | Hand-written |
+|----------|------:|-------------:|
+| Simple mapping (4 props) | 6.46 ns | 6.37 ns |
+| Medium mapping (10 props) | 12.43 ns | 14.49 ns |
+| Nested object | 21.92 ns | 23.57 ns |
+| Property flattening | 10.97 ns | 11.72 ns |
+| Deep object graph | 208.5 ns | 204.5 ns |
+| Collection (1,000 items) | 5,270 ns | 5,261 ns |
+| Throughput (10,000 objects) | 152.0 μs | 155.2 μs |
+| Real-world e-commerce order | 161.5 ns | 161.9 ns |
+| Nullable DB entity (populated) | 11.45 ns | 11.71 ns |
+
+The meaningful comparison is against reflection-based mappers — see [docs/benchmarks.md](docs/benchmarks.md) for the full breakdown.
 
 ## The Forge Ecosystem
 
-| Package | Downloads | Description |
-|---------|:---------:|-------------|
-| [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.svg) | Core attributes and enums (`[Forge]`, `[ForgeMethod]`, `[ForgeMap]`, etc.) |
-| [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Generator.svg) | Roslyn source generator — writes mapping method bodies at compile time |
-| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers.svg) | Roslyn analyzer — 35 diagnostics to validate your declarations at build time |
-| [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Diagnostics.svg) | Shared diagnostic descriptors for custom Roslyn tooling |
-| [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Conventions.svg) | Optional naming convention helpers |
+| Package | Install? | Downloads | What it does |
+|---------|:--------:|:---------:|--------------|
+| [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Generator?style=flat-square) | Roslyn source generator — writes your mapping method bodies at compile time |
+| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers?style=flat-square) | Roslyn analyzer — 44 build-time diagnostics to catch mistakes before you run |
+| [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | ⛔ Never directly | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge?style=flat-square) | Core attributes and enums — pulled in automatically by Generator and Analyzers |
+| [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | 🔧 Optional | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Conventions?style=flat-square) | Naming helpers — `ForgeConventions.ForgeClassName("Person")` → `"PersonForges"` |
+| [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | 🔧 Advanced | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Diagnostics?style=flat-square) | Shared diagnostic descriptors — only if you're building custom Roslyn tooling on top of Forge |
 
 ## How It Works
 
@@ -256,6 +290,46 @@ public static partial PersonDto ToDto(Person source);
 public static partial AddressDto ToAddressDto(Address source);
 
 // Generates: __result.Addresses = source.Addresses != null ? source.Addresses.Select(x => ToAddressDto(x)).ToList() : null;
+```
+
+## Dictionary Mapping
+
+Dictionaries are mapped when both source and destination are `Dictionary<TKey, TValue>`, `IDictionary<TKey, TValue>`, or `IReadOnlyDictionary<TKey, TValue>`. Keys must share the same type.
+
+**Same value type** — top-level projection uses the copy constructor:
+
+```csharp
+public static partial Dictionary<string, Item> Copy(Dictionary<string, Item> source);
+
+// Generates:
+// if (source == null) return null;
+// return new Dictionary<string, Item>(source);
+```
+
+**Different value types** — requires a forge method for the value type, used via `AllowNestedForging`:
+
+```csharp
+public static partial OrderDto MapOrder(Order source);
+public static partial Dictionary<string, OrderDto> MapOrders(Dictionary<string, Order> source);
+
+// Generates:
+// if (source == null) return null;
+// var __result = new Dictionary<string, OrderDto>(source.Count);
+// foreach (var __kvp in source)
+//     __result[__kvp.Key] = MapOrder(__kvp.Value);
+// return __result;
+```
+
+Dictionary properties on source/destination types are handled automatically. When value types differ, set `AllowNestedForging = true` on the forge method:
+
+```csharp
+[ForgeMethod(AllowNestedForging = true)]
+public static partial Dest ToDto(Source source);
+
+// Source.Items: Dictionary<string, Order>  →  Dest.Items: Dictionary<string, OrderDto>
+// Generates: __result.Items = source.Items != null
+//     ? source.Items.ToDictionary(__kvp => __kvp.Key, __kvp => MapOrder(__kvp.Value))
+//     : null;
 ```
 
 ## Flattening
@@ -612,12 +686,16 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 |----|----------|---------|
 | FKF001 | Info | Explicit mode activated |
 | FKF002 | Warning | Method ignored in explicit mode |
+| FKF003 | Error | Forge class not static |
+| FKF004 | Error | Forge class not partial |
 | FKF010 | Warning | Private forge method ignored |
 | FKF011 | Info | Private visibility enabled |
 | FKF020 | Error | Forge method declares a body |
 | FKF030 | Error | Forge method name overloaded |
 | FKF040 | Info | Update mode activated |
 | FKF041 | Error | Update destination has no settable members |
+| FKF042 | Warning | Zero members mapped |
+| FKF043 | Warning | Flattening enabled but no members flattened |
 | FKF050 | Info | Before hook detected |
 | FKF051 | Info | After hook detected |
 | FKF100 | Warning | Destination member has no source match |
@@ -627,8 +705,12 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF104 | Error | ForgeMap target not found |
 | FKF105 | Warning | Duplicate ForgeMap target |
 | FKF106 | Info | Flattened mapping applied |
+| FKF107 | Info | Read-only destination member skipped |
+| FKF108 | Info | Write-only source member skipped |
+| FKF109 | Warning | Member both ignored and explicitly mapped |
 | FKF110 | Error | Strict: destination member missing source |
 | FKF111 | Error | Strict: source member unused |
+| FKF112 | Warning | ForgeMap target is the member's own name |
 | FKF200 | Error | Incompatible member types |
 | FKF201 | Warning | Nullable value type to non-nullable mapping |
 | FKF202 | Info | Nullable mapping applied |
@@ -637,6 +719,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF212 | Warning | Enum member missing in destination |
 | FKF220 | Info | Type converter used |
 | FKF221 | Warning | Invalid converter signature |
+| FKF222 | Warning | Duplicate converter for same type pair |
 | FKF300 | Warning | Nested forging disabled |
 | FKF310 | Info | Collection mapping applied |
 | FKF400 | Warning | Field ignored |
@@ -644,6 +727,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF500 | Error | Constructor ambiguity |
 | FKF501 | Error | Missing constructor parameter |
 | FKF502 | Error | No viable constructor |
+| FKF503 | Error | Destination type not instantiable |
 
 ## Project Structure
 
@@ -660,16 +744,22 @@ tests/
   FreakyKit.Forge.Integration.Tests/
 ```
 
+## Roadmap
+
+Features planned for future versions — IQueryable/EF Core projection expressions, polymorphic/derived type mapping, reverse mapping, computed properties, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
+
+## Support the Project
+
+If you find Forge useful, consider supporting its development:
+
+[![](https://miro.medium.com/max/600/0*wrBJU05A3BULKcWA.gif)](https://www.buymeacoffee.com/FreakyAli)
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE) for details.
 
 ## Activity
 
-Sparkline:
-
-[![Sparkline](https://stars.medv.io/FreakyAli/FreakyKit.Forge.svg)](https://stars.medv.io/FreakyAli/FreakyKit.Forge)
-
-RepoBeats:
+[![Star History Chart](https://api.star-history.com/svg?repos=FreakyAli/FreakyKit.Forge&type=Date)](https://star-history.com/#FreakyAli/FreakyKit.Forge&Date)
 
 ![Alt](https://repobeats.axiom.co/api/embed/4e1dad54a0d67502121ef9d06efa2b3fba64c7a3.svg "Repobeats analytics image")

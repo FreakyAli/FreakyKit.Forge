@@ -189,6 +189,19 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         var srcParamName = method.Parameters[0].Name;
 
+        // ── Dictionary projection detection ───────────────────────────────────
+        if (!isUpdate)
+        {
+            var rawSrc = method.Parameters[0].Type;
+            var rawDest = method.ReturnType;
+            if (GetDictionaryKeyValueTypes(rawSrc, out var srcDictKey, out var srcDictVal) &&
+                GetDictionaryKeyValueTypes(rawDest, out var destDictKey, out var destDictVal))
+            {
+                return ExtractDictionaryProjectMethod(method, forgeClass, rawSrc, rawDest,
+                    srcDictKey!, srcDictVal!, destDictKey!, destDictVal!, srcParamName, diagnostics);
+            }
+        }
+
         // ── Collection projection detection (before INamedTypeSymbol cast) ────
         // Handles both INamedTypeSymbol (List<T>) and IArrayTypeSymbol (T[]) source/dest.
         if (!isUpdate)
@@ -472,6 +485,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         isInitOnly: initOnly));
                 }
             }
+            else if (TryResolveDictionaryMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var dictExpr))
+            {
+                assignments.Add(new MemberAssignmentModel(
+                    destMemberName: destMember.Name,
+                    sourceExpression: dictExpr,
+                    ignoreIfNull: memberIgnoreIfNull,
+                    nullCheckExpression: nullCheckExpr,
+                    isInitOnly: initOnly));
+            }
             else if (TryResolveCollectionMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var collectionExpr))
             {
                 diagnostics.Add(Diagnostic.Create(
@@ -707,17 +729,123 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return (model, diagnostics);
     }
 
+    private static (ForgeMethodModel? Model, List<Diagnostic> Diagnostics) ExtractDictionaryProjectMethod(
+        IMethodSymbol method,
+        INamedTypeSymbol forgeClass,
+        ITypeSymbol sourceDictType,
+        ITypeSymbol destDictType,
+        ITypeSymbol srcKeyType,
+        ITypeSymbol srcValType,
+        ITypeSymbol destKeyType,
+        ITypeSymbol destValType,
+        string srcParamName,
+        List<Diagnostic> diagnostics)
+    {
+        var accessibility = AccessibilityToString(method.DeclaredAccessibility);
+        var srcShort = BuildShortTypeName(sourceDictType);
+        var destShort = BuildShortTypeName(destDictType);
+        var concreteDictShort = GetConcreteDictShortName(destDictType, destKeyType, destValType);
+
+        if (srcKeyType.ToDisplayString() != destKeyType.ToDisplayString())
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.IncompatibleMemberTypes,
+                method.Locations.FirstOrDefault(),
+                method.Name,
+                srcKeyType.ToDisplayString(),
+                destKeyType.ToDisplayString()));
+            return (null, diagnostics);
+        }
+
+        string valueTransform;
+        var srcValDisplay = srcValType.ToDisplayString();
+        var destValDisplay = destValType.ToDisplayString();
+
+        if (srcValDisplay == destValDisplay)
+        {
+            valueTransform = "";
+        }
+        else if (FindNestedForgeMethod(forgeClass, srcValType, destValType, out var nestedName) && nestedName != null)
+        {
+            valueTransform = $"{nestedName}(__kvp.Value)";
+        }
+        else
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.IncompatibleMemberTypes,
+                method.Locations.FirstOrDefault(),
+                method.Name,
+                srcValDisplay,
+                destValDisplay));
+            return (null, diagnostics);
+        }
+
+        var location = method.Locations.FirstOrDefault();
+        var model = new ForgeMethodModel(
+            methodName: method.Name,
+            accessibility: accessibility,
+            sourceTypeFqn: sourceDictType.ToDisplayString(),
+            sourceTypeShortName: srcShort,
+            sourceParameterName: srcParamName,
+            destTypeFqn: destDictType.ToDisplayString(),
+            destTypeShortName: destShort,
+            construction: new ConstructionModel(ConstructionKind.Parameterless, new System.Collections.Generic.List<ConstructorArgModel>()),
+            assignments: new System.Collections.Generic.List<MemberAssignmentModel>(),
+            nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
+            methodKind: ForgeMethodKind.DictionaryProject,
+            sourceFilePath: location?.SourceTree?.FilePath,
+            sourceLineNumber: location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0,
+            collectionProjectExpression: valueTransform,
+            concreteDictInstantiationName: concreteDictShort);
+
+        return (model, diagnostics);
+    }
+
+    private static string GetCSharpKeyword(ITypeSymbol t) => t.SpecialType switch
+    {
+        SpecialType.System_Boolean => "bool",
+        SpecialType.System_Byte => "byte",
+        SpecialType.System_SByte => "sbyte",
+        SpecialType.System_Int16 => "short",
+        SpecialType.System_UInt16 => "ushort",
+        SpecialType.System_Int32 => "int",
+        SpecialType.System_UInt32 => "uint",
+        SpecialType.System_Int64 => "long",
+        SpecialType.System_UInt64 => "ulong",
+        SpecialType.System_Single => "float",
+        SpecialType.System_Double => "double",
+        SpecialType.System_Decimal => "decimal",
+        SpecialType.System_Char => "char",
+        SpecialType.System_String => "string",
+        SpecialType.System_Object => "object",
+        _ => t.Name
+    };
+
     /// <summary>Builds a short, unqualified name for a type, handling arrays and generic collections.</summary>
     private static string BuildShortTypeName(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol arr)
-            return $"{arr.ElementType.Name}[]";
+            return $"{GetCSharpKeyword(arr.ElementType)}[]";
         if (type is INamedTypeSymbol named && named.IsGenericType)
         {
-            var args = string.Join(", ", named.TypeArguments.Select(t => t.Name));
+            var args = string.Join(", ", named.TypeArguments.Select(GetCSharpKeyword));
             return $"{named.Name}<{args}>";
         }
-        return type.Name;
+        return GetCSharpKeyword(type);
+    }
+
+    /// <summary>
+    /// Returns a concrete Dictionary&lt;K,V&gt; name suitable for "new" expressions.
+    /// When the type is IDictionary or IReadOnlyDictionary, maps to the concrete Dictionary&lt;K,V&gt;;
+    /// otherwise delegates to <see cref="BuildShortTypeName"/>.
+    /// </summary>
+    private static string GetConcreteDictShortName(ITypeSymbol dictType, ITypeSymbol keyType, ITypeSymbol valType)
+    {
+        var def = (dictType as INamedTypeSymbol)?.OriginalDefinition.ToDisplayString();
+        if (def == "System.Collections.Generic.IDictionary<TKey, TValue>" ||
+            def == "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>")
+            return $"Dictionary<{GetCSharpKeyword(keyType)}, {GetCSharpKeyword(valType)}>";
+        return BuildShortTypeName(dictType);
     }
 
     private static (ConstructionModel Construction, List<Diagnostic> Diagnostics) DetermineConstruction(
@@ -922,6 +1050,35 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}#line default");
             sb.AppendLine($"{indent}{{");
             sb.AppendLine($"{indent}    return {method.CollectionProjectExpression};");
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine();
+            return;
+        }
+
+        if (method.MethodKind == ForgeMethodKind.DictionaryProject)
+        {
+            sb.AppendLine($"{indent}/// <summary>Projects each value of <paramref name=\"{method.SourceParameterName}\"/> to <see cref=\"{method.DestTypeShortName}\"/>. Auto-generated by FreakyKit.Forge.</summary>");
+            sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
+            sb.AppendLine($"{indent}[DebuggerStepThrough]");
+            if (!string.IsNullOrEmpty(method.SourceFilePath) && method.SourceLineNumber > 0)
+                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath}\"");
+            sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
+            sb.AppendLine($"{indent}#line default");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    if ({method.SourceParameterName} == null) return null;");
+            var valueTransform = method.CollectionProjectExpression;
+            var concreteDictType = method.ConcreteDictInstantiationName ?? method.DestTypeShortName;
+            if (string.IsNullOrEmpty(valueTransform))
+            {
+                sb.AppendLine($"{indent}    return new {concreteDictType}({method.SourceParameterName});");
+            }
+            else
+            {
+                sb.AppendLine($"{indent}    var __result = new {concreteDictType}({method.SourceParameterName}.Count);");
+                sb.AppendLine($"{indent}    foreach (var __kvp in {method.SourceParameterName})");
+                sb.AppendLine($"{indent}        __result[__kvp.Key] = {valueTransform};");
+                sb.AppendLine($"{indent}    return __result;");
+            }
             sb.AppendLine($"{indent}}}");
             sb.AppendLine();
             return;
@@ -1360,6 +1517,59 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 expression = $"{srcAccessor} != null ? {srcAccessor}.Select(x => {nestedName}(x)){suffix} : {nullFallback}";
             else
                 expression = $"{srcAccessor}.Select(x => {nestedName}(x)){suffix}";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool GetDictionaryKeyValueTypes(
+        ITypeSymbol type,
+        out ITypeSymbol? keyType,
+        out ITypeSymbol? valueType)
+    {
+        keyType = null;
+        valueType = null;
+        if (type is INamedTypeSymbol named && named.IsGenericType && named.TypeArguments.Length == 2)
+        {
+            var def = named.OriginalDefinition.ToDisplayString();
+            if (def == "System.Collections.Generic.Dictionary<TKey, TValue>" ||
+                def == "System.Collections.Generic.IDictionary<TKey, TValue>" ||
+                def == "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>")
+            {
+                keyType = named.TypeArguments[0];
+                valueType = named.TypeArguments[1];
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool TryResolveDictionaryMapping(
+        ITypeSymbol srcType, ITypeSymbol destType,
+        INamedTypeSymbol forgeClass, bool allowNested,
+        string sourceParamName, string srcMemberName,
+        out string expression)
+    {
+        expression = "";
+        if (!GetDictionaryKeyValueTypes(srcType, out var srcKey, out var srcVal)) return false;
+        if (!GetDictionaryKeyValueTypes(destType, out var destKey, out var destVal)) return false;
+        if (srcKey!.ToDisplayString() != destKey!.ToDisplayString()) return false;
+
+        var srcAccessor = $"{sourceParamName}.{srcMemberName}";
+        var srcIsRefType = srcType.IsReferenceType;
+
+        if (srcVal!.ToDisplayString() == destVal!.ToDisplayString())
+        {
+            var expr = $"new {GetConcreteDictShortName(destType, destKey!, destVal)}({srcAccessor})";
+            expression = srcIsRefType ? $"{srcAccessor} != null ? {expr} : null" : expr;
+            return true;
+        }
+
+        if (allowNested && FindNestedForgeMethod(forgeClass, srcVal, destVal!, out var nestedName) && nestedName != null)
+        {
+            var expr = $"{srcAccessor}.ToDictionary(__kvp => __kvp.Key, __kvp => {nestedName}(__kvp.Value))";
+            expression = srcIsRefType ? $"{srcAccessor} != null ? {expr} : null" : expr;
             return true;
         }
 
