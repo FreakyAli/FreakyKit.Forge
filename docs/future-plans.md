@@ -119,50 +119,7 @@ public static partial class AnimalForges
 
 ---
 
-## 3. Dictionary Element Conversion
-
-**Goal:** Map between `Dictionary<TKey, TSource>` and `Dictionary<TKey, TDest>` with automatic element conversion using existing forge methods.
-
-### Why
-
-Common in API responses, configuration systems, and caching layers where data is stored as keyed collections. For example, mapping `Dictionary<string, OrderEntity>` to `Dictionary<string, OrderDto>`.
-
-### Design
-
-```csharp
-[Forge]
-public static partial class MyForges
-{
-    public static partial OrderDto MapOrder(OrderEntity source);
-
-    [ForgeMethod(AllowNestedForging = true)]
-    public static partial Dictionary<string, OrderDto> MapOrderDict(Dictionary<string, OrderEntity> source);
-    // Generates:
-    // var __result = new Dictionary<string, OrderDto>(source.Count);
-    // foreach (var __kvp in source)
-    //     __result[__kvp.Key] = MapOrder(__kvp.Value);
-    // return __result;
-}
-```
-
-### Complexity
-
-**Low-medium.** Extends the existing collection mapping infrastructure:
-
-- Detection: both source and dest are `Dictionary<TKey, TValue>` or `IDictionary<TKey, TValue>`
-- Key types must match (or have a forge method / implicit conversion)
-- Value mapping reuses the existing nested forging resolution
-- Capacity hint: `new Dictionary<K,V>(source.Count)` for performance
-
-### Files to Modify
-
-- `ForgeGenerator.cs` — extend collection detection to recognize dictionary types
-- Generate `foreach` loop with key-value pair iteration instead of `.Select().ToList()`
-- Reuse existing nested forge method resolution for value conversion
-
----
-
-## 4. Computed Properties via `[ForgeComputed]`
+## 3. Computed Properties via `[ForgeComputed]`
 
 **Goal:** Allow users to define computed destination properties using type-safe methods on the forge class, rather than string-based expressions.
 
@@ -214,7 +171,7 @@ A string-based approach like `[ForgeMap(Compute = "source.FirstName + ...")]` wa
 
 ---
 
-## 5. Dictionary Mapping
+## 4. Dictionary Mapping
 
 **Goal:** Map between `Dictionary<string, T>` and typed objects by matching dictionary keys to member names.
 
@@ -287,7 +244,7 @@ public static partial class MyForges
 
 ---
 
-## 6. Mapping Profiles / Inheritance
+## 5. Mapping Profiles / Inheritance
 
 **Goal:** Allow a forge class to reuse mappings defined in another forge class via an `[ForgeIncludes]` attribute.
 
@@ -343,7 +300,7 @@ public static partial class PersonForges
 
 ---
 
-## 7. Reverse Mapping
+## 6. Reverse Mapping
 
 **Goal:** Automatically generate a reverse mapping method (Dest → Source) from an existing forward mapping (Source → Dest).
 
@@ -371,7 +328,7 @@ Many applications need bidirectional mapping — e.g., mapping an entity to a DT
 
 ---
 
-## 8. Snapshot / Approval Testing for Generated Code
+## 7. Snapshot / Approval Testing for Generated Code
 
 **Goal:** Add snapshot testing to the generator test suite so that any change in generated output is immediately caught, preventing tests from silently passing when behavior changes.
 
@@ -395,3 +352,27 @@ Negative-only assertions (`DoesNotContain`) can pass both before and after a beh
 3. Convert key test scenarios (one per mapping feature) to snapshot tests
 4. Keep existing assertion-based tests for targeted checks — snapshots complement, not replace
 5. Add a CI step that fails if any `.received.cs` files are generated (unapproved changes)
+
+---
+
+## 8. Circular Forge Detection
+
+**Goal:** Emit a build-time error when two forge methods form a recursive cycle (A→B with AllowNestedForging calls B→A with AllowNestedForging, which calls A→B, and so on).
+
+### Why
+
+With `AllowNestedForging = true`, the generator inlines calls to other forge methods for nested member types. If two types mutually reference each other and both directions have forge methods, the generated code will call itself recursively and stack-overflow at runtime. Nothing currently detects this at compile time.
+
+### Design
+
+- Build a directed graph of forge methods: a directed edge from method M to method N exists if N handles a type conversion that M depends on (i.e., a nested member of M's source→dest pair matches N's signature)
+- Run DFS cycle detection over the graph
+- Emit a new diagnostic (e.g., FKF301) on each method involved in the cycle, listing the cycle path
+- Only trigger when `AllowNestedForging = true` on the methods involved — disabled nested forging cannot create cycles
+
+### Suggested Approach
+
+1. In the analyzer, after all forge methods are collected for a class, build the dependency graph
+2. Run Tarjan's or a simple DFS-based cycle detection algorithm
+3. Report the cycle with a message like: `"Circular nested forge detected: ToDto → ToAddressDto → ToDto. This will stack-overflow at runtime."`
+4. Add a diagnostic descriptor FKF301 (Error) in the Nested category

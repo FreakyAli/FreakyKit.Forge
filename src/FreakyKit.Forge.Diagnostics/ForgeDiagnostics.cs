@@ -46,6 +46,30 @@ public static class ForgeDiagnostics
         description: "In explicit mode (ForgeMode.Explicit), only methods decorated with [ForgeMethod] are treated as forge methods. This method matches the forge shape but lacks the attribute.");
 
     /// <summary>
+    /// FKF003 (Error): A class has [Forge] but is not declared static.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeClassNotStatic = new(
+        id: "FKF003",
+        title: "Forge class not static",
+        messageFormat: "Forge class '{0}' is not static. Forge classes must be declared static.",
+        category: Category_Mode,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The class has a [Forge] attribute but is not declared static. The generator produces static mapping methods and requires a static class.");
+
+    /// <summary>
+    /// FKF004 (Error): A class has [Forge] but is not declared partial.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeClassNotPartial = new(
+        id: "FKF004",
+        title: "Forge class not partial",
+        messageFormat: "Forge class '{0}' is not partial. Forge classes must be declared partial so the generator can add the implementation.",
+        category: Category_Mode,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The class has a [Forge] attribute but is not declared partial. The source generator adds a second partial class declaration; without partial, the generated code cannot be merged.");
+
+    /// <summary>
     /// FKF010 (Warning): A private forge method is ignored because ShouldIncludePrivate is false.
     /// </summary>
     public static readonly DiagnosticDescriptor PrivateMethodIgnored = new(
@@ -120,6 +144,18 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "No members on the source and destination types share a matching name. The generated method will be empty. Check that the types are correct or that member names align.");
+
+    /// <summary>
+    /// FKF043 (Warning): AllowFlattening is enabled but no destination members were matched via flattening.
+    /// </summary>
+    public static readonly DiagnosticDescriptor FlatteningEnabledNoMatchFound = new(
+        id: "FKF043",
+        title: "Flattening enabled but no members flattened",
+        messageFormat: "Forge method '{0}' has AllowFlattening = true but no destination members were matched via flattening. Check that destination member names follow the pattern '{{NavigationProperty}}{{NestedProperty}}' (e.g., AddressCity for Address.City).",
+        category: Category_MethodShape,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "AllowFlattening was enabled on this forge method but no destination members were resolved by decomposing nested source properties. Either no destination member names follow the flattening convention, or AllowFlattening is unnecessary.");
 
     /// <summary>
     /// FKF041 (Error): Update forge method destination type has no settable members.
@@ -307,6 +343,18 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "A member cannot be both excluded from mapping and explicitly mapped at the same time. [ForgeIgnore] wins — remove [ForgeMap] or remove [ForgeIgnore].");
 
+    /// <summary>
+    /// FKF112 (Warning): A [ForgeMap] attribute maps a member to its own name — a no-op.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeMapSelfReference = new(
+        id: "FKF112",
+        title: "ForgeMap target is the member's own name",
+        messageFormat: "Member '{0}' on type '{1}' has [ForgeMap(\"{2}\")] which maps to its own name. [ForgeMap] has no effect — remove it.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "The [ForgeMap] attribute specifies the same name as the member itself. This is a no-op and is almost certainly a copy-paste mistake. Remove [ForgeMap] or correct the target name.");
+
     // ─── Strict Mapping (Drift Detection) ──────────────────────────────────────
 
     /// <summary>
@@ -435,6 +483,18 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "A [ForgeConverter] method must be static, non-void, non-generic, and take exactly one parameter. Methods that don't meet these requirements are silently ignored by the generator, which can cause unexpected FKF200 errors.");
 
+    /// <summary>
+    /// FKF222 (Warning): Multiple [ForgeConverter] methods handle the same source→destination type pair.
+    /// </summary>
+    public static readonly DiagnosticDescriptor DuplicateConverterForTypePair = new(
+        id: "FKF222",
+        title: "Duplicate converter for type pair",
+        messageFormat: "Forge class '{0}' has multiple [ForgeConverter] methods that convert from '{1}' to '{2}'. Only one converter per type pair is allowed; duplicates will be ignored.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Two or more methods in the forge class are marked with [ForgeConverter] and handle the same source-to-destination type pair. Only one will be used; the others will be silently ignored by the generator.");
+
     // ─── Nested / Collections ────────────────────────────────────────────────
 
     /// <summary>
@@ -501,4 +561,16 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The destination type has no constructor that can be fully satisfied from the available source members.");
+
+    /// <summary>
+    /// FKF503 (Error): The destination type is abstract or an interface and cannot be instantiated.
+    /// </summary>
+    public static readonly DiagnosticDescriptor DestinationTypeNotInstantiable = new(
+        id: "FKF503",
+        title: "Destination type not instantiable",
+        messageFormat: "Destination type '{0}' cannot be constructed because it is {1}. Map to a concrete type instead.",
+        category: Category_Construction,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The destination type is abstract or an interface and cannot be instantiated with 'new'. Provide a concrete class as the forge destination.");
 }

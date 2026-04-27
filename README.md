@@ -85,7 +85,7 @@ For most projects, add two packages:
 </ItemGroup>
 ```
 
-`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 39 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
+`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 44 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
 
 See the [full installation guide](docs/installation.md) for lightweight setups, the optional conventions package, local development without NuGet, and custom Roslyn tooling.
 
@@ -97,6 +97,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Init-only & record support** — init-only properties and records use object initializer syntax
 - **Nested forging** — compose mappings for complex object graphs with null-safe access
 - **Collection mapping** — automatic `List<T>`, `T[]`, `IEnumerable<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ReadOnlyCollection<T>`, `HashSet<T>` conversion with LINQ
+- **Dictionary mapping** — automatic `Dictionary<TKey, TValue>`, `IDictionary<TKey, TValue>`, `IReadOnlyDictionary<TKey, TValue>` element conversion with nested forging for value types
 - **Null-safe nested access** — null guards on nested forge calls, flattened properties, and collection mappings
 - **Flattening** — map nested properties like `Address.City` to flat members like `AddressCity`
 - **Custom member mapping** — rename members with `[ForgeMap]` on properties, fields, or constructor parameters
@@ -108,8 +109,9 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 39 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 44 diagnostics across 7 categories guide you at build time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
+- **Top-level dictionary projection** — declare a `Dictionary<string, Dest> ToDict(Dictionary<string, Source> source)` method and the generator produces an efficient `foreach`-based conversion
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
 - **Conditional mapping** — skip assignments when source is null with `IgnoreIfNull`
@@ -180,7 +182,7 @@ The meaningful comparison is against reflection-based mappers — see [docs/benc
 | Package | Install? | Downloads | What it does |
 |---------|:--------:|:---------:|--------------|
 | [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Generator?style=flat-square) | Roslyn source generator — writes your mapping method bodies at compile time |
-| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers?style=flat-square) | Roslyn analyzer — 39 build-time diagnostics to catch mistakes before you run |
+| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers?style=flat-square) | Roslyn analyzer — 44 build-time diagnostics to catch mistakes before you run |
 | [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | ⛔ Never directly | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge?style=flat-square) | Core attributes and enums — pulled in automatically by Generator and Analyzers |
 | [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | 🔧 Optional | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Conventions?style=flat-square) | Naming helpers — `ForgeConventions.ForgeClassName("Person")` → `"PersonForges"` |
 | [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | 🔧 Advanced | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Diagnostics?style=flat-square) | Shared diagnostic descriptors — only if you're building custom Roslyn tooling on top of Forge |
@@ -287,6 +289,46 @@ public static partial PersonDto ToDto(Person source);
 public static partial AddressDto ToAddressDto(Address source);
 
 // Generates: __result.Addresses = source.Addresses != null ? source.Addresses.Select(x => ToAddressDto(x)).ToList() : null;
+```
+
+## Dictionary Mapping
+
+Dictionaries are mapped when both source and destination are `Dictionary<TKey, TValue>`, `IDictionary<TKey, TValue>`, or `IReadOnlyDictionary<TKey, TValue>`. Keys must share the same type.
+
+**Same value type** — top-level projection uses the copy constructor:
+
+```csharp
+public static partial Dictionary<string, Item> Copy(Dictionary<string, Item> source);
+
+// Generates:
+// if (source == null) return null;
+// return new Dictionary<string, Item>(source);
+```
+
+**Different value types** — requires a forge method for the value type, used via `AllowNestedForging`:
+
+```csharp
+public static partial OrderDto MapOrder(Order source);
+public static partial Dictionary<string, OrderDto> MapOrders(Dictionary<string, Order> source);
+
+// Generates:
+// if (source == null) return null;
+// var __result = new Dictionary<string, OrderDto>(source.Count);
+// foreach (var __kvp in source)
+//     __result[__kvp.Key] = MapOrder(__kvp.Value);
+// return __result;
+```
+
+Dictionary properties on source/destination types are handled automatically. When value types differ, set `AllowNestedForging = true` on the forge method:
+
+```csharp
+[ForgeMethod(AllowNestedForging = true)]
+public static partial Dest ToDto(Source source);
+
+// Source.Items: Dictionary<string, Order>  →  Dest.Items: Dictionary<string, OrderDto>
+// Generates: __result.Items = source.Items != null
+//     ? source.Items.ToDictionary(__kvp => __kvp.Key, __kvp => MapOrder(__kvp.Value))
+//     : null;
 ```
 
 ## Flattening
@@ -643,6 +685,8 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 |----|----------|---------|
 | FKF001 | Info | Explicit mode activated |
 | FKF002 | Warning | Method ignored in explicit mode |
+| FKF003 | Error | Forge class not static |
+| FKF004 | Error | Forge class not partial |
 | FKF010 | Warning | Private forge method ignored |
 | FKF011 | Info | Private visibility enabled |
 | FKF020 | Error | Forge method declares a body |
@@ -650,6 +694,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF040 | Info | Update mode activated |
 | FKF041 | Error | Update destination has no settable members |
 | FKF042 | Warning | Zero members mapped |
+| FKF043 | Warning | Flattening enabled but no members flattened |
 | FKF050 | Info | Before hook detected |
 | FKF051 | Info | After hook detected |
 | FKF100 | Warning | Destination member has no source match |
@@ -664,6 +709,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF109 | Warning | Member both ignored and explicitly mapped |
 | FKF110 | Error | Strict: destination member missing source |
 | FKF111 | Error | Strict: source member unused |
+| FKF112 | Warning | ForgeMap target is the member's own name |
 | FKF200 | Error | Incompatible member types |
 | FKF201 | Warning | Nullable value type to non-nullable mapping |
 | FKF202 | Info | Nullable mapping applied |
@@ -672,6 +718,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF212 | Warning | Enum member missing in destination |
 | FKF220 | Info | Type converter used |
 | FKF221 | Warning | Invalid converter signature |
+| FKF222 | Warning | Duplicate converter for same type pair |
 | FKF300 | Warning | Nested forging disabled |
 | FKF310 | Info | Collection mapping applied |
 | FKF400 | Warning | Field ignored |
@@ -679,6 +726,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF500 | Error | Constructor ambiguity |
 | FKF501 | Error | Missing constructor parameter |
 | FKF502 | Error | No viable constructor |
+| FKF503 | Error | Destination type not instantiable |
 
 ## Project Structure
 
@@ -697,7 +745,7 @@ tests/
 
 ## Roadmap
 
-Features planned for future versions — IQueryable/EF Core projection expressions, polymorphic/derived type mapping, dictionary mapping, reverse mapping, computed properties, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
+Features planned for future versions — IQueryable/EF Core projection expressions, polymorphic/derived type mapping, reverse mapping, computed properties, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
 
 ## Support the Project
 

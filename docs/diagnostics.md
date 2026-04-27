@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 39 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 44 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -33,6 +33,46 @@ public static partial class MyForges
 
     public static partial Other ToOther(Source s);   // FKF002
 }
+```
+
+### FKF003 — Forge class not static
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Mode |
+| **Message** | Forge class '{0}' is not static. Forge classes must be declared static. |
+
+Emitted when a class has `[Forge]` but is not declared `static`. The generator produces `static` method implementations and requires a static containing class. Add the `static` modifier to the class.
+
+```csharp
+// Wrong — FKF003
+[Forge]
+public partial class MyForges { ... }
+
+// Correct
+[Forge]
+public static partial class MyForges { ... }
+```
+
+### FKF004 — Forge class not partial
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Mode |
+| **Message** | Forge class '{0}' is not partial. Forge classes must be declared partial so the generator can add the implementation. |
+
+Emitted when a class has `[Forge]` but is not declared `partial`. The source generator adds a second partial class declaration containing the method bodies; without `partial`, the generated code cannot be merged. Add the `partial` modifier to the class.
+
+```csharp
+// Wrong — FKF004
+[Forge]
+public static class MyForges { ... }
+
+// Correct
+[Forge]
+public static partial class MyForges { ... }
 ```
 
 ### FKF010 — Private forge method ignored
@@ -125,6 +165,24 @@ public static partial void Update(Person source, PersonDto existing);
 Emitted when a forge method results in zero assignments — source and destination types share no matching member names. The generated method body will be effectively empty. This is almost always a mistake: check that the types are correct and that member names align (case-insensitive).
 
 Not emitted for collection projection methods (where both parameter and return type are collections) since those produce a LINQ expression rather than member assignments.
+
+### FKF043 — Flattening enabled but no members flattened
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MethodShape |
+| **Message** | Forge method '{0}' has AllowFlattening = true but no destination members were matched via flattening. |
+
+Emitted when `AllowFlattening = true` is set on a `[ForgeMethod]` but no destination member was matched by decomposing a nested source property. This means the flattening option had no effect — either no destination member names follow the `NavigationPropertyNestedProperty` convention (e.g., `AddressCity` for `Address.City`), or `AllowFlattening` is unnecessary and can be removed.
+
+```csharp
+// FKF043: AllowFlattening is on but Dest has no AddressCity-style members
+[ForgeMethod(AllowFlattening = true)]
+public static partial Dest ToDest(Source source);
+
+// Fix: either remove AllowFlattening or add a flattened member like AddressCity to Dest
+```
 
 ---
 
@@ -409,6 +467,26 @@ public static partial Dest ToDest(Source source);
 // FKF111 if Source has a member not present in Dest
 ```
 
+### FKF112 — ForgeMap target is the member's own name
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}' on type '{1}' has [ForgeMap("{2}")] which maps to its own name. [ForgeMap] has no effect — remove it. |
+
+Emitted when a `[ForgeMap]` attribute specifies the same name as the member it's applied to. The rename is a no-op — the member would have been matched by name convention anyway. This is almost always a copy-paste mistake.
+
+```csharp
+// Wrong — FKF112: Name already maps to Name by convention
+[ForgeMap("Name")]
+public string Name { get; set; }
+
+// Fix: remove [ForgeMap] or correct the target name
+[ForgeMap("FullName")]
+public string Name { get; set; }
+```
+
 ---
 
 ## Type Safety
@@ -537,6 +615,25 @@ public static void ConvertDate(DateTime value) { }
 public static string ConvertDate(DateTime value) => value.ToString("yyyy-MM-dd");
 ```
 
+### FKF222 — Duplicate converter for same type pair
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.TypeSafety |
+| **Message** | Forge class '{0}' has multiple [ForgeConverter] methods that convert from '{1}' to '{2}'. Only one converter per type pair is allowed; duplicates will be ignored. |
+
+Emitted when two or more valid `[ForgeConverter]` methods in the same forge class handle the same source-to-destination type pair. The generator picks one and ignores the rest. Remove the duplicates and keep only the converter you intend to use.
+
+```csharp
+// FKF222: both converters handle DateTime → string
+[ForgeConverter]
+public static string ConvertDate1(DateTime value) => value.ToString("yyyy-MM-dd");
+
+[ForgeConverter]
+public static string ConvertDate2(DateTime value) => value.ToString("dd/MM/yyyy");
+```
+
 ---
 
 ## Nested / Collections
@@ -609,3 +706,26 @@ A required constructor parameter on the destination type has no matching source 
 | **Message** | Type '{0}' has no viable constructor for forge construction. Provide a parameterless constructor or a constructor whose parameters can all be satisfied from source type '{1}'. |
 
 No public constructor on the destination type can be used. Either there are no public constructors at all, or all constructors have parameters that can't be matched from the source type.
+
+### FKF503 — Destination type not instantiable
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Construction |
+| **Message** | Destination type '{0}' cannot be constructed because it is {1}. Map to a concrete type instead. |
+
+Emitted when the destination type is an abstract class or an interface. The generator emits `new DestType(...)`, which is invalid for abstract types. Use a concrete class as the mapping destination.
+
+```csharp
+// Wrong — FKF503: abstract class cannot be constructed
+public abstract class Dest { ... }
+public static partial Dest ToDest(Source source);
+
+// Wrong — FKF503: interface cannot be constructed
+public static partial IDest ToDest(Source source);
+
+// Correct
+public class ConcreteDest : IDest { ... }
+public static partial ConcreteDest ToDest(Source source);
+```

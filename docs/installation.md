@@ -11,7 +11,7 @@ Add two packages and you're done:
 </ItemGroup>
 ```
 
-`Generator` writes your mapping method bodies at compile time. `Analyzers` gives you 39 build-time diagnostics. Both automatically pull in `FreakyKit.Forge` (core attributes) as a transitive dependency — you never need to add it separately.
+`Generator` writes your mapping method bodies at compile time. `Analyzers` gives you 44 build-time diagnostics. Both automatically pull in `FreakyKit.Forge` (core attributes) as a transitive dependency — you never need to add it separately.
 
 ---
 
