@@ -87,6 +87,60 @@ public sealed class DictionaryProjectGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
+    public void DictProject_IDictionaryReturnType_UsesConcreteDict()
+    {
+        // Return type is IDictionary<K,V> — the body must instantiate Dictionary<K,V>, not IDictionary<K,V>.
+        const string source = """
+            using System.Collections.Generic;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Item { public string Name { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial IDictionary<string, Item> Copy(Dictionary<string, Item> source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("return new Dictionary<string, Item>(source);", generated);
+        Assert.DoesNotContain("new IDictionary<", generated);
+    }
+
+    [Fact]
+    public void DictProject_IReadOnlyDictionaryReturnType_UsesConcreteDict()
+    {
+        // Return type is IReadOnlyDictionary<K,V> — body must instantiate Dictionary<K,V>.
+        const string source = """
+            using System.Collections.Generic;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Order    { public string Id { get; set; } = ""; }
+                public class OrderDto { public string Id { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial OrderDto MapOrder(Order source);
+                    public static partial IReadOnlyDictionary<string, OrderDto> MapOrders(Dictionary<string, Order> source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("new Dictionary<string, OrderDto>(", generated);
+        Assert.DoesNotContain("new IReadOnlyDictionary<", generated);
+    }
+
+    [Fact]
     public void DictProject_IDictionarySource_Detected()
     {
         const string source = """
@@ -276,8 +330,9 @@ public sealed class DictionaryProjectGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("source.Items != null ?", generated);
-        Assert.Contains(": null", generated);
+        Assert.Contains(
+            "source.Items != null ? source.Items.ToDictionary(__kvp => __kvp.Key, __kvp => MapItem(__kvp.Value)) : null",
+            generated);
     }
 
     [Fact]
@@ -307,5 +362,36 @@ public sealed class DictionaryProjectGeneratorTests : GeneratorTestBase
         Assert.False(result.HasCompilationErrors,
             string.Join("\n", result.CompilationDiagnostics));
         AssertNoErrors(result);
+    }
+
+    [Fact]
+    public void DictMember_IDictionaryDestType_UsesConcreteDict()
+    {
+        // Source member is Dictionary<string,int> (concrete), dest member is IDictionary<string,int> (interface).
+        // The types differ so TryResolveDictionaryMapping is called; same-V branch must emit
+        // "new Dictionary<string,int>(...)" rather than the invalid "new IDictionary<string,int>(...)".
+        const string source = """
+            using System.Collections.Generic;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public Dictionary<string, int> Scores { get; set; } = new(); }
+                public class Dest   { public IDictionary<string, int> Scores { get; set; } = new Dictionary<string, int>(); }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDto(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        Assert.False(result.HasCompilationErrors,
+            string.Join("\n", result.CompilationDiagnostics));
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("source.Scores != null ? new Dictionary<string, int>(source.Scores) : null", generated);
+        Assert.DoesNotContain("new IDictionary<", generated);
     }
 }

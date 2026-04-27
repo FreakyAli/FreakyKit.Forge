@@ -563,7 +563,7 @@ public static class ForgeDiagnostics
         description: "The destination type has no constructor that can be fully satisfied from the available source members.");
 
     /// <summary>
-    /// FKF503 (Error): The destination type is abstract or an interface and cannot be instantiated.
+    /// FKF503 (Error): The destination type is abstract, an interface, or a static class and cannot be instantiated.
     /// </summary>
     public static readonly DiagnosticDescriptor DestinationTypeNotInstantiable = new(
         id: "FKF503",
@@ -572,5 +572,5 @@ public static class ForgeDiagnostics
         category: Category_Construction,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "The destination type is abstract or an interface and cannot be instantiated with 'new'. Provide a concrete class as the forge destination.");
+        description: "The destination type is abstract, an interface, or a static class and cannot be instantiated with 'new'. Provide a concrete, non-static class as the forge destination.");
 }

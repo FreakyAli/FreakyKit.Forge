@@ -30,6 +30,12 @@ internal sealed class ForgeMethodModel
     /// </summary>
     public string? CollectionProjectExpression { get; }
 
+    /// <summary>
+    /// For DictionaryProject methods: the concrete Dictionary&lt;K,V&gt; type name to use in "new" expressions.
+    /// Differs from DestTypeShortName when the return type is an interface (IDictionary, IReadOnlyDictionary).
+    /// </summary>
+    public string? ConcreteDictInstantiationName { get; }
+
     public ForgeMethodModel(
         string methodName,
         string accessibility,
@@ -47,7 +53,8 @@ internal sealed class ForgeMethodModel
         string? afterHookName = null,
         string? sourceFilePath = null,
         int sourceLineNumber = 0,
-        string? collectionProjectExpression = null)
+        string? collectionProjectExpression = null,
+        string? concreteDictInstantiationName = null)
     {
         MethodName = methodName;
         Accessibility = accessibility;
@@ -66,5 +73,6 @@ internal sealed class ForgeMethodModel
         SourceFilePath = sourceFilePath;
         SourceLineNumber = sourceLineNumber;
         CollectionProjectExpression = collectionProjectExpression;
+        ConcreteDictInstantiationName = concreteDictInstantiationName;
     }
 }

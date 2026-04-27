@@ -154,6 +154,25 @@ public static partial void Update(Person source, PersonDto existing);
 // Generates: existing.Name = source.Name;
 ```
 
+### FKF041 — Update destination has no settable members
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MethodShape |
+| **Message** | Update forge method '{0}' destination type '{1}' has no settable members. |
+
+The destination type of an update forge method has no settable properties or fields. There is nothing to update.
+
+A member is considered **non-settable** if it is:
+
+- A property with no setter (get-only)
+- A property with an `init`-only setter (`{ get; init; }`)
+- A `readonly` field
+- A `const` field
+
+If every matching destination member falls into one of these categories, FKF041 is emitted.
+
 ### FKF042 — Zero members mapped
 
 | | |
@@ -183,27 +202,6 @@ public static partial Dest ToDest(Source source);
 
 // Fix: either remove AllowFlattening or add a flattened member like AddressCity to Dest
 ```
-
----
-
-### FKF041 — Update destination has no settable members
-
-| | |
-|--|--|
-| **Severity** | Error |
-| **Category** | FreakyKit.Forge.MethodShape |
-| **Message** | Update forge method '{0}' destination type '{1}' has no settable members. |
-
-The destination type of an update forge method has no settable properties or fields. There is nothing to update.
-
-A member is considered **non-settable** if it is:
-
-- A property with no setter (get-only)
-- A property with an `init`-only setter (`{ get; init; }`)
-- A `readonly` field
-- A `const` field
-
-If every matching destination member falls into one of these categories, FKF041 is emitted.
 
 ### FKF050 — Before hook detected
 
@@ -715,7 +713,7 @@ No public constructor on the destination type can be used. Either there are no p
 | **Category** | FreakyKit.Forge.Construction |
 | **Message** | Destination type '{0}' cannot be constructed because it is {1}. Map to a concrete type instead. |
 
-Emitted when the destination type is an abstract class or an interface. The generator emits `new DestType(...)`, which is invalid for abstract types. Use a concrete class as the mapping destination.
+Emitted when the destination type cannot be instantiated with `new`: abstract classes, interfaces, and static classes all trigger this error. Use a concrete, non-static class as the mapping destination.
 
 ```csharp
 // Wrong — FKF503: abstract class cannot be constructed
@@ -724,6 +722,10 @@ public static partial Dest ToDest(Source source);
 
 // Wrong — FKF503: interface cannot be constructed
 public static partial IDest ToDest(Source source);
+
+// Wrong — FKF503: static class cannot be constructed
+public static class Dest { ... }
+public static partial Dest ToDest(Source source);
 
 // Correct
 public class ConcreteDest : IDest { ... }

@@ -511,7 +511,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             var loc503 = forgeMethod.Locations.FirstOrDefault();
             if (loc503 != null)
             {
-                string kind = destType.IsStatic ? "static"
+                string kind = destType.IsStatic ? "a static class"
                     : destType.TypeKind == TypeKind.Interface ? "an interface"
                     : "abstract";
                 context.ReportDiagnostic(Diagnostic.Create(

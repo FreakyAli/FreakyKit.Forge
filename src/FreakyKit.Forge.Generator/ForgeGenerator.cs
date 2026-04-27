@@ -744,6 +744,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var accessibility = AccessibilityToString(method.DeclaredAccessibility);
         var srcShort = BuildShortTypeName(sourceDictType);
         var destShort = BuildShortTypeName(destDictType);
+        var concreteDictShort = GetConcreteDictShortName(destDictType, destKeyType, destValType);
 
         if (srcKeyType.ToDisplayString() != destKeyType.ToDisplayString())
         {
@@ -794,7 +795,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             methodKind: ForgeMethodKind.DictionaryProject,
             sourceFilePath: location?.SourceTree?.FilePath,
             sourceLineNumber: location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0,
-            collectionProjectExpression: valueTransform);
+            collectionProjectExpression: valueTransform,
+            concreteDictInstantiationName: concreteDictShort);
 
         return (model, diagnostics);
     }
@@ -830,6 +832,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             return $"{named.Name}<{args}>";
         }
         return GetCSharpKeyword(type);
+    }
+
+    /// <summary>
+    /// Returns a concrete Dictionary&lt;K,V&gt; name suitable for "new" expressions.
+    /// When the type is IDictionary or IReadOnlyDictionary, maps to the concrete Dictionary&lt;K,V&gt;;
+    /// otherwise delegates to <see cref="BuildShortTypeName"/>.
+    /// </summary>
+    private static string GetConcreteDictShortName(ITypeSymbol dictType, ITypeSymbol keyType, ITypeSymbol valType)
+    {
+        var def = (dictType as INamedTypeSymbol)?.OriginalDefinition.ToDisplayString();
+        if (def == "System.Collections.Generic.IDictionary<TKey, TValue>" ||
+            def == "System.Collections.Generic.IReadOnlyDictionary<TKey, TValue>")
+            return $"Dictionary<{GetCSharpKeyword(keyType)}, {GetCSharpKeyword(valType)}>";
+        return BuildShortTypeName(dictType);
     }
 
     private static (ConstructionModel Construction, List<Diagnostic> Diagnostics) DetermineConstruction(
@@ -1051,13 +1067,14 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}{{");
             sb.AppendLine($"{indent}    if ({method.SourceParameterName} == null) return null;");
             var valueTransform = method.CollectionProjectExpression;
+            var concreteDictType = method.ConcreteDictInstantiationName ?? method.DestTypeShortName;
             if (string.IsNullOrEmpty(valueTransform))
             {
-                sb.AppendLine($"{indent}    return new {method.DestTypeShortName}({method.SourceParameterName});");
+                sb.AppendLine($"{indent}    return new {concreteDictType}({method.SourceParameterName});");
             }
             else
             {
-                sb.AppendLine($"{indent}    var __result = new {method.DestTypeShortName}({method.SourceParameterName}.Count);");
+                sb.AppendLine($"{indent}    var __result = new {concreteDictType}({method.SourceParameterName}.Count);");
                 sb.AppendLine($"{indent}    foreach (var __kvp in {method.SourceParameterName})");
                 sb.AppendLine($"{indent}        __result[__kvp.Key] = {valueTransform};");
                 sb.AppendLine($"{indent}    return __result;");
@@ -1544,7 +1561,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         if (srcVal!.ToDisplayString() == destVal!.ToDisplayString())
         {
-            var expr = $"new {BuildShortTypeName(destType)}({srcAccessor})";
+            var expr = $"new {GetConcreteDictShortName(destType, destKey!, destVal)}({srcAccessor})";
             expression = srcIsRefType ? $"{srcAccessor} != null ? {expr} : null" : expr;
             return true;
         }
