@@ -71,6 +71,7 @@ Both are Roslyn source generators with zero runtime overhead. Mapperly is a matu
 | Nested forging | ✅ | ✅ |
 | Collection mapping | ✅ | ✅ |
 | Constructor mapping | ✅ | ✅ |
+| EF Core / IQueryable projection expressions | ✅ | ✅ |
 
 If you want more explicit control over which methods get generated and how members are handled on each side, Forge is worth a look.
 
@@ -109,9 +110,11 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 44 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 52 diagnostics across 7 categories guide you at build time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
 - **Top-level dictionary projection** — declare a `Dictionary<string, Dest> ToDict(Dictionary<string, Source> source)` method and the generator produces an efficient `foreach`-based conversion
+- **EF Core / IQueryable projection expressions** — add `GenerateExpression = true` and the generator emits a static `Expression<Func<TSource, TDest>>` property alongside the partial method, usable directly in `IQueryable.Select(...)`. Requires EF Core 8+. See [docs/projections.md](docs/projections.md).
+- **Reference semantics control** — same-type mutable collections are deep-copied by default (so the DTO owns an independent list/dictionary instance). Opt out with `[ForgeMethod(ShareReference = true)]` for hot paths, or override per-member with `[ForgeMap(ShareReference = ...)]`. See [Reference semantics](docs/attributes.md#reference-semantics-for-same-type-collections).
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
 - **Conditional mapping** — skip assignments when source is null with `IgnoreIfNull`
@@ -154,6 +157,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 | Dedicated collection projection methods | ✅ | ✅ | ✅ | ✅ | ~ |
 | Side-specific member exclusion | ✅ | ~ | ❌ | ❌ | ❌ |
 | Type converter validation | ✅ | N/A | ✅ | N/A | N/A |
+| EF Core / IQueryable projection expressions | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 </details>
 
@@ -633,6 +637,8 @@ Applied to a `static partial` method. Required in explicit mode, optional in imp
 | `AllowFlattening` | `bool` | `false` | Flatten nested source properties into flat destination members |
 | `IgnoreIfNull` | `bool` | `false` | Wrap all assignments in null checks — skip when source is null |
 | `StrictMapping` | `bool` | `false` | Escalate unmapped/unused member warnings to errors (drift detection) |
+| `GenerateExpression` | `bool` | `false` | Emit a static `Expression<Func<TSource, TDest>>` property alongside the partial method body, usable in `IQueryable.Select(...)` with EF Core 8+. See [docs/projections.md](docs/projections.md). |
+| `ShareReference` | `bool` | `false` | When true, same-type mutable collection members are assigned by reference instead of being deep-copied. Faster but the source and destination share the same collection instance. Can be overridden per-member via `[ForgeMap(ShareReference = ...)]`. See [Reference semantics](docs/attributes.md#reference-semantics-for-same-type-collections). |
 
 ### `[ForgeIgnore]`
 
@@ -651,6 +657,7 @@ Applied to a property, field, or constructor parameter. Maps the member to a dif
 | `name` | `string` | The name of the counterpart member (or a shared key when used on both sides) |
 | `DefaultValue` | `object?` | Fallback value for `Nullable<T>` → `T` mappings. Generates `??` instead of `.Value` |
 | `IgnoreIfNull` | `bool` | When true, wraps the assignment in `if (source.X != null)` — skips when source is null |
+| `ShareReference` | `bool` | Per-member override of `[ForgeMethod(ShareReference)]`. Source-side wins over destination-side over method-level. Set explicitly to flip the deep-copy/reference-share decision for a single collection member. |
 
 ### `[ForgeConverter]`
 
@@ -722,12 +729,20 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF222 | Warning | Duplicate converter for same type pair |
 | FKF300 | Warning | Nested forging disabled |
 | FKF310 | Info | Collection mapping applied |
+| FKF311 | Info | Same-type collection reference-shared |
+| FKF312 | Info | Same-type reference member shared |
+| FKF313 | Warning | Conflicting ShareReference between source and destination |
 | FKF400 | Warning | Field ignored |
 | FKF401 | Info | Fields enabled |
 | FKF500 | Error | Constructor ambiguity |
 | FKF501 | Error | Missing constructor parameter |
 | FKF502 | Error | No viable constructor |
 | FKF503 | Error | Destination type not instantiable |
+| FKF504 | Error | Expression generation incompatible with update method |
+| FKF505 | Warning | Hooks ignored in generated expression |
+| FKF506 | Info | Member excluded from generated expression |
+| FKF507 | Error | Circular nested forge in expression property |
+| FKF508 | Info | Deep nested-forge inlining in expression property |
 
 ## Project Structure
 
@@ -739,14 +754,15 @@ src/
   FreakyKit.Forge.Diagnostics/  # Shared diagnostic descriptors (NuGet: FreakyKit.Forge.Diagnostics)
   FreakyKit.Forge.Conventions/  # Optional naming conventions (NuGet: FreakyKit.Forge.Conventions)
 tests/
-  FreakyKit.Forge.Analyzers.Tests/
-  FreakyKit.Forge.Generator.Tests/
-  FreakyKit.Forge.Integration.Tests/
+  FreakyKit.Forge.Analyzers.Tests/   # 148 tests
+  FreakyKit.Forge.Generator.Tests/   # 171 tests
+  FreakyKit.Forge.Integration.Tests/ # 49 tests
+  FreakyKit.Forge.EFCore.Tests/      # 8 tests — projection expressions verified against real EF Core 8 + Sqlite
 ```
 
 ## Roadmap
 
-Features planned for future versions — IQueryable/EF Core projection expressions, polymorphic/derived type mapping, reverse mapping, computed properties, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
+Features planned for future versions — production-grade real-world benchmarks, polymorphic/derived type mapping, reverse mapping, computed properties, mapping profiles, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
 
 ## Support the Project
 

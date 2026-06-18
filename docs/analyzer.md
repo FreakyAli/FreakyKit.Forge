@@ -25,6 +25,8 @@ The analyzer validates every `[Forge]`-decorated static partial class and its fo
 | Update destination has no settable members | FKF041 (Error) |
 | Before hook detected | FKF050 (Info) |
 | After hook detected | FKF051 (Info) |
+| `GenerateExpression = true` on update method | FKF504 (Error) |
+| `GenerateExpression = true` with before/after hooks | FKF505 (Warning) |
 
 ### Member-Level Checks
 
@@ -48,6 +50,9 @@ The analyzer validates every `[Forge]`-decorated static partial class and its fo
 | Type converter used | FKF220 (Info) |
 | Nested forge exists but AllowNestedForging is false | FKF300 (Warning) |
 | Collection mapping applied | FKF310 (Info) |
+| Member excluded from generated expression (custom converter, IgnoreIfNull, non-translatable materializer) | FKF506 (Info) |
+| Circular nested forge in expression property | FKF507 (Error) |
+| Deep nested-forge inlining (>5 levels) in expression property | FKF508 (Info) |
 
 ### Construction Checks
 
@@ -56,6 +61,7 @@ The analyzer validates every `[Forge]`-decorated static partial class and its fo
 | Multiple equally viable constructors | FKF500 (Error) |
 | Constructor parameter can't be satisfied | FKF501 (Error) |
 | No viable constructor | FKF502 (Error) |
+| Destination type is abstract, an interface, or a static class | FKF503 (Error) |
 
 ## Type Mismatch Resolution
 

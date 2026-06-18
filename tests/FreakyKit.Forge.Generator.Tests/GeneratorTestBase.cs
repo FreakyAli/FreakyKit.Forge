@@ -47,6 +47,9 @@ public abstract class GeneratorTestBase
         // System.Linq (for Select, ToList, etc.)
         refs.Add(MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location));
 
+        // System.Linq.Expressions (for Expression<Func<...>> in projection mode)
+        refs.Add(MetadataReference.CreateFromFile(typeof(System.Linq.Expressions.Expression).Assembly.Location));
+
         // FreakyKit.Forge attributes
         refs.Add(MetadataReference.CreateFromFile(typeof(ForgeAttribute).Assembly.Location));
 
