@@ -160,6 +160,87 @@ public static partial class MyForges
 }
 ```
 
+#### `ShareReference` (`bool`, default: `false`)
+
+Controls how Forge handles same-type **mutable collection** members (e.g. `List<T>` on both source and destination).
+
+- **`false` (default)** — the generated code uses a copy constructor (`new List<T>(source.X)`) so the destination owns an independent collection. Mutations to the destination's collection do not affect the source.
+- **`true`** — the generated code uses direct reference assignment (`dto.Tags = source.Tags`). Faster and allocation-free, but the source and destination share the same collection instance, so mutations leak across.
+
+Applies to: `List<T>`, `Dictionary<K,V>`, `HashSet<T>`, `T[]`, and their interface forms (`IList`, `ICollection`, `IDictionary`, `IEnumerable`, `IReadOnlyList`, `IReadOnlyCollection`, `IReadOnlyDictionary`, `ISet`), plus `Collection<T>` and `ReadOnlyCollection<T>`.
+
+Does **not** apply to:
+- Immutable types (`string`, primitives, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`) — these are always direct assignment; sharing a reference is safe because they can't be mutated anyway.
+- Same-type custom classes (e.g. `Address Home` on both sides) — Forge always reference-shares these and emits **FKF312** (Info). To deep-copy a custom class, use a distinct DTO type combined with `AllowNestedForging` and an explicit forge method.
+
+When this flag is `true` and applies to a member, **FKF311** (Info) is emitted per member as an audit trail.
+
+```csharp
+[Forge]
+public static partial class MyForges
+{
+    // Default: deep-copy. Tags in PersonDto is a new List<string>, independent of source.
+    public static partial PersonDto ToDto(Person source);
+
+    // Opt-out: reference-share. Tags in PersonUpdate IS source.Tags.
+    [ForgeMethod(ShareReference = true)]
+    public static partial PersonUpdate ToUpdate(Person source);
+}
+```
+
+Can be overridden per-member via [`ForgeMap.ShareReference`](#forgemap-name).
+See [Reference semantics for same-type collections](#reference-semantics-for-same-type-collections) below for the full precedence rules.
+
+#### `GenerateExpression` (`bool`, default: `false`)
+
+When true, the generator emits an additional static `Expression<Func<TSource, TDest>>` property
+named `{MethodName}Expression` alongside the partial method body. The expression property is
+suitable for use with EF Core / LINQ providers in `IQueryable.Select(...)` — the same mapping
+runs as SQL against a database instead of materialising every row in memory.
+
+The imperative method is unaffected. Setting this flag is purely additive: both the regular method
+and the expression property exist after compilation.
+
+```csharp
+[Forge]
+public static partial class PersonForges
+{
+    [ForgeMethod(GenerateExpression = true)]
+    public static partial PersonDto ToDto(Person source);
+}
+
+// Use the imperative method as before:
+var dto = PersonForges.ToDto(person);
+
+// Or push the projection to the database:
+var dtos = await dbContext.People
+    .Where(p => p.IsActive)
+    .Select(PersonForges.ToDtoExpression)
+    .ToListAsync();
+```
+
+**Requirements:**
+
+- **EF Core 8 or later** if you intend to use the expression against a database. Earlier EF Core
+  versions are out of support and not guaranteed to translate every shape Forge emits.
+
+**Constraints and exclusions:**
+
+- Cannot be used with update methods (void return, two parameters) — emits **FKF504** (Error)
+  and blocks generation for the class.
+- Before/after hooks are silently omitted from the expression property — emits **FKF505** (Warning).
+  The hooks still run when the imperative method is invoked.
+- Members whose conversion has no translatable expression-tree encoding are silently omitted from
+  the expression property — emits **FKF506** (Info) per member with the reason. Affected cases:
+  - Custom `[ForgeConverter]` calls (user methods can't translate to SQL)
+  - `IgnoreIfNull` (conditional skipping has no expression-tree equivalent)
+  - Collection materializers other than `.ToList()` / `.ToArray()` (HashSet, ImmutableArray, etc.)
+- Nested forge methods are **inlined** into the expression body (EF Core cannot translate
+  `Expression.Invoke`). A cycle in the nested chain emits **FKF507** (Error). Inlining depth
+  greater than five levels emits **FKF508** (Info).
+
+See [projections.md](projections.md) for the full coverage matrix and translation reference.
+
 ---
 
 ## `[ForgeIgnore]`
@@ -240,6 +321,34 @@ public class Dest   { public string Name { get; set; } = ""; }
 // Generates: if (source.Name != null) __result.Name = source.Name;
 ```
 
+#### `ShareReference` (`bool`, default unset)
+
+Per-member override of [`ForgeMethod.ShareReference`](#forgemethod) for same-type mutable collections. Setting this overrides the method-level setting for this one member.
+
+- **Unset (default)** — inherit the method-level value (or the default of `false` / deep-copy if the method doesn't set it either).
+- **`true`** — this member is reference-shared regardless of method-level setting.
+- **`false`** — this member is deep-copied regardless of method-level setting.
+
+Can be placed on either the source or destination member. See [Reference semantics for same-type collections](#reference-semantics-for-same-type-collections) for full precedence rules.
+
+```csharp
+[ForgeMethod(ShareReference = true)]                       // method default: share all
+public static partial PersonDto ToDto(Person source);
+
+public class Person
+{
+    // Inherits method-level share (true)
+    public List<string> Tags { get; set; }
+
+    // Per-member override — this one deep-copies even though method says share
+    [ForgeMap("History", ShareReference = false)]
+    public List<string> History { get; set; }
+}
+// Generates:
+//   __result.Tags = source.Tags;                                                       // shared
+//   __result.History = source.History != null ? new List<string>(source.History) : null; // copied
+```
+
 ### Usage Patterns
 
 **Source-side mapping:** The attribute value names the destination member.
@@ -285,6 +394,84 @@ Without `[ForgeMap]`, the generator looks for a source member named `name` and e
 - `FKF103` (Info) — custom mapping applied
 - `FKF104` (Error) — target member not found
 - `FKF105` (Warning) — duplicate target (multiple members map to the same key)
+
+---
+
+## Reference semantics for same-type collections
+
+When a member has the **same exact type** on source and destination (e.g. `List<string>` → `List<string>`), Forge has two possible semantics:
+
+1. **Deep-copy** (default) — emit `new List<T>(source.X)` so the destination owns an independent instance. Mutations to the destination's collection do not affect the source.
+2. **Reference-share** — emit direct assignment `dto.X = source.X` so source and destination share the same instance. Faster and allocation-free, but mutations leak across.
+
+The choice is controlled by the `ShareReference` flag, which can appear in three places.
+
+### Precedence
+
+When multiple `ShareReference` values could apply to the same member, the most specific wins:
+
+```
+1. Source-side  [ForgeMap(ShareReference = X)]   ← most specific
+2. Destination-side [ForgeMap(ShareReference = X)]
+3. Method-level [ForgeMethod(ShareReference = X)]
+4. Default: false (deep-copy)
+```
+
+Per-member settings always win over method-level. When both source-side and destination-side `[ForgeMap]` explicitly set `ShareReference` to different values, the **destination-side wins** and **FKF313** (Warning) is emitted to surface the conflict.
+
+### What's affected
+
+| Type | Default behavior |
+|---|---|
+| `string`, `int`, `bool`, primitives | Direct assignment (immutable / value type) |
+| `Address` (custom class, same type both sides) | Reference-shared **always**, emits FKF312 |
+| `List<T>`, `Dictionary<K,V>`, `HashSet<T>` | **Deep-copy** by default (new in this release) |
+| `T[]` | **Copy via `.ToArray()`** by default |
+| `IList<T>`, `ICollection<T>`, `IEnumerable<T>` | **Copy via `new List<T>(source)`** |
+| `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IReadOnlyDictionary<K,V>` | **Copy via `new List<T>` / `new Dictionary<K,V>`** |
+| `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>` | Direct assignment (immutable, safe to share) |
+| `ReadOnlyCollection<T>` | **Copy via `new ReadOnlyCollection<T>(new List<T>(source))`** |
+| `Collection<T>` | **Copy via `new Collection<T>(new List<T>(source))`** |
+
+### Why this is the default
+
+Most users of object-mapping libraries expect the destination to be a separate object — that's the entire point of having a DTO. Sharing a `List<T>` between source entity and DTO is a footgun: a `dto.Tags.Add(...)` call would mutate the source entity's `Tags` collection too. The deep-copy default makes Forge match user expectations and matches AutoMapper / Mapperly / Mapster, which all deep-copy by default.
+
+The opt-out exists for hot paths where you've measured the allocation overhead and decided you want the speed.
+
+### Custom classes are different
+
+Forge does **not** auto-clone same-type custom classes. If you have:
+
+```csharp
+public class Source { public Address Home { get; set; } }
+public class Dest   { public Address Home { get; set; } }   // same exact type
+```
+
+Forge emits `dto.Home = source.Home` (reference share) and **FKF312** (Info) flags it. To get a deep copy, change `Dest.Home` to a distinct DTO type and use `AllowNestedForging`:
+
+```csharp
+public class Source { public Address Home { get; set; } }
+public class Dest   { public AddressDto Home { get; set; } }  // distinct type
+
+[Forge]
+public static partial class MyForges
+{
+    public static partial AddressDto ToAddressDto(Address source);
+
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial Dest ToDest(Source source);
+}
+// Generates: __result.Home = source.Home != null ? ToAddressDto(source.Home) : null;
+```
+
+### Related diagnostics
+
+- **FKF311** (Info) — fires per-member when a same-type mutable collection is reference-shared (audit trail when you opt out of the default).
+- **FKF312** (Info) — fires for same-type custom class members (these are always reference-shared).
+- **FKF313** (Warning) — fires when source-side and destination-side `[ForgeMap]` set `ShareReference` to different values. Destination-side wins.
+
+See [docs/diagnostics.md](diagnostics.md) for full diagnostic reference.
 
 ---
 
