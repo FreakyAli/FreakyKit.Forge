@@ -4,29 +4,54 @@ Features under consideration for future versions of FreakyKit.Forge. Each sectio
 
 ---
 
-## 1. Production-Grade Benchmark Suite
+## 1. Projection Expressions
 
-**Goal:** Expand the benchmark suite beyond synthetic micro-benchmarks to include real-world mapping scenarios sourced from open-source production codebases, giving a more honest picture of performance under realistic conditions.
+**Goal:** Generate `Expression<Func<TSource, TDest>>` methods for use with EF Core / IQueryable LINQ providers.
 
 ### Why
 
-The current benchmarks cover well-defined scenarios — simple flat mappings, fixed property counts, controlled object graphs. These are useful for measuring overhead but they don't reflect the messiness of production code: deeply nested graphs, mixed nullable and non-nullable members, enums, collections of varying sizes, partial updates, and mappings that change shape over time. Numbers from synthetic scenarios are easy to dismiss. Numbers from code that actually ships are harder to argue with.
+Currently, Forge generates imperative mapping code (variable assignments). This works for in-memory mapping but cannot be translated to SQL by EF Core. A projection expression would allow:
+
+```csharp
+var dtos = dbContext.People
+    .Select(PersonForges.ToDtoExpression)
+    .ToListAsync();
+```
 
 ### Design
 
-- Source mapping scenarios from permissively licensed open-source .NET projects (e-commerce, CRM, ERP, API layers) where object mapping is a core concern
-- Reproduce the source and destination types as faithfully as possible without pulling in unrelated dependencies
-- Run the same scenarios through Forge and any competing library that supports the shape
-- Document exactly where each scenario comes from so the benchmark is reproducible and auditable
-- Cover a range of real-world shapes: large flat DTOs, deeply nested domain models, collections with hundreds of items, update methods on existing objects, nullable-heavy database entities
+- New attribute property: `[ForgeMethod(GenerateExpression = true)]`
+- Generates an additional static field or property of type `Expression<Func<TSource, TDest>>`
+- Uses `MemberInitExpression` with `MemberBinding` nodes instead of imperative assignments
+- Constructor mapping becomes `Expression.New(ctor, args)` + `Expression.MemberInit(...)`
+- Naming convention: if method is `ToDto`, expression is `ToDtoExpression`
+
+### Complexity
+
+**High.** This is a completely separate code generation path. Every mapping scenario (direct, nullable, enum, nested, collection, converter, flattening) needs an expression-tree equivalent. Key challenges:
+
+- `Expression.MemberInit` requires all assignments upfront (no sequential statements)
+- Nested forging becomes `Expression.Invoke` or inlining the nested expression
+- Collection mapping with `.Select()` needs `Expression.Call` on `Queryable.Select`
+- Type converters need to be expressed as `Expression<Func<TSrc, TDest>>` themselves
+- `IgnoreIfNull` becomes `Expression.Condition` with `Expression.Constant(null)` checks
+- Before/after hooks are not compatible with expression trees
+
+### Files to Modify
+
+- `ForgeGenerator.cs` — new `GenerateExpressionBody` method parallel to `GenerateMethodBody`
+- `ForgeMethodModel.cs` — add `bool GenerateExpression` property
+- `ForgeMethodAttribute.cs` — add `GenerateExpression` property
+- New tests for every mapping scenario in expression mode
 
 ### Suggested Approach
 
-1. Identify 5-10 open-source projects with realistic, representative mapping scenarios
-2. Extract and reproduce the relevant types in a new `benchmarks/FreakyKit.Forge.Benchmarks.RealWorld/` project
-3. Run against the same library versions used in the existing suite
-4. Document each scenario with a link to the source project and a description of what it represents
-5. Add to CI so results are regenerated on each release
+1. Start with the simplest case: parameterless constructor + direct property assignments
+2. Add nullable handling
+3. Add enum cast mapping
+4. Add constructor mapping
+5. Add nested/collection (hardest part)
+6. Skip hooks in expression mode (emit a diagnostic if hooks exist + expression mode)
 
 ---
 

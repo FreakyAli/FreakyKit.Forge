@@ -39,9 +39,6 @@ public abstract class IntegrationTestBase
         // System.Linq (generated code uses Select, ToList, etc.)
         refs.Add(MetadataReference.CreateFromFile(typeof(System.Linq.Enumerable).Assembly.Location));
 
-        // System.Linq.Expressions (for projection-mode Expression<Func<,>> properties)
-        refs.Add(MetadataReference.CreateFromFile(typeof(System.Linq.Expressions.Expression).Assembly.Location));
-
         refs.Add(MetadataReference.CreateFromFile(typeof(ForgeAttribute).Assembly.Location));
 
         return refs;

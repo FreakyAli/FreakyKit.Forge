@@ -36,17 +36,6 @@ internal sealed class ForgeMethodModel
     /// </summary>
     public string? ConcreteDictInstantiationName { get; }
 
-    /// <summary>
-    /// When true, the generator emits an additional static <c>Expression&lt;Func&lt;TSrc, TDest&gt;&gt;</c>
-    /// property alongside the imperative method body. Default false.
-    /// </summary>
-    public bool GenerateExpression { get; }
-
-    /// <summary>
-    /// Name of the emitted expression property. Conventionally <c>{MethodName}Expression</c>.
-    /// </summary>
-    public string ExpressionPropertyName { get; }
-
     public ForgeMethodModel(
         string methodName,
         string accessibility,
@@ -65,9 +54,7 @@ internal sealed class ForgeMethodModel
         string? sourceFilePath = null,
         int sourceLineNumber = 0,
         string? collectionProjectExpression = null,
-        string? concreteDictInstantiationName = null,
-        bool generateExpression = false,
-        string? expressionPropertyName = null)
+        string? concreteDictInstantiationName = null)
     {
         MethodName = methodName;
         Accessibility = accessibility;
@@ -87,7 +74,5 @@ internal sealed class ForgeMethodModel
         SourceLineNumber = sourceLineNumber;
         CollectionProjectExpression = collectionProjectExpression;
         ConcreteDictInstantiationName = concreteDictInstantiationName;
-        GenerateExpression = generateExpression;
-        ExpressionPropertyName = expressionPropertyName ?? $"{methodName}Expression";
     }
 }

@@ -49,32 +49,6 @@ Requirements:
 
 Null safety follows the same rules as regular collection mappings: a null-guard is generated when the source collection is a reference type.
 
-### Expression Projection (additive)
-
-When a method has `[ForgeMethod(GenerateExpression = true)]`, the generator emits an **additional**
-static property of type `Expression<Func<TSource, TDest>>` named `{MethodName}Expression`, alongside
-the regular partial method body. The expression property is suitable for use with EF Core / LINQ
-providers in `IQueryable.Select(...)`:
-
-```csharp
-[ForgeMethod(GenerateExpression = true)]
-public static partial PersonDto ToDto(Person source);
-
-// Generated alongside the imperative body:
-public static Expression<Func<Person, PersonDto>> ToDtoExpression { get; } =
-    source => new PersonDto { Name = source.Name, Age = source.Age };
-```
-
-The expression property is built from the same member-resolution chain as the imperative method
-but rewrites each translatable case into an expression-tree-compatible form (no `?.`, no `switch`
-expressions, no `Expression.Invoke` for nested forge). Members whose conversion can't be expressed
-translatably (custom converters, `IgnoreIfNull`, non-translatable collection materializers) are
-silently omitted from the expression property and emit **FKF506** with a reason. See
-[projections.md](projections.md) for the full coverage matrix and EF Core 8+ requirement.
-
-Update methods (void return, two parameters) cannot have an expression — `GenerateExpression = true`
-on an update method emits **FKF504** and blocks generation for the class.
-
 ## Member Matching
 
 Members are matched between source and destination types by **name** (case-insensitive). Only public, non-static, instance members are considered:
@@ -89,16 +63,6 @@ When a destination member has a matching source member with the same type, a sim
 ```csharp
 __result.Name = source.Name;
 ```
-
-#### Same-type mutable collections
-
-When the same-type member is a **mutable collection** (`List<T>`, `Dictionary<K,V>`, `HashSet<T>`, `T[]`, `IList<T>`, `ICollection<T>`, `IDictionary<K,V>`, `IEnumerable<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IReadOnlyDictionary<K,V>`, `ISet<T>`, `Collection<T>`, `ReadOnlyCollection<T>`), the generator emits a copy-constructor expression by default so the destination owns an independent instance:
-
-```csharp
-__result.Tags = source.Tags != null ? new List<string>(source.Tags) : null;
-```
-
-Set `[ForgeMethod(ShareReference = true)]` (or per-member `[ForgeMap(ShareReference = true)]`) to opt out and emit direct reference assignment instead. Immutable collections (`ImmutableArray<T>`, `ImmutableList<T>`, etc.) and same-type custom classes are always direct reference assignment regardless of the flag. See [attributes.md#reference-semantics-for-same-type-collections](attributes.md#reference-semantics-for-same-type-collections).
 
 ### Custom Mapping with `[ForgeMap]`
 

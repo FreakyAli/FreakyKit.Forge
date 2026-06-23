@@ -61,15 +61,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.FlatteningEnabledNoMatchFound,
             ForgeDiagnostics.ForgeMapSelfReference,
             ForgeDiagnostics.DuplicateConverterForTypePair,
-            ForgeDiagnostics.DestinationTypeNotInstantiable,
-            ForgeDiagnostics.ExpressionIncompatibleWithUpdate,
-            ForgeDiagnostics.ExpressionIgnoresHooks,
-            ForgeDiagnostics.ExpressionMemberExcluded,
-            ForgeDiagnostics.ExpressionNestedCycle,
-            ForgeDiagnostics.ExpressionDeepNesting,
-            ForgeDiagnostics.SameTypeCollectionShared,
-            ForgeDiagnostics.SameTypeReferenceShared,
-            ForgeDiagnostics.ShareReferenceConflict
+            ForgeDiagnostics.DestinationTypeNotInstantiable
         );
 
     public override void Initialize(AnalysisContext context)
