@@ -1,9 +1,11 @@
+using System;
+
 namespace FreakyKit.Forge.Generator.Models;
 
 /// <summary>
 /// A property or field assignment in the generated method body.
 /// </summary>
-internal sealed class MemberAssignmentModel
+internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
 {
     public string DestMemberName { get; }
     public string SourceExpression { get; }
@@ -12,11 +14,11 @@ internal sealed class MemberAssignmentModel
     public bool IsInitOnly { get; }
 
     /// <summary>
-    /// Expression-tree-compatible right-hand-side for this assignment, if the conversion
-    /// can be expressed as a translatable expression (no null-conditional, no method calls
-    /// that EF can't translate). Null when the imperative <see cref="SourceExpression"/> is
-    /// not safe to use inside <c>Expression&lt;Func&lt;,&gt;&gt;</c>. Mutable because nested-forge
-    /// inlining is resolved in a post-extraction pass once all method models exist.
+    /// Expression-tree-compatible right-hand-side for this assignment. Null when the imperative
+    /// <see cref="SourceExpression"/> is not safe to use inside <c>Expression&lt;Func&lt;,&gt;&gt;</c>.
+    /// Mutable because nested-forge inlining is resolved in a post-extraction pass once all method
+    /// models exist. The mutation occurs within ExtractForgeClass before the model enters the
+    /// incremental pipeline, so the cached value is always up-to-date.
     /// </summary>
     public string? ExpressionAssignment { get; set; }
 
@@ -78,5 +80,47 @@ internal sealed class MemberAssignmentModel
         CollectionSourceAccessor = collectionSourceAccessor;
         CollectionMaterializer = collectionMaterializer;
         CollectionSourceIsRefType = collectionSourceIsRefType;
+    }
+
+    public bool Equals(MemberAssignmentModel other)
+    {
+        if (other is null) return false;
+        return DestMemberName == other.DestMemberName
+            && SourceExpression == other.SourceExpression
+            && IgnoreIfNull == other.IgnoreIfNull
+            && NullCheckExpression == other.NullCheckExpression
+            && IsInitOnly == other.IsInitOnly
+            && ExpressionAssignment == other.ExpressionAssignment
+            && NestedForgeMethodName == other.NestedForgeMethodName
+            && NestedForgeSourceAccessor == other.NestedForgeSourceAccessor
+            && NestedForgeSourceIsRefType == other.NestedForgeSourceIsRefType
+            && CollectionElementForgeMethod == other.CollectionElementForgeMethod
+            && CollectionSourceAccessor == other.CollectionSourceAccessor
+            && CollectionMaterializer == other.CollectionMaterializer
+            && CollectionSourceIsRefType == other.CollectionSourceIsRefType;
+    }
+
+    public override bool Equals(object obj) => Equals(obj as MemberAssignmentModel);
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + (DestMemberName?.GetHashCode() ?? 0);
+            hash = hash * 31 + (SourceExpression?.GetHashCode() ?? 0);
+            hash = hash * 31 + IgnoreIfNull.GetHashCode();
+            hash = hash * 31 + (NullCheckExpression?.GetHashCode() ?? 0);
+            hash = hash * 31 + IsInitOnly.GetHashCode();
+            hash = hash * 31 + (ExpressionAssignment?.GetHashCode() ?? 0);
+            hash = hash * 31 + (NestedForgeMethodName?.GetHashCode() ?? 0);
+            hash = hash * 31 + (NestedForgeSourceAccessor?.GetHashCode() ?? 0);
+            hash = hash * 31 + NestedForgeSourceIsRefType.GetHashCode();
+            hash = hash * 31 + (CollectionElementForgeMethod?.GetHashCode() ?? 0);
+            hash = hash * 31 + (CollectionSourceAccessor?.GetHashCode() ?? 0);
+            hash = hash * 31 + (CollectionMaterializer?.GetHashCode() ?? 0);
+            hash = hash * 31 + CollectionSourceIsRefType.GetHashCode();
+            return hash;
+        }
     }
 }

@@ -280,10 +280,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         // Collect source members
-        var sourceMembers = CollectMembers(sourceType, includeFields, method, diagnostics, isSourceSide: true);
+        var forgeAssembly = forgeClass.ContainingAssembly;
+        var sourceMembers = CollectMembers(sourceType, includeFields, method, diagnostics, isSourceSide: true, forgeAssembly: forgeAssembly);
 
         // Collect dest members (no FKF400 for dest — only source triggers it)
-        var destMembers = CollectMembers(destType, includeFields, null, null, isSourceSide: false);
+        var destMembers = CollectMembers(destType, includeFields, null, null, isSourceSide: false, forgeAssembly: forgeAssembly);
 
         // Determine construction (skip for update methods)
         ConstructionModel construction;
@@ -1040,20 +1041,42 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         SpecialType.System_Char => "char",
         SpecialType.System_String => "string",
         SpecialType.System_Object => "object",
-        _ => t.Name
+        _ => BuildShortTypeName(t)
     };
 
     /// <summary>Builds a short, unqualified name for a type, handling arrays and generic collections.</summary>
     private static string BuildShortTypeName(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol arr)
-            return $"{GetCSharpKeyword(arr.ElementType)}[]";
+            return $"{BuildShortTypeName(arr.ElementType)}[]";
         if (type is INamedTypeSymbol named && named.IsGenericType)
         {
-            var args = string.Join(", ", named.TypeArguments.Select(GetCSharpKeyword));
+            var args = string.Join(", ", named.TypeArguments.Select(BuildShortTypeName));
             return $"{named.Name}<{args}>";
         }
-        return GetCSharpKeyword(type);
+        if (type.SpecialType != SpecialType.None)
+        {
+            return type.SpecialType switch
+            {
+                SpecialType.System_Boolean => "bool",
+                SpecialType.System_Byte => "byte",
+                SpecialType.System_SByte => "sbyte",
+                SpecialType.System_Int16 => "short",
+                SpecialType.System_UInt16 => "ushort",
+                SpecialType.System_Int32 => "int",
+                SpecialType.System_UInt32 => "uint",
+                SpecialType.System_Int64 => "long",
+                SpecialType.System_UInt64 => "ulong",
+                SpecialType.System_Single => "float",
+                SpecialType.System_Double => "double",
+                SpecialType.System_Decimal => "decimal",
+                SpecialType.System_Char => "char",
+                SpecialType.System_String => "string",
+                SpecialType.System_Object => "object",
+                _ => type.Name
+            };
+        }
+        return type.Name;
     }
 
     // ─── Expression inlining (Phase 5: nested forging) ────────────────────────
@@ -1264,7 +1287,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     /// </summary>
     private static string SubstituteParam(string expr, string oldParam, string newAccessor)
     {
-        return Regex.Replace(expr, $@"\b{Regex.Escape(oldParam)}\b", newAccessor);
+        return Regex.Replace(expr, $@"\b{Regex.Escape(oldParam)}\b", newAccessor.Replace("$", "$$"));
     }
 
     /// <summary>
@@ -1492,7 +1515,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
             sb.AppendLine($"{indent}[DebuggerStepThrough]");
             if (!string.IsNullOrEmpty(method.SourceFilePath) && method.SourceLineNumber > 0)
-                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath}\"");
+                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath?.Replace("\\", "\\\\")}\"");
             sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
             sb.AppendLine($"{indent}#line default");
             sb.AppendLine($"{indent}{{");
@@ -1508,7 +1531,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
             sb.AppendLine($"{indent}[DebuggerStepThrough]");
             if (!string.IsNullOrEmpty(method.SourceFilePath) && method.SourceLineNumber > 0)
-                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath}\"");
+                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath?.Replace("\\", "\\\\")}\"");
             sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
             sb.AppendLine($"{indent}#line default");
             sb.AppendLine($"{indent}{{");
@@ -1543,7 +1566,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         // #line directive
         if (!string.IsNullOrEmpty(method.SourceFilePath) && method.SourceLineNumber > 0)
-            sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath}\"");
+            sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath?.Replace("\\", "\\\\")}\"");
 
         if (method.MethodKind == ForgeMethodKind.Update)
         {
@@ -1700,7 +1723,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         sb.AppendLine($"{indent}/// <summary>Expression-tree projection of <see cref=\"{method.MethodName}\"/>, usable with <c>IQueryable.Select</c>. Auto-generated by FreakyKit.Forge.</summary>");
         sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
-        sb.AppendLine($"{indent}public static Expression<Func<{method.SourceTypeShortName}, {method.DestTypeShortName}>> {method.ExpressionPropertyName} {{ get; }} =");
+        sb.AppendLine($"{indent}{method.Accessibility} static Expression<Func<{method.SourceTypeShortName}, {method.DestTypeShortName}>> {method.ExpressionPropertyName} {{ get; }} =");
         if (emittable.Count == 0)
         {
             // Parameterized ctor with no extra property assignments — single-line form
@@ -1728,67 +1751,77 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         bool includeFields,
         IMethodSymbol? forgeMethod,
         List<Diagnostic>? diagnostics,
-        bool isSourceSide = true)
+        bool isSourceSide = true,
+        IAssemblySymbol? forgeAssembly = null)
     {
         var result = new Dictionary<string, (ITypeSymbol, string, bool)>();
 
-        foreach (var member in type.GetMembers())
+        for (var currentType = type; currentType != null; currentType = currentType.BaseType)
         {
-            if (member.IsStatic) continue;
-            if (member.DeclaredAccessibility == Accessibility.Private) continue;
-
-            if (member is IPropertySymbol prop)
+            foreach (var member in currentType.GetMembers())
             {
-                if (prop.IsIndexer) continue;
-                if (ShouldIgnoreMember(prop, isSourceSide)) continue;
-                var mapName = GetForgeMapName(prop);
-                var key = (mapName ?? prop.Name).ToLowerInvariant();
-                if (result.ContainsKey(key))
-                {
-                    if (forgeMethod != null && diagnostics != null)
-                    {
-                        diagnostics.Add(Diagnostic.Create(
-                            ForgeDiagnostics.DuplicateForgeMapTarget,
-                            forgeMethod.Locations.FirstOrDefault(),
-                            key, prop.Name, type.Name));
-                    }
-                }
-                else
-                {
-                    result[key] = (prop.Type, prop.Name, false);
-                }
-            }
-            else if (member is IFieldSymbol field)
-            {
-                if (ShouldIgnoreMember(field, isSourceSide)) continue;
-                if (!includeFields)
-                {
-                    if (forgeMethod != null && diagnostics != null)
-                    {
-                        diagnostics.Add(Diagnostic.Create(
-                            ForgeDiagnostics.FieldIgnored,
-                            forgeMethod.Locations.FirstOrDefault(),
-                            field.Name,
-                            type.Name));
-                    }
+                if (member.IsStatic) continue;
+                if (member.DeclaredAccessibility == Accessibility.Private) continue;
+                if (forgeAssembly != null &&
+                    (member.DeclaredAccessibility == Accessibility.Internal ||
+                     member.DeclaredAccessibility == Accessibility.ProtectedAndInternal) &&
+                    !SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, forgeAssembly))
                     continue;
-                }
 
-                var mapName = GetForgeMapName(field);
-                var key = (mapName ?? field.Name).ToLowerInvariant();
-                if (result.ContainsKey(key))
+                if (member is IPropertySymbol prop)
                 {
-                    if (forgeMethod != null && diagnostics != null)
+                    if (prop.IsIndexer) continue;
+                    if (isSourceSide && prop.GetMethod == null) continue;
+                    if (ShouldIgnoreMember(prop, isSourceSide)) continue;
+                    var mapName = GetForgeMapName(prop);
+                    var key = (mapName ?? prop.Name).ToLowerInvariant();
+                    if (result.ContainsKey(key))
                     {
-                        diagnostics.Add(Diagnostic.Create(
-                            ForgeDiagnostics.DuplicateForgeMapTarget,
-                            forgeMethod.Locations.FirstOrDefault(),
-                            key, field.Name, type.Name));
+                        if (currentType.Equals(type, SymbolEqualityComparer.Default) && forgeMethod != null && diagnostics != null)
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.DuplicateForgeMapTarget,
+                                forgeMethod.Locations.FirstOrDefault(),
+                                key, prop.Name, type.Name));
+                        }
+                    }
+                    else
+                    {
+                        result[key] = (prop.Type, prop.Name, false);
                     }
                 }
-                else
+                else if (member is IFieldSymbol field)
                 {
-                    result[key] = (field.Type, field.Name, true);
+                    if (ShouldIgnoreMember(field, isSourceSide)) continue;
+                    if (!includeFields)
+                    {
+                        if (currentType.Equals(type, SymbolEqualityComparer.Default) && forgeMethod != null && diagnostics != null)
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.FieldIgnored,
+                                forgeMethod.Locations.FirstOrDefault(),
+                                field.Name,
+                                type.Name));
+                        }
+                        continue;
+                    }
+
+                    var mapName = GetForgeMapName(field);
+                    var key = (mapName ?? field.Name).ToLowerInvariant();
+                    if (result.ContainsKey(key))
+                    {
+                        if (currentType.Equals(type, SymbolEqualityComparer.Default) && forgeMethod != null && diagnostics != null)
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.DuplicateForgeMapTarget,
+                                forgeMethod.Locations.FirstOrDefault(),
+                                key, field.Name, type.Name));
+                        }
+                    }
+                    else
+                    {
+                        result[key] = (field.Type, field.Name, true);
+                    }
                 }
             }
         }
@@ -2560,7 +2593,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
     private sealed class ForgeClassResult
     {
-        public static readonly ForgeClassResult Empty = new(null, new List<Diagnostic>(), hasErrors: false);
+        public static readonly ForgeClassResult Empty = new(null, System.Array.Empty<Diagnostic>(), hasErrors: false);
 
         public ForgeClassModel? ClassModel { get; }
         public IReadOnlyList<Diagnostic> Diagnostics { get; }

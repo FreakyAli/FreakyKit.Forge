@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace FreakyKit.Forge.Generator.Models;
 
@@ -6,7 +8,7 @@ namespace FreakyKit.Forge.Generator.Models;
 /// Extracted, equatable model for a single forge method.
 /// Carries all information needed to generate the method body.
 /// </summary>
-internal sealed class ForgeMethodModel
+internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
 {
     public string MethodName { get; }
     public string Accessibility { get; }
@@ -89,5 +91,48 @@ internal sealed class ForgeMethodModel
         ConcreteDictInstantiationName = concreteDictInstantiationName;
         GenerateExpression = generateExpression;
         ExpressionPropertyName = expressionPropertyName ?? $"{methodName}Expression";
+    }
+
+    public bool Equals(ForgeMethodModel other)
+    {
+        if (other is null) return false;
+        return MethodName == other.MethodName
+            && Accessibility == other.Accessibility
+            && SourceTypeFqn == other.SourceTypeFqn
+            && SourceTypeShortName == other.SourceTypeShortName
+            && SourceParameterName == other.SourceParameterName
+            && DestTypeFqn == other.DestTypeFqn
+            && DestTypeShortName == other.DestTypeShortName
+            && Equals(Construction, other.Construction)
+            && Assignments.SequenceEqual(other.Assignments)
+            && NestedMethods.SequenceEqual(other.NestedMethods)
+            && MethodKind == other.MethodKind
+            && DestParameterName == other.DestParameterName
+            && BeforeHookName == other.BeforeHookName
+            && AfterHookName == other.AfterHookName
+            && SourceFilePath == other.SourceFilePath
+            && SourceLineNumber == other.SourceLineNumber
+            && CollectionProjectExpression == other.CollectionProjectExpression
+            && ConcreteDictInstantiationName == other.ConcreteDictInstantiationName
+            && GenerateExpression == other.GenerateExpression
+            && ExpressionPropertyName == other.ExpressionPropertyName;
+    }
+
+    public override bool Equals(object obj) => Equals(obj as ForgeMethodModel);
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + (MethodName?.GetHashCode() ?? 0);
+            hash = hash * 31 + (Accessibility?.GetHashCode() ?? 0);
+            hash = hash * 31 + (SourceTypeFqn?.GetHashCode() ?? 0);
+            hash = hash * 31 + (DestTypeFqn?.GetHashCode() ?? 0);
+            hash = hash * 31 + MethodKind.GetHashCode();
+            hash = hash * 31 + GenerateExpression.GetHashCode();
+            hash = hash * 31 + (ExpressionPropertyName?.GetHashCode() ?? 0);
+            return hash;
+        }
     }
 }
