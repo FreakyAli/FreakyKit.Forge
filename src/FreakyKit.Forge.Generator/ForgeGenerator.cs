@@ -408,7 +408,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 // EXCEPT mutable same-type collections which deep-copy by default (so DTO and source
                 // own independent collection instances). The ShareReference flag flips that back.
 
-                // Resolve ShareReference precedence: source-side > dest-side > method-level > default(false).
+                // Resolve ShareReference precedence: dest-side > source-side > method-level > default(false).
                 // When both source and dest are explicitly set with conflicting values, the dest wins
                 // and FKF313 is emitted.
                 var srcShareRef = GetForgeMapShareReference(srcSymbolForNull);
@@ -1746,6 +1746,26 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns true if the member is accessible from a static, non-derived context in the forge assembly.
+    /// </summary>
+    private static bool IsMemberAccessibleFromStaticContext(ISymbol member, IAssemblySymbol? forgeAssembly)
+    {
+        switch (member.DeclaredAccessibility)
+        {
+            case Accessibility.Public:
+                return true;
+            case Accessibility.Internal:
+            case Accessibility.ProtectedOrInternal:
+                return forgeAssembly == null || SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, forgeAssembly);
+            case Accessibility.Private:
+            case Accessibility.Protected:
+            case Accessibility.ProtectedAndInternal:
+            default:
+                return false;
+        }
+    }
+
     private static Dictionary<string, (ITypeSymbol Type, string Name, bool IsField)> CollectMembers(
         INamedTypeSymbol type,
         bool includeFields,
@@ -1761,17 +1781,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             foreach (var member in currentType.GetMembers())
             {
                 if (member.IsStatic) continue;
-                if (member.DeclaredAccessibility == Accessibility.Private) continue;
-                if (forgeAssembly != null &&
-                    (member.DeclaredAccessibility == Accessibility.Internal ||
-                     member.DeclaredAccessibility == Accessibility.ProtectedAndInternal) &&
-                    !SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, forgeAssembly))
-                    continue;
+                if (!IsMemberAccessibleFromStaticContext(member, forgeAssembly)) continue;
 
                 if (member is IPropertySymbol prop)
                 {
                     if (prop.IsIndexer) continue;
-                    if (isSourceSide && prop.GetMethod == null) continue;
+                    if (isSourceSide && (prop.GetMethod == null || !IsMemberAccessibleFromStaticContext(prop.GetMethod, forgeAssembly))) continue;
+                    if (!isSourceSide && prop.SetMethod != null && !IsMemberAccessibleFromStaticContext(prop.SetMethod, forgeAssembly)) continue;
                     if (ShouldIgnoreMember(prop, isSourceSide)) continue;
                     var mapName = GetForgeMapName(prop);
                     var key = (mapName ?? prop.Name).ToLowerInvariant();

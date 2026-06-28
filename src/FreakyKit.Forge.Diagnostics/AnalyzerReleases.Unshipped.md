@@ -40,9 +40,17 @@ FKF221 | FreakyKit.Forge.TypeSafety | Warning |
 FKF222 | FreakyKit.Forge.TypeSafety | Warning |
 FKF300 | FreakyKit.Forge.Nested | Warning |
 FKF310 | FreakyKit.Forge.Nested | Info |
+FKF311 | FreakyKit.Forge.Nested | Info |
+FKF312 | FreakyKit.Forge.Nested | Info |
+FKF313 | FreakyKit.Forge.Nested | Warning |
 FKF400 | FreakyKit.Forge.MemberDiscovery | Warning |
 FKF401 | FreakyKit.Forge.MemberDiscovery | Info |
 FKF500 | FreakyKit.Forge.Construction | Error |
 FKF501 | FreakyKit.Forge.Construction | Error |
 FKF502 | FreakyKit.Forge.Construction | Error |
 FKF503 | FreakyKit.Forge.Construction | Error |
+FKF504 | FreakyKit.Forge.MethodShape | Error |
+FKF505 | FreakyKit.Forge.MethodShape | Warning |
+FKF506 | FreakyKit.Forge.TypeSafety | Info |
+FKF507 | FreakyKit.Forge.Nested | Error |
+FKF508 | FreakyKit.Forge.Nested | Info |

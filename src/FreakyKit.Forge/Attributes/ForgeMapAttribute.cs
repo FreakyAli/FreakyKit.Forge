@@ -36,7 +36,7 @@ public sealed class ForgeMapAttribute : Attribute
     /// copy-constructed regardless of the method-level setting. Leave unset (the default) to
     /// inherit from <see cref="ForgeMethodAttribute.ShareReference"/>.
     ///
-    /// Precedence: source-side <c>[ForgeMap]</c> &gt; destination-side <c>[ForgeMap]</c> &gt;
+    /// Precedence: destination-side <c>[ForgeMap]</c> &gt; source-side <c>[ForgeMap]</c> &gt;
     /// <c>[ForgeMethod]</c> &gt; default (false / copy).
     ///
     /// When source-side and destination-side both set this with different values, FKF313 is

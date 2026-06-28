@@ -185,7 +185,7 @@ Source code: [`benchmarks/FreakyKit.Forge.Benchmarks`](../benchmarks/FreakyKit.F
 
 ## Real-World Scenarios
 
-> Benchmark run: 2026-05-14 — commit: `d3b8763` (plus uncommitted RealWorld benchmark project + ShareReference behavior change)
+> Benchmark run: 2026-05-14 — commit: `1cfa763`
 > Source: [`benchmarks/FreakyKit.Forge.Benchmarks.RealWorld`](../benchmarks/FreakyKit.Forge.Benchmarks.RealWorld)
 > Raw BDN reports: [`BenchmarkDotNet.Artifacts/results/`](../benchmarks/FreakyKit.Forge.Benchmarks.RealWorld/BenchmarkDotNet.Artifacts/results/)
 
@@ -209,7 +209,7 @@ for the opt-out flag.
 | Runtime | .NET 8.0.11 (Arm64 RyuJIT armv8.0-a) |
 | Machine | Apple M4 Pro, 14 cores, macOS Tahoe 26.4.1 |
 | Benchmark tool | BenchmarkDotNet v0.15.8 |
-| Iterations | 50 warmup × 10 iterations (Banking: 8 × 30 — large collection) |
+| Iterations | 10 warmup × 50 iterations (Banking: 8 × 30 — large collection) |
 
 ### Real-World: B2B Order Fulfilment (~20 props + nested + audit collection)
 
@@ -309,12 +309,12 @@ for the opt-out flag.
 
 - **Forge sits within 0.91×–1.51× of hand-written** across all 8 scenarios, median ~1.28×. The generator's per-element pre-sizing and helper-method overhead is measurable but well within negligible territory at API/request-handling boundaries.
 - **Forge beats hand-written outright on Banking Ledger** (0.91x). At 500-row throughput the generated code's tight straight-line loop overtakes the per-call setup overhead. This is a real win, not a semantic artifact — both implementations deep-copy.
-- **Forge is consistently faster than AutoMapper** in 7 of 8 scenarios. AutoMapper is 1.29×–1.93× hand-written across the board; Forge is 0.91×–1.51×.
-- **Forge trades leads with Mapster.** Mapster narrowly faster in 5 scenarios (typically by 5–15%), Forge faster on Banking and Public API. Both are well within the same performance band relative to hand-written.
+- **Forge is consistently faster than AutoMapper** in 6 of 8 scenarios. AutoMapper is 1.29×–1.93× hand-written across the board; Forge is 0.91×–1.51×.
+- **Forge trades leads with Mapster.** Mapster narrowly faster in 5 scenarios (typically by 5–15%), Forge faster on Banking, CRM Contact, and Public API. Both are well within the same performance band relative to hand-written.
 - **Mapperly leads on dictionary-heavy scenarios** (CRM Contact, Public API Response) because its `Dictionary` and `List<string>` handling allocates less than Forge's `new Dictionary<,>(source)` / `new List<>(source)` calls. Tracked as a Forge optimisation target.
 - **AutoMapper is 1.29×–1.93× hand-written**, consistently in the bottom-third of every scenario.
 - **Facet is 4×–8× hand-written and allocates 2.9×–5× more** when configured for deep copy. Its sweet spot is shallow-projection scenarios that the other libraries don't model.
-- **Allocation overhead** for Forge is within +7%–+21% of hand-written across all 8 scenarios. The +21% in Identity Provisioning comes from copying 4 separate parallel collections (roles, claims, external logins, audit trail).
+- **Allocation overhead** for Forge is within +0.1%–+21% of hand-written across all 8 scenarios. Banking Ledger is near-zero (+0.1%) because the dominant allocation is the 500-element transaction list, shared across all implementations. The +21% in Identity Provisioning comes from copying 4 separate parallel collections (roles, claims, external logins, audit trail).
 
 ---
 

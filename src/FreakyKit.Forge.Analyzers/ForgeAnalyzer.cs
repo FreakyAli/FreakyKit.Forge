@@ -900,12 +900,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             foreach (var member in currentType.GetMembers())
             {
                 if (member.IsStatic) continue;
-                if (member.DeclaredAccessibility == Accessibility.Private) continue;
-                if (forgeAssembly != null &&
-                    (member.DeclaredAccessibility == Accessibility.Internal ||
-                     member.DeclaredAccessibility == Accessibility.ProtectedAndInternal) &&
-                    !SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, forgeAssembly))
-                    continue;
+                if (!IsMemberAccessibleFromStaticContext(member, forgeAssembly)) continue;
 
                 if (member is IPropertySymbol prop)
                 {
@@ -1275,6 +1270,23 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             }
         }
         return false;
+    }
+
+    private static bool IsMemberAccessibleFromStaticContext(ISymbol member, IAssemblySymbol? forgeAssembly)
+    {
+        switch (member.DeclaredAccessibility)
+        {
+            case Accessibility.Public:
+                return true;
+            case Accessibility.Internal:
+            case Accessibility.ProtectedOrInternal:
+                return forgeAssembly == null || SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, forgeAssembly);
+            case Accessibility.Private:
+            case Accessibility.Protected:
+            case Accessibility.ProtectedAndInternal:
+            default:
+                return false;
+        }
     }
 
     private static bool IsForgeAttribute(AttributeData a, string fqn)
