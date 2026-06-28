@@ -307,7 +307,7 @@ for the opt-out flag.
 
 ### Key Takeaways (Real-World)
 
-- **Forge sits within 0.91×–1.51× of hand-written** across all 8 scenarios, median ~1.28×. The generator's per-element pre-sizing and helper-method overhead is measurable but well within negligible territory at API/request-handling boundaries.
+- **Forge sits within 0.91×–1.51× of hand-written** across all 8 scenarios, median ~1.32×. The generator's per-element pre-sizing and helper-method overhead is measurable but well within negligible territory at API/request-handling boundaries.
 - **Forge beats hand-written outright on Banking Ledger** (0.91x). At 500-row throughput the generated code's tight straight-line loop overtakes the per-call setup overhead. This is a real win, not a semantic artifact — both implementations deep-copy.
 - **Forge is consistently faster than AutoMapper** in 6 of 8 scenarios. AutoMapper is 1.29×–1.93× hand-written across the board; Forge is 0.91×–1.51×.
 - **Forge trades leads with Mapster.** Mapster narrowly faster in 5 scenarios (typically by 5–15%), Forge faster on Banking, CRM Contact, and Public API. Both are well within the same performance band relative to hand-written.
