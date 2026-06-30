@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 44 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 45 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -69,6 +69,26 @@ Emitted when a class has `[Forge]` but is not declared `partial`. The source gen
 // Wrong — FKF004
 [Forge]
 public static class MyForges { ... }
+
+// Correct
+[Forge]
+public static partial class MyForges { ... }
+```
+
+### FKF005 — Forge attribute on non-class type
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Mode |
+| **Message** | [Forge] on '{0}' has no effect. Only static partial classes are supported as forge containers. |
+
+Emitted when `[Forge]` is applied to a struct, interface, record struct, or other non-class type. The source generator only processes static partial classes.
+
+```csharp
+// Wrong — FKF005
+[Forge]
+public partial struct MyForges { }
 
 // Correct
 [Forge]

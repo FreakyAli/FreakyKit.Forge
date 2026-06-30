@@ -541,4 +541,57 @@ public sealed class AdditionalDiagnosticsTests : AnalyzerTestBase
         AssertNotContainsDiagnostic(source, "FKF501");
         AssertNotContainsDiagnostic(source, "FKF502");
     }
+
+    // ─── FKF005: [Forge] on non-class type ──────────────────────────────────
+
+    [Fact]
+    public void FKF005_ForgeOnStruct_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                public partial struct MyForges;
+            }
+            """;
+
+        AssertContainsDiagnostic(source, "FKF005");
+    }
+
+    [Fact]
+    public void FKF005_ForgeOnInterface_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                public partial interface IMyForges { }
+            }
+            """;
+
+        AssertContainsDiagnostic(source, "FKF005");
+    }
+
+    [Fact]
+    public void FKF005_ForgeOnClass_NoError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string Name { get; set; } = ""; }
+                public class Dest { public string Name { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest Map(Source s);
+                }
+            }
+            """;
+
+        AssertNotContainsDiagnostic(source, "FKF005");
+    }
 }

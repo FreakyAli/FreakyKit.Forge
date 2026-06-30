@@ -6,6 +6,7 @@ FKF001 | FreakyKit.Forge.Mode | Info |
 FKF002 | FreakyKit.Forge.Mode | Warning |
 FKF003 | FreakyKit.Forge.Mode | Error |
 FKF004 | FreakyKit.Forge.Mode | Error |
+FKF005 | FreakyKit.Forge.Mode | Error |
 FKF010 | FreakyKit.Forge.Mode | Warning |
 FKF011 | FreakyKit.Forge.Mode | Info |
 FKF020 | FreakyKit.Forge.MethodShape | Error |

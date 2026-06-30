@@ -70,6 +70,18 @@ public static class ForgeDiagnostics
         description: "The class has a [Forge] attribute but is not declared partial. The source generator adds a second partial class declaration; without partial, the generated code cannot be merged.");
 
     /// <summary>
+    /// FKF005 (Error): [Forge] is applied to a non-class type (struct, interface, enum, etc.).
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeOnNonClassType = new(
+        id: "FKF005",
+        title: "Forge attribute on non-class type",
+        messageFormat: "[Forge] on '{0}' has no effect. Only static partial classes are supported as forge containers.",
+        category: Category_Mode,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The [Forge] attribute was applied to a struct, interface, record, or other non-class type. The source generator only processes static partial classes.");
+
+    /// <summary>
     /// FKF010 (Warning): A private forge method is ignored because ShouldIncludePrivate is false.
     /// </summary>
     public static readonly DiagnosticDescriptor PrivateMethodIgnored = new(

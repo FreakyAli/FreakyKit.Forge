@@ -351,3 +351,46 @@ With `AllowNestedForging = true`, the generator inlines calls to other forge met
 2. Run Tarjan's or a simple DFS-based cycle detection algorithm
 3. Report the cycle with a message like: `"Circular nested forge detected: ToDto → ToAddressDto → ToDto. This will stack-overflow at runtime."`
 4. Add a diagnostic descriptor FKF301 (Error) in the Nested category
+
+---
+
+## 9. Tri-State `ShareReference` / `IgnoreIfNull` on `[ForgeMap]`
+
+**Goal:** Allow per-member `[ForgeMap(ShareReference = false)]` to override a method-level `[ForgeMethod(ShareReference = true)]`.
+
+### Why
+
+Currently `ShareReference` and `IgnoreIfNull` on `[ForgeMap]` are `bool` properties defaulting to `false`. C# compilers omit named attribute arguments that match the default value, so `ShareReference = false` is indistinguishable from "not set" in the attribute metadata. This means explicitly writing `false` on a member cannot override a method-level `true` — the generator falls back to the method-level value in both cases.
+
+The reverse (method=false, member=true) works fine because `true` is non-default and always emitted.
+
+### Impact
+
+Low. Only affects users who set `ShareReference = true` at the method level and try to opt a specific member back out. The default behavior (copy) is the safe one.
+
+### Design
+
+Replace the `bool` properties with a tri-state enum:
+
+```csharp
+public enum ForgeOptionalBool
+{
+    Inherit = 0,  // default — inherit from method/class level
+    True = 1,
+    False = 2
+}
+
+public sealed class ForgeMapAttribute : Attribute
+{
+    public ForgeOptionalBool ShareReference { get; set; }  // was bool
+    public ForgeOptionalBool IgnoreIfNull { get; set; }    // was bool
+}
+```
+
+### Complexity
+
+**Low** code change, **breaking** API change. Existing user code writing `ShareReference = true` or `IgnoreIfNull = true` would need to change to `ShareReference = ForgeOptionalBool.True`.
+
+### Workaround
+
+Don't set `ShareReference = true` at the method level if you need per-member control. Instead, set `ShareReference = true` individually on each member that should share.

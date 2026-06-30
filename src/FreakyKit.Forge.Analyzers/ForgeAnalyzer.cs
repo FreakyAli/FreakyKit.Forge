@@ -58,6 +58,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.MemberBothIgnoredAndMapped,
             ForgeDiagnostics.ForgeClassNotStatic,
             ForgeDiagnostics.ForgeClassNotPartial,
+            ForgeDiagnostics.ForgeOnNonClassType,
             ForgeDiagnostics.FlatteningEnabledNoMatchFound,
             ForgeDiagnostics.ForgeMapSelfReference,
             ForgeDiagnostics.DuplicateConverterForTypePair,
@@ -83,11 +84,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     {
         var type = (INamedTypeSymbol)context.Symbol;
 
-        // Only process classes (not structs, interfaces, enums, etc.)
-        if (type.TypeKind != TypeKind.Class) return;
-
         var forgeClassAttr = GetForgeClassAttribute(type);
         if (forgeClassAttr is null) return;
+
+        // FKF005: [Forge] on non-class types
+        if (type.TypeKind != TypeKind.Class)
+        {
+            var loc005 = type.Locations.FirstOrDefault();
+            if (loc005 != null)
+                context.ReportDiagnostic(Diagnostic.Create(ForgeDiagnostics.ForgeOnNonClassType, loc005, type.Name));
+            return;
+        }
 
         // FKF003: forge class must be static
         if (!type.IsStatic)
