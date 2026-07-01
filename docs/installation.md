@@ -71,7 +71,7 @@ This package has no dependency on `Generator` or `Analyzers` — it's a standalo
 
 ## Advanced: custom Roslyn tooling
 
-Install `FreakyKit.Forge.Diagnostics` directly only if you're writing your own Roslyn analyzer or source generator that needs to reference Forge's diagnostic IDs (FKF001–FKF503):
+Install `FreakyKit.Forge.Diagnostics` directly only if you're writing your own Roslyn analyzer or source generator that needs to reference Forge's diagnostic IDs (FKF001–FKF508):
 
 ```xml
 <PackageReference Include="FreakyKit.Forge.Diagnostics" Version="1.0.0" />

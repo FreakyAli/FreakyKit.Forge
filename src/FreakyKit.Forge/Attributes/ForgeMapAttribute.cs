@@ -29,6 +29,21 @@ public sealed class ForgeMapAttribute : Attribute
     /// </summary>
     public bool IgnoreIfNull { get; set; }
 
+    /// <summary>
+    /// Per-member override of <see cref="ForgeMethodAttribute.ShareReference"/> for same-type
+    /// mutable collection members. When set to <c>true</c>, this member is reference-shared
+    /// regardless of the method-level setting. When set to <c>false</c>, this member is
+    /// copy-constructed regardless of the method-level setting. Leave unset (the default) to
+    /// inherit from <see cref="ForgeMethodAttribute.ShareReference"/>.
+    ///
+    /// Precedence: destination-side <c>[ForgeMap]</c> &gt; source-side <c>[ForgeMap]</c> &gt;
+    /// <c>[ForgeMethod]</c> &gt; default (false / copy).
+    ///
+    /// When source-side and destination-side both set this with different values, FKF313 is
+    /// emitted and the destination-side value wins.
+    /// </summary>
+    public bool ShareReference { get; set; }
+
     public ForgeMapAttribute(string name)
     {
         Name = name;

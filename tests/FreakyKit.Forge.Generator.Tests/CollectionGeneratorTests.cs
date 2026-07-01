@@ -5,9 +5,10 @@ namespace FreakyKit.Forge.Generator.Tests;
 public sealed class CollectionGeneratorTests : GeneratorTestBase
 {
     [Fact]
-    public void Collection_SameType_DirectAssignment()
+    public void Collection_SameType_DeepCopiesByDefault()
     {
-        // Same List<string> on both sides = exact type match = direct assignment
+        // Same List<string> on both sides — Forge deep-copies via copy ctor by default so
+        // mutations to the DTO don't leak back to the source. The opt-out is ShareReference = true.
         const string source = """
             using System.Collections.Generic;
             using FreakyKit.Forge;
@@ -27,9 +28,39 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("__result.Tags = source.Tags", generated);
-        Assert.DoesNotContain(".ToList()", generated);
-        Assert.DoesNotContain(".ToArray()", generated);
+        Assert.Contains("__result.Tags = source.Tags != null ? new List<string>(source.Tags) : null", generated);
+    }
+
+    [Fact]
+    public void Collection_SameType_ShareReferenceTrue_OptsOutOfCopy()
+    {
+        // With [ForgeMethod(ShareReference = true)], same-type mutable collection members are
+        // reference-shared instead of copied. Faster, less alloc, but mutations to the DTO leak
+        // back to the source. FKF311 (Info) is emitted for visibility.
+        const string source = """
+            using System.Collections.Generic;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public List<string> Tags { get; set; } = new(); }
+                public class Dest   { public List<string> Tags { get; set; } = new(); }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(ShareReference = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("__result.Tags = source.Tags;", generated);
+        Assert.DoesNotContain("new List<string>(source.Tags)", generated);
+        // FKF311 emitted
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF311");
     }
 
     [Fact]

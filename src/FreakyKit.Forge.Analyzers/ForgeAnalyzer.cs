@@ -58,10 +58,19 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.MemberBothIgnoredAndMapped,
             ForgeDiagnostics.ForgeClassNotStatic,
             ForgeDiagnostics.ForgeClassNotPartial,
+            ForgeDiagnostics.ForgeOnNonClassType,
             ForgeDiagnostics.FlatteningEnabledNoMatchFound,
             ForgeDiagnostics.ForgeMapSelfReference,
             ForgeDiagnostics.DuplicateConverterForTypePair,
-            ForgeDiagnostics.DestinationTypeNotInstantiable
+            ForgeDiagnostics.DestinationTypeNotInstantiable,
+            ForgeDiagnostics.ExpressionIncompatibleWithUpdate,
+            ForgeDiagnostics.ExpressionIgnoresHooks,
+            ForgeDiagnostics.ExpressionMemberExcluded,
+            ForgeDiagnostics.ExpressionNestedCycle,
+            ForgeDiagnostics.ExpressionDeepNesting,
+            ForgeDiagnostics.SameTypeCollectionShared,
+            ForgeDiagnostics.SameTypeReferenceShared,
+            ForgeDiagnostics.ShareReferenceConflict
         );
 
     public override void Initialize(AnalysisContext context)
@@ -75,11 +84,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     {
         var type = (INamedTypeSymbol)context.Symbol;
 
-        // Only process classes (not structs, interfaces, enums, etc.)
-        if (type.TypeKind != TypeKind.Class) return;
-
         var forgeClassAttr = GetForgeClassAttribute(type);
         if (forgeClassAttr is null) return;
+
+        // FKF005: [Forge] on non-class types
+        if (type.TypeKind != TypeKind.Class)
+        {
+            var loc005 = type.Locations.FirstOrDefault();
+            if (loc005 != null)
+                context.ReportDiagnostic(Diagnostic.Create(ForgeDiagnostics.ForgeOnNonClassType, loc005, type.Name));
+            return;
+        }
 
         // FKF003: forge class must be static
         if (!type.IsStatic)
@@ -190,8 +205,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         foreach (var member in type.GetMembers().OfType<IMethodSymbol>())
         {
             bool hasConverterAttr = member.GetAttributes()
-                .Any(a => a.AttributeClass?.Name == "ForgeConverterAttribute" ||
-                           a.AttributeClass?.Name == "ForgeConverter");
+                .Any(a => IsForgeAttribute(a, "FreakyKit.Forge.ForgeConverterAttribute"));
             if (!hasConverterAttr) continue;
 
             string? reason = null;
@@ -223,8 +237,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         foreach (var member in type.GetMembers().OfType<IMethodSymbol>())
         {
             bool hasConverterAttr = member.GetAttributes()
-                .Any(a => a.AttributeClass?.Name == "ForgeConverterAttribute" ||
-                           a.AttributeClass?.Name == "ForgeConverter");
+                .Any(a => IsForgeAttribute(a, "FreakyKit.Forge.ForgeConverterAttribute"));
             if (!hasConverterAttr) continue;
             // Only count valid converters (invalid ones are already flagged by FKF221)
             if (!member.IsStatic || member.ReturnsVoid || member.TypeParameters.Length > 0 || member.Parameters.Length != 1)
@@ -416,10 +429,11 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
 
         // Collect source members
-        var sourceMembers = CollectMembers(sourceType, includeFields, context, method, isSourceSide: true);
+        var forgeAssembly = forgeClass.ContainingAssembly;
+        var sourceMembers = CollectMembers(sourceType, includeFields, context, method, isSourceSide: true, forgeAssembly: forgeAssembly);
 
         // Collect dest members
-        var destMembers = CollectMembers(destType, includeFields, context, method, isSourceSide: false);
+        var destMembers = CollectMembers(destType, includeFields, context, method, isSourceSide: false, forgeAssembly: forgeAssembly);
 
         if (isUpdate)
         {
@@ -504,8 +518,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         var none = new HashSet<string>();
 
         // FKF503: abstract class, interface, or static class cannot be constructed
-        // Note: static classes have IsAbstract=false in Roslyn (the keyword is absent in source),
-        // so IsStatic must be checked separately.
+        // Note: in Roslyn, static classes have both IsAbstract=true and IsStatic=true (marked as
+        // 'abstract sealed' in IL). IsStatic is checked first for a more specific error message.
         if (destType.IsAbstract || destType.IsStatic)
         {
             var loc503 = forgeMethod.Locations.FirstOrDefault();
@@ -551,9 +565,10 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             var missing = new List<IParameterSymbol>();
             foreach (var param in ctor.Parameters)
             {
-                var key = param.Name.ToLowerInvariant();
+                var forgeMapName = GetForgeMapName(param);
+                var key = (forgeMapName ?? param.Name).ToLowerInvariant();
                 if (!sourceMembers.TryGetValue(key, out var srcMember) ||
-                    (!SymbolEqualityComparer.Default.Equals(srcMember.Type, param.Type) &&
+                    (srcMember.Type.ToDisplayString() != param.Type.ToDisplayString() &&
                      !AreNullableCompatible(srcMember.Type, param.Type)))
                 {
                     missing.Add(param);
@@ -640,6 +655,10 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         int matchedCount = 0;
         int flattenedCount = 0;
 
+        // FKF104: validate [ForgeMap] targets exist on counterpart type
+        ValidateForgeMapTargets(context, forgeMethod, sourceType, destMembers, isSourceSide: true);
+        ValidateForgeMapTargets(context, forgeMethod, destType, sourceMembers, isSourceSide: false);
+
         foreach (var destKvp in destMembers)
         {
             var key = destKvp.Key;
@@ -712,6 +731,16 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         ForgeDiagnostics.NullableValueTypeMapping,
+                        loc,
+                        key,
+                        srcMember.Type.ToDisplayString(),
+                        destMember.Type.ToDisplayString()));
+                }
+                else if (loc != null)
+                {
+                    // FKF202: nullable mapping applied automatically
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ForgeDiagnostics.NullableMappingApplied,
                         loc,
                         key,
                         srcMember.Type.ToDisplayString(),
@@ -816,6 +845,49 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
     }
 
+    private static void ValidateForgeMapTargets(
+        SymbolAnalysisContext context,
+        IMethodSymbol forgeMethod,
+        INamedTypeSymbol type,
+        Dictionary<string, (ITypeSymbol Type, bool IsField)> counterpartMembers,
+        bool isSourceSide)
+    {
+        for (var currentType = type; currentType != null; currentType = currentType.BaseType)
+        {
+            foreach (var member in currentType.GetMembers())
+            {
+                if (member.IsStatic || member.DeclaredAccessibility == Accessibility.Private) continue;
+
+                string? mapName = null;
+                string memberName = "";
+
+                if (member is IPropertySymbol prop && !prop.IsIndexer)
+                {
+                    mapName = GetForgeMapName(prop);
+                    memberName = prop.Name;
+                }
+                else if (member is IFieldSymbol field)
+                {
+                    mapName = GetForgeMapName(field);
+                    memberName = field.Name;
+                }
+
+                if (mapName == null) continue;
+
+                var mapKey = mapName.ToLowerInvariant();
+                if (!counterpartMembers.ContainsKey(mapKey))
+                {
+                    var loc = forgeMethod.Locations.FirstOrDefault();
+                    if (loc != null)
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.ForgeMapTargetNotFound,
+                            loc,
+                            memberName, type.Name, mapName));
+                }
+            }
+        }
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
     private static Dictionary<string, (ITypeSymbol Type, bool IsField)> CollectMembers(
@@ -823,120 +895,178 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         bool includeFields,
         SymbolAnalysisContext context,
         IMethodSymbol forgeMethod,
-        bool isSourceSide = true)
+        bool isSourceSide = true,
+        IAssemblySymbol? forgeAssembly = null)
     {
         var result = new Dictionary<string, (ITypeSymbol, bool)>();
 
-        foreach (var member in type.GetMembers())
+        for (var currentType = type; currentType != null; currentType = currentType.BaseType)
         {
-            if (member.IsStatic) continue;
-            if (member.DeclaredAccessibility == Accessibility.Private) continue;
+            var isDeclaredType = SymbolEqualityComparer.Default.Equals(currentType, type);
 
-            if (member is IPropertySymbol prop)
+            foreach (var member in currentType.GetMembers())
             {
-                if (prop.IsIndexer) continue;
+                if (member.IsStatic) continue;
+                if (!IsMemberAccessibleFromStaticContext(member, forgeAssembly)) continue;
 
-                // FKF109: member has both [ForgeIgnore] and [ForgeMap]
-                if (HasIgnoreAttribute(prop) && GetForgeMapName(prop) != null)
+                if (member is IPropertySymbol prop)
                 {
-                    var loc = forgeMethod.Locations.FirstOrDefault();
-                    if (loc != null)
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, prop.Name, type.Name));
-                }
+                    if (prop.IsIndexer) continue;
 
-                if (ShouldIgnoreMember(prop, isSourceSide)) continue;
-
-                // FKF108: source member getter absent or inaccessible to generated code
-                if (isSourceSide && !IsGetterAccessible(prop))
-                {
-                    var loc = forgeMethod.Locations.FirstOrDefault();
-                    if (loc != null)
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.WriteOnlySourceMember, loc, type.Name, prop.Name));
-                    continue;
-                }
-
-                var mapName = GetForgeMapName(prop);
-
-                // FKF112: [ForgeMap] target is the member's own name — no-op
-                if (mapName != null && string.Equals(mapName, prop.Name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    var loc112 = forgeMethod.Locations.FirstOrDefault();
-                    if (loc112 != null)
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.ForgeMapSelfReference, loc112, prop.Name, type.Name, mapName));
-                }
-
-                var keyLower = (mapName ?? prop.Name).ToLowerInvariant();
-                if (result.ContainsKey(keyLower))
-                {
-                    var loc = forgeMethod.Locations.FirstOrDefault();
-                    if (loc != null)
+                    // FKF109: member has both [ForgeIgnore] and [ForgeMap] (only for directly declared members)
+                    if (isDeclaredType && HasIgnoreAttribute(prop) && GetForgeMapName(prop) != null)
                     {
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.DuplicateForgeMapTarget,
-                            loc,
-                            keyLower, prop.Name, type.Name));
+                        var loc = forgeMethod.Locations.FirstOrDefault();
+                        if (loc != null)
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, prop.Name, type.Name));
+                    }
+
+                    if (ShouldIgnoreMember(prop, isSourceSide))
+                    {
+                        // FKF102: member excluded via [ForgeIgnore]
+                        if (isDeclaredType)
+                        {
+                            var loc102 = forgeMethod.Locations.FirstOrDefault();
+                            if (loc102 != null)
+                                context.ReportDiagnostic(Diagnostic.Create(
+                                    ForgeDiagnostics.MemberIgnored, loc102, prop.Name, type.Name));
+                        }
+                        continue;
+                    }
+
+                    // FKF108: source member getter absent or inaccessible to generated code
+                    if (isSourceSide && !IsGetterAccessible(prop))
+                    {
+                        if (isDeclaredType)
+                        {
+                            var loc = forgeMethod.Locations.FirstOrDefault();
+                            if (loc != null)
+                                context.ReportDiagnostic(Diagnostic.Create(
+                                    ForgeDiagnostics.WriteOnlySourceMember, loc, type.Name, prop.Name));
+                        }
+                        continue;
+                    }
+
+                    var mapName = GetForgeMapName(prop);
+
+                    // FKF103: custom member mapping via [ForgeMap]
+                    if (isDeclaredType && mapName != null)
+                    {
+                        var loc103 = forgeMethod.Locations.FirstOrDefault();
+                        if (loc103 != null)
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                ForgeDiagnostics.CustomMemberMapping, loc103, prop.Name, type.Name, mapName));
+                    }
+
+                    // FKF112: [ForgeMap] target is the member's own name — no-op
+                    if (isDeclaredType && mapName != null && string.Equals(mapName, prop.Name, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        var loc112 = forgeMethod.Locations.FirstOrDefault();
+                        if (loc112 != null)
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                ForgeDiagnostics.ForgeMapSelfReference, loc112, prop.Name, type.Name, mapName));
+                    }
+
+                    var keyLower = (mapName ?? prop.Name).ToLowerInvariant();
+                    if (result.ContainsKey(keyLower))
+                    {
+                        if (isDeclaredType)
+                        {
+                            var loc = forgeMethod.Locations.FirstOrDefault();
+                            if (loc != null)
+                            {
+                                context.ReportDiagnostic(Diagnostic.Create(
+                                    ForgeDiagnostics.DuplicateForgeMapTarget,
+                                    loc,
+                                    keyLower, prop.Name, type.Name));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        result[keyLower] = (prop.Type, false);
                     }
                 }
-                else
+                else if (member is IFieldSymbol field)
                 {
-                    result[keyLower] = (prop.Type, false);
-                }
-            }
-            else if (member is IFieldSymbol field)
-            {
-                // FKF109: field has both [ForgeIgnore] and [ForgeMap]
-                if (HasIgnoreAttribute(field) && GetForgeMapName(field) != null)
-                {
-                    var loc = forgeMethod.Locations.FirstOrDefault();
-                    if (loc != null)
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, field.Name, type.Name));
-                }
-
-                if (ShouldIgnoreMember(field, isSourceSide)) continue;
-                if (!includeFields)
-                {
-                    // FKF400: field ignored
-                    var loc = forgeMethod.Locations.FirstOrDefault();
-                    if (loc != null)
+                    // FKF109: field has both [ForgeIgnore] and [ForgeMap] (only for directly declared members)
+                    if (isDeclaredType && HasIgnoreAttribute(field) && GetForgeMapName(field) != null)
                     {
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.FieldIgnored,
-                            loc,
-                            field.Name,
-                            type.Name));
+                        var loc = forgeMethod.Locations.FirstOrDefault();
+                        if (loc != null)
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, field.Name, type.Name));
                     }
-                    continue;
-                }
-                var mapName = GetForgeMapName(field);
 
-                // FKF112: [ForgeMap] target is the field's own name — no-op
-                if (mapName != null && string.Equals(mapName, field.Name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    var loc112 = forgeMethod.Locations.FirstOrDefault();
-                    if (loc112 != null)
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.ForgeMapSelfReference, loc112, field.Name, type.Name, mapName));
-                }
-
-                var keyLower = (mapName ?? field.Name).ToLowerInvariant();
-                if (result.ContainsKey(keyLower))
-                {
-                    var loc = forgeMethod.Locations.FirstOrDefault();
-                    if (loc != null)
+                    if (ShouldIgnoreMember(field, isSourceSide))
                     {
-                        context.ReportDiagnostic(Diagnostic.Create(
-                            ForgeDiagnostics.DuplicateForgeMapTarget,
-                            loc,
-                            keyLower, field.Name, type.Name));
+                        // FKF102: field excluded via [ForgeIgnore]
+                        if (isDeclaredType)
+                        {
+                            var loc102 = forgeMethod.Locations.FirstOrDefault();
+                            if (loc102 != null)
+                                context.ReportDiagnostic(Diagnostic.Create(
+                                    ForgeDiagnostics.MemberIgnored, loc102, field.Name, type.Name));
+                        }
+                        continue;
                     }
-                }
-                else
-                {
-                    result[keyLower] = (field.Type, true);
+                    if (!includeFields)
+                    {
+                        if (isDeclaredType)
+                        {
+                            // FKF400: field ignored
+                            var loc = forgeMethod.Locations.FirstOrDefault();
+                            if (loc != null)
+                            {
+                                context.ReportDiagnostic(Diagnostic.Create(
+                                    ForgeDiagnostics.FieldIgnored,
+                                    loc,
+                                    field.Name,
+                                    type.Name));
+                            }
+                        }
+                        continue;
+                    }
+                    var mapName = GetForgeMapName(field);
+
+                    // FKF103: custom field mapping via [ForgeMap]
+                    if (isDeclaredType && mapName != null)
+                    {
+                        var loc103 = forgeMethod.Locations.FirstOrDefault();
+                        if (loc103 != null)
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                ForgeDiagnostics.CustomMemberMapping, loc103, field.Name, type.Name, mapName));
+                    }
+
+                    // FKF112: [ForgeMap] target is the field's own name — no-op
+                    if (isDeclaredType && mapName != null && string.Equals(mapName, field.Name, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        var loc112 = forgeMethod.Locations.FirstOrDefault();
+                        if (loc112 != null)
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                ForgeDiagnostics.ForgeMapSelfReference, loc112, field.Name, type.Name, mapName));
+                    }
+
+                    var keyLower = (mapName ?? field.Name).ToLowerInvariant();
+                    if (result.ContainsKey(keyLower))
+                    {
+                        if (isDeclaredType)
+                        {
+                            var loc = forgeMethod.Locations.FirstOrDefault();
+                            if (loc != null)
+                            {
+                                context.ReportDiagnostic(Diagnostic.Create(
+                                    ForgeDiagnostics.DuplicateForgeMapTarget,
+                                    loc,
+                                    keyLower, field.Name, type.Name));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        result[keyLower] = (field.Type, true);
+                    }
                 }
             }
         }
@@ -983,7 +1113,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 srcType.WithNullableAnnotation(NullableAnnotation.NotAnnotated),
                 destType.WithNullableAnnotation(NullableAnnotation.NotAnnotated)))
         {
-            if (!SymbolEqualityComparer.Default.Equals(srcType, destType))
+            if (!SymbolEqualityComparer.IncludeNullability.Equals(srcType, destType))
                 return true;
         }
 
@@ -997,10 +1127,9 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             .Where(m => m.IsStatic && !m.ReturnsVoid && m.Parameters.Length == 1)
             .Any(m =>
                 m.GetAttributes().Any(a =>
-                    a.AttributeClass?.Name == "ForgeConverterAttribute" ||
-                    a.AttributeClass?.Name == "ForgeConverter") &&
-                SymbolEqualityComparer.Default.Equals(m.Parameters[0].Type, sourceType) &&
-                SymbolEqualityComparer.Default.Equals(m.ReturnType, destType));
+                    IsForgeAttribute(a, "FreakyKit.Forge.ForgeConverterAttribute")) &&
+                m.Parameters[0].Type.ToDisplayString() == sourceType.ToDisplayString() &&
+                m.ReturnType.ToDisplayString() == destType.ToDisplayString());
     }
 
     private static bool IsCollectionType(ITypeSymbol type)
@@ -1081,7 +1210,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     if (nestedMember.IsStatic || nestedMember.DeclaredAccessibility == Accessibility.Private) continue;
                     if (nestedMember is IPropertySymbol nestedProp &&
                         nestedProp.Name.ToLowerInvariant() == remainder &&
-                        SymbolEqualityComparer.Default.Equals(nestedProp.Type, destMemberType))
+                        nestedProp.Type.ToDisplayString() == destMemberType.ToDisplayString())
                     {
                         sourceNavKey = prefixLower;
                         return true;
@@ -1099,8 +1228,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             .Where(m => m.IsStatic && m.IsPartialDefinition)
             .Any(m =>
                 m.Parameters.Length == 1 &&
-                SymbolEqualityComparer.Default.Equals(m.Parameters[0].Type, sourceType) &&
-                SymbolEqualityComparer.Default.Equals(m.ReturnType, destType));
+                m.Parameters[0].Type.ToDisplayString() == sourceType.ToDisplayString() &&
+                m.ReturnType.ToDisplayString() == destType.ToDisplayString());
     }
 
     private static bool IsForgeMethodCandidate(IMethodSymbol method)
@@ -1150,18 +1279,36 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
+    private static bool IsMemberAccessibleFromStaticContext(ISymbol member, IAssemblySymbol? forgeAssembly)
+    {
+        switch (member.DeclaredAccessibility)
+        {
+            case Accessibility.Public:
+                return true;
+            case Accessibility.Internal:
+            case Accessibility.ProtectedOrInternal:
+                return forgeAssembly == null || SymbolEqualityComparer.Default.Equals(member.ContainingAssembly, forgeAssembly);
+            case Accessibility.Private:
+            case Accessibility.Protected:
+            case Accessibility.ProtectedAndInternal:
+            default:
+                return false;
+        }
+    }
+
+    private static bool IsForgeAttribute(AttributeData a, string fqn)
+        => a.AttributeClass?.ToDisplayString() == fqn;
+
     private static AttributeData? GetForgeClassAttribute(INamedTypeSymbol type)
     {
         return type.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeAttribute" ||
-                                 a.AttributeClass?.Name == "Forge");
+            .FirstOrDefault(a => IsForgeAttribute(a, "FreakyKit.Forge.ForgeAttribute"));
     }
 
     private static AttributeData? GetForgeAttribute(IMethodSymbol method)
     {
         return method.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeMethodAttribute" ||
-                                 a.AttributeClass?.Name == "ForgeMethod");
+            .FirstOrDefault(a => IsForgeAttribute(a, "FreakyKit.Forge.ForgeMethodAttribute"));
     }
 
     private static bool HasForgeAttribute(IMethodSymbol method)
@@ -1171,17 +1318,12 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
 
     private static bool HasIgnoreAttribute(ISymbol member)
         => member.GetAttributes().Any(a =>
-            a.AttributeClass?.Name == "ForgeIgnoreAttribute" ||
-            a.AttributeClass?.Name == "ForgeIgnore");
-
-    private static bool HasForgeIgnoreAttribute(ISymbol member)
-        => ShouldIgnoreMember(member, isSourceSide: true) || ShouldIgnoreMember(member, isSourceSide: false);
+            IsForgeAttribute(a, "FreakyKit.Forge.ForgeIgnoreAttribute"));
 
     private static bool ShouldIgnoreMember(ISymbol member, bool isSourceSide)
     {
         var attr = member.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeIgnoreAttribute" ||
-                                  a.AttributeClass?.Name == "ForgeIgnore");
+            .FirstOrDefault(a => IsForgeAttribute(a, "FreakyKit.Forge.ForgeIgnoreAttribute"));
         if (attr == null) return false;
 
         var sideArg = attr.NamedArguments.FirstOrDefault(a => a.Key == "Side");
@@ -1195,8 +1337,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     private static string? GetForgeMapName(ISymbol member)
     {
         var attr = member.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.Name == "ForgeMapAttribute" ||
-                                  a.AttributeClass?.Name == "ForgeMap");
+            .FirstOrDefault(a => IsForgeAttribute(a, "FreakyKit.Forge.ForgeMapAttribute"));
         if (attr != null && attr.ConstructorArguments.Length == 1 && attr.ConstructorArguments[0].Value is string name)
             return name;
         return null;

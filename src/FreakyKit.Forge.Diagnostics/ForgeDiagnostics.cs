@@ -70,6 +70,18 @@ public static class ForgeDiagnostics
         description: "The class has a [Forge] attribute but is not declared partial. The source generator adds a second partial class declaration; without partial, the generated code cannot be merged.");
 
     /// <summary>
+    /// FKF005 (Error): [Forge] is applied to a non-class type (struct, interface, enum, etc.).
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeOnNonClassType = new(
+        id: "FKF005",
+        title: "Forge attribute on non-class type",
+        messageFormat: "[Forge] on '{0}' has no effect. Only static partial classes are supported as forge containers.",
+        category: Category_Mode,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The [Forge] attribute was applied to a struct, interface, record, or other non-class type. The source generator only processes static partial classes.");
+
+    /// <summary>
     /// FKF010 (Warning): A private forge method is ignored because ShouldIncludePrivate is false.
     /// </summary>
     public static readonly DiagnosticDescriptor PrivateMethodIgnored = new(
@@ -522,6 +534,44 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "The source and destination members are both collection types. The generator will map element-by-element using LINQ.");
 
+    /// <summary>
+    /// FKF311 (Info): A same-type mutable collection member is reference-shared with the source
+    /// (rather than deep-copied) because ShareReference is in effect.
+    /// </summary>
+    public static readonly DiagnosticDescriptor SameTypeCollectionShared = new(
+        id: "FKF311",
+        title: "Same-type collection reference-shared",
+        messageFormat: "Member '{0}' is reference-shared with the source collection because ShareReference is true. Mutations to the destination will affect the source.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "When ShareReference is true (method-level or per-member), same-type mutable collection members are assigned by reference rather than copy-constructed. Faster and allocation-free, but the source and destination share the same collection instance, so mutations leak across.");
+
+    /// <summary>
+    /// FKF312 (Info): A same-type mutable custom-class member is reference-shared with the source.
+    /// </summary>
+    public static readonly DiagnosticDescriptor SameTypeReferenceShared = new(
+        id: "FKF312",
+        title: "Same-type reference member shared",
+        messageFormat: "Member '{0}' is the same type '{1}' on both source and destination and is shared by reference. Mutations to the destination will affect the source. Use a distinct DTO type with AllowNestedForging + a forge method to deep-copy.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Same-type reference-typed members (custom classes appearing on both source and destination) are assigned by reference. Forge does not auto-clone custom classes; to get an independent copy, use a distinct DTO type and AllowNestedForging with a forge method that maps the type.");
+
+    /// <summary>
+    /// FKF313 (Warning): Source-side and destination-side [ForgeMap] both set ShareReference to
+    /// conflicting values.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ShareReferenceConflict = new(
+        id: "FKF313",
+        title: "Conflicting ShareReference between source and destination",
+        messageFormat: "Member '{0}': source-side [ForgeMap] sets ShareReference={1} but destination-side sets ShareReference={2}. The destination-side value ({2}) is used.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "When source-side and destination-side [ForgeMap] both explicitly set ShareReference with different values, the destination-side wins (the DTO author's intent for ownership semantics). Remove one of the conflicting attributes to silence this warning.");
+
     // ─── Construction ─────────────────────────────────────────────────────────
 
     /// <summary>
@@ -573,4 +623,65 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "The destination type is abstract, an interface, or a static class and cannot be instantiated with 'new'. Provide a concrete, non-static class as the forge destination.");
+
+    /// <summary>
+    /// FKF504 (Error): GenerateExpression = true is incompatible with update method shape.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionIncompatibleWithUpdate = new(
+        id: "FKF504",
+        title: "Expression generation incompatible with update method",
+        messageFormat: "Forge method '{0}' has GenerateExpression = true but is an update method (void return, two parameters). Expressions can only be generated for create methods.",
+        category: Category_MethodShape,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Expression<Func<TSource, TDest>> properties model pure functions. Update methods modify state in place and have no return value, so no expression can be generated.");
+
+    /// <summary>
+    /// FKF505 (Warning): Before/after hooks are ignored when generating an expression property.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionIgnoresHooks = new(
+        id: "FKF505",
+        title: "Hooks ignored in generated expression",
+        messageFormat: "Forge method '{0}' has GenerateExpression = true but defines a before/after hook; the hook will be invoked from the imperative method but not from the generated expression property.",
+        category: Category_MethodShape,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Expression trees model pure data flow and cannot invoke arbitrary side-effectful methods. Before/after hooks remain wired into the imperative partial method body but are omitted from the generated Expression<Func<,>> property.");
+
+    /// <summary>
+    /// FKF506 (Info): A member was excluded from the generated expression property because its
+    /// conversion has no translatable expression-tree encoding.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionMemberExcluded = new(
+        id: "FKF506",
+        title: "Member excluded from generated expression",
+        messageFormat: "Member '{0}' was excluded from the generated expression property: {1}. The imperative method still maps this member normally.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Some mapping cases (custom converters, conditional null skipping, non-translatable collection materializers) have no equivalent encoding inside an Expression<Func<,>>. The member is mapped normally by the imperative method but omitted from the generated expression property.");
+
+    /// <summary>
+    /// FKF507 (Error): A cycle was detected while inlining nested forge methods into an expression property.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionNestedCycle = new(
+        id: "FKF507",
+        title: "Circular nested forge in expression property",
+        messageFormat: "Expression property for '{0}' cannot be generated because the nested forge call chain contains a cycle: {1}. Inlining would produce infinite source.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Expression properties must inline nested forge methods because EF cannot translate Expression.Invoke. A cycle in the nested call chain (A → B → A or longer) would inline forever. Either break the cycle or remove GenerateExpression from the involved methods.");
+
+    /// <summary>
+    /// FKF508 (Info): A deeply-nested expression property was inlined.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionDeepNesting = new(
+        id: "FKF508",
+        title: "Deep nested-forge inlining in expression property",
+        messageFormat: "Expression property for '{0}' inlines nested forge methods {1} levels deep. The generated source size grows multiplicatively; consider whether flattening or a converter would be cleaner.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Each level of nested-forge inlining substitutes the full body of the nested expression into the outer one. Deep chains can produce large generated source files. This diagnostic fires when depth exceeds 5 to surface the cost; no action is required.");
 }

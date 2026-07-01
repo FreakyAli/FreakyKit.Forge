@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 44 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 45 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -69,6 +69,26 @@ Emitted when a class has `[Forge]` but is not declared `partial`. The source gen
 // Wrong — FKF004
 [Forge]
 public static class MyForges { ... }
+
+// Correct
+[Forge]
+public static partial class MyForges { ... }
+```
+
+### FKF005 — Forge attribute on non-class type
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Mode |
+| **Message** | [Forge] on '{0}' has no effect. Only static partial classes are supported as forge containers. |
+
+Emitted when `[Forge]` is applied to a struct, interface, record struct, or other non-class type. The source generator only processes static partial classes.
+
+```csharp
+// Wrong — FKF005
+[Forge]
+public partial struct MyForges { }
 
 // Correct
 [Forge]
@@ -671,6 +691,82 @@ public static partial class MyForges
 
 The source and destination members are both collection types. The generator maps element-by-element using LINQ (`.ToList()`, `.ToArray()`, or `.Select(x => ...).ToList()` for different element types).
 
+### FKF311 — Same-type collection reference-shared
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}' is reference-shared with the source collection because ShareReference is true. Mutations to the destination will affect the source. |
+
+When `ShareReference = true` is set (method-level via `[ForgeMethod]` or per-member via `[ForgeMap]`), Forge emits direct reference assignment for same-type mutable collections rather than the deep-copy default. This diagnostic fires per affected member as an audit trail: the source and destination will share the same collection instance, so mutations leak across.
+
+```csharp
+[ForgeMethod(ShareReference = true)]
+public static partial PersonDto ToDto(Person source);
+// __result.Tags = source.Tags;    ← reference share, FKF311 fires for Tags
+```
+
+If you didn't intend reference sharing, drop the `ShareReference = true` flag and Forge will deep-copy by default. See [Reference semantics for same-type collections](attributes.md#reference-semantics-for-same-type-collections) for the full reference.
+
+### FKF312 — Same-type reference member shared
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}' is the same type '{1}' on both source and destination and is shared by reference. Mutations to the destination will affect the source. Use a distinct DTO type with AllowNestedForging + a forge method to deep-copy. |
+
+When a same-type **custom class** member appears on both source and destination (e.g. `Address Home { get; set; }` on both sides), Forge cannot auto-clone the value — it only generates property-by-property mapping for explicit forge methods. The destination receives the same instance the source had. Mutations leak across.
+
+This diagnostic always fires for affected members; it cannot be silenced via `ShareReference` (which only affects collections). To get a deep copy, change the destination property to a distinct DTO type and use `AllowNestedForging` with a forge method:
+
+```csharp
+// Wrong — shared reference, FKF312:
+public class Source { public Address Home { get; set; } }
+public class Dest   { public Address Home { get; set; } }   // same type → ref share
+
+// Right — distinct DTO type + forge method:
+public class Source { public Address Home { get; set; } }
+public class Dest   { public AddressDto Home { get; set; } }
+
+[Forge]
+public static partial class MyForges
+{
+    public static partial AddressDto ToAddressDto(Address source);
+
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial Dest ToDest(Source source);
+}
+```
+
+### FKF313 — Conflicting ShareReference between source and destination
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}': source-side [ForgeMap] sets ShareReference={1} but destination-side sets ShareReference={2}. The destination-side value ({2}) is used. |
+
+Both the source-side and destination-side `[ForgeMap]` explicitly set `ShareReference` with different values. The destination-side wins (it bears the consequences of the mapping decision), but the warning surfaces the conflict so you can resolve it.
+
+```csharp
+public class Source
+{
+    [ForgeMap("Tags", ShareReference = true)]    // entity says "share is fine"
+    public List<string> Tags { get; set; }
+}
+
+public class Dest
+{
+    [ForgeMap("Tags", ShareReference = false)]   // DTO says "I want my own copy" — wins
+    public List<string> Tags { get; set; }
+}
+// FKF313 fires. Forge generates the deep-copy form.
+```
+
+To silence the warning, remove one of the conflicting attributes.
+
 ---
 
 ## Construction
@@ -731,3 +827,91 @@ public static partial Dest ToDest(Source source);
 public class ConcreteDest : IDest { ... }
 public static partial ConcreteDest ToDest(Source source);
 ```
+
+### FKF504 — Expression generation incompatible with update method
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MethodShape |
+| **Message** | Forge method '{0}' has GenerateExpression = true but is an update method (void return, two parameters). Expressions can only be generated for create methods. |
+
+`Expression<Func<TSource, TDest>>` models a pure function from source to destination. Update methods
+modify state in place and have no return value, so no expression can be generated. Drop the flag,
+or split the update method into a create method.
+
+```csharp
+// Wrong
+[ForgeMethod(GenerateExpression = true)]
+public static partial void Update(Source source, Dest existing);  // FKF504
+
+// Correct: drop the flag, or convert to a create method
+[ForgeMethod(GenerateExpression = true)]
+public static partial Dest ToDest(Source source);
+```
+
+See [projections.md](projections.md) for the full projection-expression reference.
+
+### FKF505 — Hooks ignored in generated expression
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MethodShape |
+| **Message** | Forge method '{0}' has GenerateExpression = true but defines a before/after hook; the hook will be invoked from the imperative method but not from the generated expression property. |
+
+Expression trees can't invoke arbitrary side-effectful methods. Before/after hooks remain wired
+into the imperative partial method body but are omitted from the generated expression property.
+If the hook performs state changes you need at query time, those changes won't happen when the
+expression is used in `IQueryable.Select`.
+
+### FKF506 — Member excluded from generated expression
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.TypeSafety |
+| **Message** | Member '{0}' was excluded from the generated expression property: {1}. The imperative method still maps this member normally. |
+
+Some mapping cases have no equivalent encoding inside an expression tree:
+
+- **Custom converter** — user-defined static methods aren't translatable to SQL.
+- **`IgnoreIfNull`** — conditional skipping doesn't exist in expression trees; every binding evaluates.
+- **Non-translatable collection materializer** — EF translates only `.ToList()` and `.ToArray()`. Destinations like `HashSet<T>`, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ReadOnlyCollection<T>` are excluded.
+
+The imperative method continues to map the member normally. The expression property emits with the
+remaining translatable members.
+
+### FKF507 — Circular nested forge in expression property
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Expression property for '{0}' cannot be generated because the nested forge call chain contains a cycle: {1}. Inlining would produce infinite source. |
+
+Expression properties inline nested forge methods because EF cannot translate `Expression.Invoke`.
+When two forge methods (or a chain) mutually reference each other via `AllowNestedForging = true`,
+the inliner would recurse forever. Break the cycle by removing one direction, by using a converter,
+or by dropping `GenerateExpression` on the involved methods.
+
+```csharp
+// Wrong: Address.Parent loops back to ToAddressDto
+public class Address { public Address Parent { get; set; } }
+[ForgeMethod(GenerateExpression = true, AllowNestedForging = true)]
+public static partial AddressDto ToAddressDto(Address source);  // FKF507
+```
+
+### FKF508 — Deep nested-forge inlining in expression property
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Expression property for '{0}' inlines nested forge methods {1} levels deep. The generated source size grows multiplicatively; consider whether flattening or a converter would be cleaner. |
+
+Each level of nested-forge inlining substitutes the full body of the nested expression into the
+outer one. Deep chains produce large generated source files. This diagnostic fires when depth
+exceeds five to surface the cost. No action is required — the expression still emits and runs
+correctly. Consider flattening with `AllowFlattening = true` for shallow-but-wide member access if
+the generated source is becoming unwieldy.
