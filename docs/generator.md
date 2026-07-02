@@ -171,10 +171,11 @@ When source and destination members share a name but have different types, the g
 
 1. **Nullable handling** — `Nullable<T>` ↔ `T` conversions
 2. **Enum mapping** — enum-to-enum via cast or name-based switch
-3. **Collection mapping** — collection-to-collection conversions
-4. **Type converter** — `[ForgeConverter]` methods
-5. **Nested forging** — other forge methods (requires `AllowNestedForging = true`)
-6. **Error** — `FKF200` if nothing resolves the mismatch
+3. **Enum ↔ string mapping** — automatic string serialization for enums
+4. **Collection mapping** — collection-to-collection conversions
+5. **Type converter** — `[ForgeConverter]` methods
+6. **Nested forging** — other forge methods (requires `AllowNestedForging = true`)
+7. **Error** — `FKF200` if nothing resolves the mismatch
 
 ### Nullable Handling
 
@@ -188,6 +189,31 @@ When both types are enums:
 
 - **Cast** (default): `(DestEnum)source.Value`
 - **ByName**: switch expression mapping each member by name
+
+### Enum ↔ String Mapping
+
+When one member is an enum and the other is a `string`, automatic conversion is applied:
+
+- **Enum → string**: `source.Status.ToString()`
+- **String → enum**: `Enum.Parse<StatusEnum>(source.Status)` (throws if invalid)
+- **With fallback**: Use `[ForgeMap("Status", DefaultValue = Status.Unknown)]` on the destination property to provide a fallback value when parsing fails: `Enum.TryParse<StatusEnum>(source.Status, out var result) ? result : Status.Unknown`
+
+```csharp
+[Forge]
+public static partial class OrderForges
+{
+    // String → enum (throws if "Cancelled" is not a valid Status value)
+    public static partial Order ToOrder(OrderDto source);
+    // Generates: __result.Status = Enum.Parse<Status>(source.Status);
+    
+    // With fallback value
+    public static partial Order ToOrderSafe(OrderDto source);
+    // If destination property has [ForgeMap(..., DefaultValue = Status.Unknown)],
+    // generates: Enum.TryParse<Status>(source.Status, out var __parsed) ? __parsed : Status.Unknown;
+}
+```
+
+Emits **FKF230** (Info) when enum-string mapping is applied.
 
 ### Collection Mapping
 
@@ -283,6 +309,37 @@ public static partial void Update(Person source, PersonDto existing)
 }
 ```
 
+## Extension Methods
+
+When `GenerateExtensionMethods = true` (the default) on the `[Forge]` attribute, the generator emits an additional **extension method class** alongside the forge class. This enables idiomatic `this` syntax without requiring static method calls.
+
+The extension class is named `{ForgeClassName}Extensions` and lives in the same namespace as the forge class. Each extension method is a thin wrapper that forwards to the corresponding static forge method:
+
+```csharp
+// User code
+[Forge]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+    public static partial void Update(Person source, PersonDto existing);
+}
+
+// Generated extensions (in PersonForges.Forge.g.cs):
+public static class PersonForgesExtensions
+{
+    public static PersonDto ToDto(this Person source) => PersonForges.ToDto(source);
+    public static void Update(this Person source, PersonDto existing) => PersonForges.Update(source, existing);
+}
+
+// Usage: both forms work
+var dto = person.ToDto();                                    // extension syntax
+var dto2 = PersonForges.ToDto(person);                       // static syntax
+```
+
+Extension methods skip collection/dictionary projection methods — only create and update method shapes are wrapped. Set `GenerateExtensionMethods = false` on `[Forge]` to suppress extension method generation entirely.
+
+Extension methods are **only** generated for top-level forge classes. Nested forge classes (classes declared inside other types) do not generate extensions.
+
 ## Generated File
 
 For each forge class, the generator produces a single `.g.cs` file containing:
@@ -293,6 +350,7 @@ For each forge class, the generator produces a single `.g.cs` file containing:
 - `using System.Linq;`
 - The partial class in the same namespace as the original
 - All forge method implementations
+- (If `GenerateExtensionMethods = true`) The extension method class
 
 The file is named `{FullyQualifiedClassName}.Forge.g.cs` (with `.`, `<`, and `>` replaced by underscores).
 

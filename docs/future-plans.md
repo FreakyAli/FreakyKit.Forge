@@ -12,23 +12,19 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
-| 10 | Extension method generation | P1 | High | Low | Biggest ergonomics win for least work |
-| 12 | Implicit numeric conversions | P1 | High | Low | Roslyn API does the heavy lifting |
-| 13 | Enum ↔ string mapping | P1 | High | Low | Eliminates common converter boilerplate |
-| 17 | Null-object fallback | P1 | Medium | Low | One-line change to existing ternary |
-| 7 | Snapshot testing | P1 | High | Low | Protects all future work from regressions |
-| 8 | Circular forge detection | P2 | Medium | Low | Prevents runtime stack overflows |
-| 3 | Computed properties | P2 | High | Medium | Common need, clean design |
-| 14 | Conditional/predicate mapping | P2 | High | Medium | Essential for PATCH/update scenarios |
-| 15 | Multi-level deep flattening | P2 | Medium | Medium | Common in deep domain models |
 | 1 | Production benchmark suite | P2 | Medium | Medium | Partially done already |
-| 9 | Tri-state ShareReference | P2 | Low | Low | Breaking API change, narrow edge case |
-| 16 | Cross-class nested forge | P2 | High | Medium-High | Enables better code organization |
-| 6 | Reverse mapping | P3 | Medium | Medium | Many open design questions |
 | 2 | Polymorphic mapping | P3 | Medium | Medium | Niche but valuable for EF Core TPH |
+| 3 | Computed properties | P2 | High | Medium | Common need, clean design |
 | 4 | Dictionary mapping | P3 | Medium | Medium | Fundamentally different member discovery |
 | 5 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class pipeline changes |
-| 11 | Generic forge methods | P3 | High | High | Complex type parameter resolution |
+| 6 | Reverse mapping | P3 | Medium | Medium | Many open design questions |
+| 7 | Circular forge detection | P2 | Medium | Low | Prevents runtime stack overflows |
+| 8 | Tri-state ShareReference | P2 | Low | Low | Breaking API change, narrow edge case |
+| 9 | Generic forge methods | P3 | High | High | Complex type parameter resolution |
+| 10 | Conditional/predicate mapping | P2 | High | Medium | Essential for PATCH/update scenarios |
+| 11 | Multi-level deep flattening | P2 | Medium | Medium | Common in deep domain models |
+| 12 | Cross-class nested forge | P2 | High | Medium-High | Enables better code organization |
+| 13 | Null-object fallback | P1 | Medium | Low | One-line change to existing ternary |
 
 ---
 
@@ -331,34 +327,7 @@ Many applications need bidirectional mapping — e.g., mapping an entity to a DT
 
 ---
 
-## 7. Snapshot / Approval Testing for Generated Code — `P1`
-
-**Goal:** Add snapshot testing to the generator test suite so that any change in generated output is immediately caught, preventing tests from silently passing when behavior changes.
-
-### Why
-
-Negative-only assertions (`DoesNotContain`) can pass both before and after a behavioral change. This was observed with the init-only property feature — old tests used only negative assertions and continued to pass even though the generated code changed from skipping init-only properties entirely to placing them in object initializers. Snapshot tests compare the full generated output against a golden file, making any change visible.
-
-### Design
-
-- Each generator test scenario gets a corresponding `.verified.cs` golden file
-- Use a library like `Verify` (https://github.com/VerifyTests/Verify) or a simple custom approach:
-  1. Generate code via `RunGenerator`
-  2. Compare against stored golden file
-  3. On mismatch, fail with a diff
-  4. Developer reviews and accepts new output to update the golden file
-
-### Suggested Approach
-
-1. Add `Verify.Xunit` NuGet package to `FreakyKit.Forge.Generator.Tests`
-2. Create a `Snapshots/` folder for `.verified.cs` golden files
-3. Convert key test scenarios (one per mapping feature) to snapshot tests
-4. Keep existing assertion-based tests for targeted checks — snapshots complement, not replace
-5. Add a CI step that fails if any `.received.cs` files are generated (unapproved changes)
-
----
-
-## 8. Circular Forge Detection — `P2`
+## 7. Circular Forge Detection — `P2`
 
 **Goal:** Emit a build-time error when two forge methods form a recursive cycle (A→B with AllowNestedForging calls B→A with AllowNestedForging, which calls A→B, and so on).
 
@@ -382,7 +351,7 @@ With `AllowNestedForging = true`, the generator inlines calls to other forge met
 
 ---
 
-## 9. Tri-State `ShareReference` / `IgnoreIfNull` on `[ForgeMap]` — `P2`
+## 8. Tri-State `ShareReference` / `IgnoreIfNull` on `[ForgeMap]` — `P2`
 
 **Goal:** Allow per-member `[ForgeMap(ShareReference = false)]` to override a method-level `[ForgeMethod(ShareReference = true)]`.
 
@@ -425,35 +394,7 @@ Don't set `ShareReference = true` at the method level if you need per-member con
 
 ---
 
-## 10. Extension Method Generation — `P1`
-
-**Goal:** Generate extension methods so users can write `person.ToDto()` instead of `PersonForges.ToDto(person)`.
-
-### Why
-
-Most competing mappers (Mapperly, Mapster) support extension-method call syntax. It's more idiomatic C# and integrates better with fluent call chains like LINQ pipelines. Currently Forge requires the static-class prefix at every call site, which is verbose and unfamiliar to users coming from other mappers.
-
-### Design
-
-```csharp
-[Forge(GenerateExtensionMethods = true)]
-public static partial class PersonForges
-{
-    public static partial PersonDto ToDto(Person source);
-    // Also generates:
-    // public static PersonDto ToDto(this Person source) => PersonForges.ToDto(source);
-}
-```
-
-A per-method option `[ForgeMethod(AsExtension = true)]` could also work for finer control. The extension method would be a thin wrapper calling the existing forge method — no duplication of mapping logic.
-
-### Complexity
-
-**Low.** The generated extension method is a one-line forwarder. The main consideration is namespace placement — extension methods must be in a static class, which the forge class already is. The method must use `this` on the first parameter.
-
----
-
-## 11. Generic / Open-Generic Forge Methods — `P3`
+## 9. Generic / Open-Generic Forge Methods — `P3`
 
 **Goal:** Support forge methods with type parameters for mapping generic wrapper types like `Result<T>`, `ApiResponse<T>`, or `PagedList<T>`.
 
@@ -483,47 +424,7 @@ public static partial class MyForges
 
 ---
 
-## 12. Implicit Numeric / Widening Type Conversions — `P1`
-
-**Goal:** Automatically handle safe implicit numeric conversions (`int` → `long`, `float` → `double`, `int` → `decimal`) without requiring a `[ForgeConverter]`.
-
-### Why
-
-C# allows these widening conversions implicitly — a hand-written mapper would just write `dest.Amount = source.Amount` and the compiler handles it. Forge currently emits FKF200 (incompatible types) for these, forcing users to write a converter for each pair. This is unnecessary friction for guaranteed-lossless conversions.
-
-### Design
-
-When source and destination types differ, check if a C# implicit conversion exists between them (using Roslyn's `Compilation.ClassifyConversion`). If the conversion is implicit and numeric, emit a direct assignment. Optionally support explicit (narrowing) conversions behind a flag like `[ForgeMethod(AllowExplicitConversions = true)]`, which would emit a cast.
-
-### Complexity
-
-**Low.** Roslyn's `ClassifyConversion` API does the heavy lifting. The main change is adding a check between the existing enum-to-enum and converter-exists checks in the member matching logic.
-
----
-
-## 13. Enum ↔ String Mapping — `P1`
-
-**Goal:** Built-in support for mapping enum values to/from strings without requiring a `[ForgeConverter]` per enum type.
-
-### Why
-
-API DTOs frequently serialize enum values as strings for JSON compatibility. Mapping `Status.Active` to `"Active"` and back is extremely common. Currently each enum-string pair needs a dedicated converter method, which is pure boilerplate.
-
-### Design
-
-When one side is an enum and the other is `string`, automatically generate:
-- Enum → string: `source.Status.ToString()`
-- String → enum: `Enum.Parse<StatusEnum>(source.Status)` (or `Enum.TryParse` with a configurable fallback)
-
-A method-level opt-in like `[ForgeMethod(EnumStringMapping = true)]` could gate this to avoid surprises with accidental enum-string pairs.
-
-### Complexity
-
-**Low.** Detection is straightforward (one side `TypeKind.Enum`, other side `string`). The generated expressions are simple. The main design decision is whether to default to `ToString()`/`Enum.Parse` or support `[EnumMember]` attribute-based name mapping.
-
----
-
-## 14. Conditional / Predicate-Based Mapping — `P2`
+## 10. Conditional / Predicate-Based Mapping — `P2`
 
 **Goal:** Extend `IgnoreIfNull` with `IgnoreIfDefault` and custom predicate support for partial-update scenarios.
 
@@ -562,7 +463,7 @@ public class PatchDto
 
 ---
 
-## 15. Multi-Level Deep Flattening — `P2`
+## 11. Multi-Level Deep Flattening — `P2`
 
 **Goal:** Extend `AllowFlattening` to support 2+ levels of nesting (e.g., `source.Customer.BillingAddress.PostalCode` → `dest.CustomerBillingAddressPostalCode`).
 
@@ -584,7 +485,7 @@ Each intermediate step adds null-safety: `source.Customer?.BillingAddress?.Posta
 
 ---
 
-## 16. Cross-Class Nested Forge Method Discovery — `P2`
+## 12. Cross-Class Nested Forge Method Discovery — `P2`
 
 **Goal:** Allow `AllowNestedForging` to discover forge methods in other `[Forge]`-decorated classes, not just the current one.
 
@@ -613,7 +514,7 @@ Alternatively, the generator could automatically scan all `[Forge]` classes in t
 
 ---
 
-## 17. Null-Object Fallback for Nested Forging — `P1`
+## 13. Null-Object Fallback for Nested Forging — `P1`
 
 **Goal:** Allow configuring what happens when a source member is `null` during nested forging — construct a default destination object instead of returning `null`.
 

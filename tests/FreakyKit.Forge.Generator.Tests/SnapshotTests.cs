@@ -361,6 +361,92 @@ public sealed class SnapshotTests : GeneratorTestBase
         Assert.DoesNotContain("this Person source", generated);
     }
 
+    [Fact]
+    public void EnumStringMapping_EnumToString()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public enum Status { Active, Inactive, Pending }
+                public class Order { public Status Status { get; set; } }
+                public class OrderDto { public string Status { get; set; } = ""; }
+
+                [Forge]
+                public static partial class OrderForges
+                {
+                    public static partial OrderDto ToDto(Order source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+
+        Assert.Contains("__result.Status = source.Status.ToString()", generated);
+        AssertSnapshot(generated);
+    }
+
+    [Fact]
+    public void EnumStringMapping_StringToEnum()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public enum Status { Active, Inactive, Pending }
+                public class OrderDto { public Status Status { get; set; } }
+                public class Order { public string Status { get; set; } = ""; }
+
+                [Forge]
+                public static partial class OrderForges
+                {
+                    public static partial OrderDto ToDto(Order source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+
+        Assert.Contains("System.Enum.Parse<Status>(source.Status)", generated);
+        AssertSnapshot(generated);
+    }
+
+    [Fact]
+    public void EnumStringMapping_StringToEnumWithFallback()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public enum Status { Active, Inactive, Pending }
+                public class Order { public string Status { get; set; } = ""; }
+                public class OrderDto
+                {
+                    [ForgeMap("Status", DefaultValue = Status.Pending)]
+                    public Status Status { get; set; }
+                }
+
+                [Forge]
+                public static partial class OrderForges
+                {
+                    public static partial OrderDto ToDto(Order source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+
+        // Just check that the TryParse pattern is present with fallback
+        Assert.Contains("System.Enum.TryParse<Status>(source.Status, out var __parsed)", generated);
+        Assert.Contains("__parsed :", generated);
+    }
+
     private static int CountOccurrences(string text, string substring)
     {
         int count = 0;

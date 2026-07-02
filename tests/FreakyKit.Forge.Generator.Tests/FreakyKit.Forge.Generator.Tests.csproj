@@ -28,4 +28,8 @@
     <ProjectReference Include="..\..\src\FreakyKit.Forge\FreakyKit.Forge.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Snapshots/**/*.cs" />
+  </ItemGroup>
+
 </Project>

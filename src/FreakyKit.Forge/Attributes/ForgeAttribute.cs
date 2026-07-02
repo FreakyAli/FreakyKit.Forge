@@ -20,4 +20,10 @@ public sealed class ForgeAttribute : Attribute
     /// When false (default), each private forge method emits FKF010 and is ignored.
     /// </summary>
     public bool ShouldIncludePrivate { get; set; } = false;
+
+    /// <summary>
+    /// When true (default), generates extension methods for idiomatic call syntax (e.g., person.ToDto()).
+    /// When false, only static forge methods are generated.
+    /// </summary>
+    public bool GenerateExtensionMethods { get; set; } = true;
 }

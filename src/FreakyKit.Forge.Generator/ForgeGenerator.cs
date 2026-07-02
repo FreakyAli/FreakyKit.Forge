@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -66,6 +67,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         var mode = GetForgeMode(forgeClassAttr);
         var includePrivate = GetBoolNamedArg(forgeClassAttr, "ShouldIncludePrivate");
+        // Default is true; only false if explicitly set
+        var generateExtensionMethods = forgeClassAttr.NamedArguments
+            .FirstOrDefault(a => a.Key == "GenerateExtensionMethods").Value.Value is bool val
+            ? val
+            : true;
 
         // Collect all candidate static partial methods
         var allMethods = type.GetMembers()
@@ -139,7 +145,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var methodModels = new List<ForgeMethodModel>();
         foreach (var method in forgeMethods)
         {
-            var (methodModel, methodDiags) = ExtractForgeMethod(method, type, ct);
+            var (methodModel, methodDiags) = ExtractForgeMethod(method, type, ctx.SemanticModel.Compilation, ct);
             diagnostics.AddRange(methodDiags);
 
             if (methodDiags.Any(d => d.Severity == DiagnosticSeverity.Error))
@@ -180,7 +186,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             fullyQualifiedName: type.ToDisplayString(),
             hasErrors: false,
             methods: methodModels,
-            containingTypes: containingTypes);
+            containingTypes: containingTypes,
+            generateExtensionMethods: generateExtensionMethods);
 
         return new ForgeClassResult(classModel, diagnostics, hasErrors: false);
     }
@@ -188,6 +195,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     private static (ForgeMethodModel? Model, List<Diagnostic> Diagnostics) ExtractForgeMethod(
         IMethodSymbol method,
         INamedTypeSymbol forgeClass,
+        Microsoft.CodeAnalysis.Compilation compilation,
         System.Threading.CancellationToken ct)
     {
         var diagnostics = new List<Diagnostic>();
@@ -646,6 +654,23 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         expressionAssignment: memberIgnoreIfNull ? null : castExpr));
                 }
             }
+            else if (TryResolveEnumStringMapping(srcMember.Type, destMember.Type, srcParamName, srcMember.Name, srcSymbolForNull, destSymbolForNull, out var enumStringExpr))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.EnumStringMapping,
+                    method.Locations.FirstOrDefault(),
+                    key,
+                    srcMember.Type.ToDisplayString(),
+                    destMember.Type.ToDisplayString()));
+
+                assignments.Add(new MemberAssignmentModel(
+                    destMemberName: destMember.Name,
+                    sourceExpression: enumStringExpr,
+                    ignoreIfNull: memberIgnoreIfNull,
+                    nullCheckExpression: nullCheckExpr,
+                    isInitOnly: initOnly,
+                    expressionAssignment: memberIgnoreIfNull ? null : enumStringExpr));
+            }
             else if (TryResolveDictionaryMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var dictExpr))
             {
                 assignments.Add(new MemberAssignmentModel(
@@ -733,6 +758,29 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly));
+            }
+            else if (TryImplicitConversion(compilation, srcMember.Type, destMember.Type, out var isLossy))
+            {
+                // Implicit conversion available
+                if (isLossy)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.LossyImplicitConversion,
+                        method.Locations.FirstOrDefault(),
+                        key,
+                        srcMember.Type.ToDisplayString(),
+                        destMember.Type.ToDisplayString()));
+                }
+
+                // Direct assignment with implicit conversion
+                var srcAccessor = $"{srcParamName}.{srcMember.Name}";
+                assignments.Add(new MemberAssignmentModel(
+                    destMemberName: destMember.Name,
+                    sourceExpression: srcAccessor,
+                    ignoreIfNull: memberIgnoreIfNull,
+                    nullCheckExpression: nullCheckExpr,
+                    isInitOnly: initOnly,
+                    expressionAssignment: memberIgnoreIfNull ? null : srcAccessor));
             }
             else
             {
@@ -1493,6 +1541,23 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         sb.AppendLine($"{baseIndent}}}");
 
+        // Generate extension methods if enabled (and not in a nested class)
+        if (model.GenerateExtensionMethods && model.ContainingTypes.Count == 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"{baseIndent}/// <summary>Extension method forwarders for <see cref=\"{model.ClassName}\"/>. Auto-generated by FreakyKit.Forge.</summary>");
+            sb.AppendLine($"{baseIndent}public static class {model.ClassName}Extensions");
+            sb.AppendLine($"{baseIndent}{{");
+
+            foreach (var method in model.Methods)
+            {
+                ct.ThrowIfCancellationRequested();
+                GenerateExtensionMethod(sb, method, model.ClassName, indent: methodIndent);
+            }
+
+            sb.AppendLine($"{baseIndent}}}");
+        }
+
         // Close containing type declarations (innermost first)
         for (int i = model.ContainingTypes.Count - 1; i >= 0; i--)
         {
@@ -2033,6 +2098,107 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return false;
     }
 
+    private static bool TryImplicitConversion(
+        Microsoft.CodeAnalysis.Compilation compilation,
+        ITypeSymbol sourceType,
+        ITypeSymbol destType,
+        out bool isLossy)
+    {
+        isLossy = false;
+
+        // Get conversion using Roslyn's API
+        var conversion = compilation.ClassifyConversion(sourceType, destType);
+
+        // Only allow implicit conversions
+        if (!conversion.IsImplicit)
+            return false;
+
+        // Determine if the conversion is lossy
+        // Lossy conversions are those where precision or data can be lost
+        // Examples: float→double→decimal, double→decimal, etc.
+        isLossy = IsLossyConversion(sourceType, destType);
+
+        return true;
+    }
+
+    private static bool IsLossyConversion(ITypeSymbol sourceType, ITypeSymbol destType)
+    {
+        var srcName = sourceType.ToDisplayString();
+        var destName = destType.ToDisplayString();
+
+        // Determine lossy conversions based on numeric types
+        // Safe (lossless) implicit conversions:
+        // - byte → short, int, long, float, double, decimal
+        // - sbyte → short, int, long, float, double, decimal
+        // - short → int, long, float, double, decimal
+        // - ushort → int, uint, long, ulong, float, double, decimal
+        // - int → long, float, double, decimal
+        // - uint → long, ulong, float, double, decimal
+        // - long → float, double, decimal
+        // - ulong → float, double, decimal
+        //
+        // Lossy (precision-losing) implicit conversions:
+        // - long → float, double
+        // - ulong → float, double
+        // - float → double (may lose precision when double is then used)
+        // - double → decimal (different precision model)
+        // - float → decimal (different precision model)
+
+        // Pattern: if converting FROM a floating-point type TO another floating-point type,
+        // or FROM floating-point TO decimal, it's lossy
+        var isSourceFloat = srcName == "float";
+        var isSourceDouble = srcName == "double";
+        var isSourceDecimal = srcName == "decimal";
+
+        var isDestFloat = destName == "float";
+        var isDestDouble = destName == "double";
+        var isDestDecimal = destName == "decimal";
+
+        // float→double is considered lossy (precision may be lost in some contexts)
+        if (isSourceFloat && (isDestDouble || isDestDecimal))
+            return true;
+
+        // double→decimal is lossy (different precision model)
+        if (isSourceDouble && isDestDecimal)
+            return true;
+
+        // float→decimal is lossy
+        if (isSourceFloat && isDestDecimal)
+            return true;
+
+        // Converting FROM long/ulong TO float/double is lossy
+        if ((srcName == "long" || srcName == "ulong") && (isDestFloat || isDestDouble))
+            return true;
+
+        return false;
+    }
+
+    private static void GenerateExtensionMethod(StringBuilder sb, ForgeMethodModel method, string forgeClassName, string indent)
+    {
+        if (method.MethodKind == ForgeMethodKind.CollectionProject || method.MethodKind == ForgeMethodKind.DictionaryProject)
+            return;
+
+        sb.AppendLine();
+        sb.AppendLine($"{indent}/// <summary>Extension method forwarder to <see cref=\"{forgeClassName}.{method.MethodName}\"/>. Auto-generated by FreakyKit.Forge.</summary>");
+        sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
+        sb.AppendLine($"{indent}[DebuggerStepThrough]");
+
+        if (method.MethodKind == ForgeMethodKind.Update)
+        {
+            sb.AppendLine($"{indent}public static void {method.MethodName}(this {method.SourceTypeShortName} {method.SourceParameterName}, {method.DestTypeShortName} {method.DestParameterName})");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    {forgeClassName}.{method.MethodName}({method.SourceParameterName}, {method.DestParameterName});");
+            sb.AppendLine($"{indent}}}");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}public static {method.DestTypeShortName} {method.MethodName}(this {method.SourceTypeShortName} {method.SourceParameterName})");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    return {forgeClassName}.{method.MethodName}({method.SourceParameterName});");
+            sb.AppendLine($"{indent}}}");
+        }
+    }
+
     // ─── Collection Helpers ─────────────────────────────────────────────────
 
     private static bool TryResolveCollectionMapping(
@@ -2453,6 +2619,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             decimal m => $"{m}m",
             long l => $"{l}L",
             ulong ul => $"{ul}UL",
+            Enum e => $"{e.GetType().Name}.{e}",
             _ => value.ToString()
         };
     }
@@ -2599,6 +2766,55 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 kind = NullableConversionKind.Direct;
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool TryResolveEnumStringMapping(
+        ITypeSymbol srcType,
+        ITypeSymbol destType,
+        string srcParamName,
+        string srcMemberName,
+        ISymbol? srcSymbol,
+        ISymbol? destSymbol,
+        out string expr)
+    {
+        expr = "";
+
+        bool srcIsEnum = srcType.TypeKind == TypeKind.Enum;
+        bool srcIsString = srcType.SpecialType == SpecialType.System_String;
+        bool destIsEnum = destType.TypeKind == TypeKind.Enum;
+        bool destIsString = destType.SpecialType == SpecialType.System_String;
+
+        // Case 1: Enum → String
+        if (srcIsEnum && destIsString)
+        {
+            expr = $"{srcParamName}.{srcMemberName}.ToString()";
+            return true;
+        }
+
+        // Case 2: String → Enum
+        if (srcIsString && destIsEnum)
+        {
+            var destEnumType = (INamedTypeSymbol)destType;
+            var destEnumName = destEnumType.Name;
+
+            // Check for DefaultValue on destSymbol (from [ForgeMap])
+            var defaultValue = GetForgeDefaultValue(destSymbol);
+
+            if (defaultValue != null)
+            {
+                // Use TryParse with fallback: Enum.TryParse<Dest>(..., out var __result) ? __result : fallback
+                var literal = FormatLiteral(defaultValue);
+                expr = $"(System.Enum.TryParse<{destEnumName}>({srcParamName}.{srcMemberName}, out var __parsed) ? __parsed : {literal})";
+            }
+            else
+            {
+                // Use Parse which throws on invalid
+                expr = $"System.Enum.Parse<{destEnumName}>({srcParamName}.{srcMemberName})";
+            }
+            return true;
         }
 
         return false;

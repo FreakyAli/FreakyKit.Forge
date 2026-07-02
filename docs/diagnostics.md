@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 45 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 46 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -556,6 +556,24 @@ public class Dest   { public int Age { get; set; } }
 
 The source and destination types differ only in nullability. The generator handles this automatically (direct assignment for `T` → `Nullable<T>`, `.Value` for `Nullable<T>` → `T`).
 
+### FKF203 — Lossy implicit conversion
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.TypeSafety |
+| **Message** | Member '{0}': implicit conversion from '{1}' to '{2}' may lose precision or data. |
+
+A source and destination member differ in type, but an implicit conversion exists that may lose precision or data. For example, `float` → `double` (loss of precision due to representation differences), or `long` → `int` (overflow potential).
+
+The generator emits this warning to flag lossy conversions. If you're confident the loss is acceptable, you can suppress it or use an explicit `[ForgeConverter]` to document the intentional conversion. Safe implicit widening conversions (e.g., `byte` → `int`) do not emit this warning.
+
+```csharp
+public class Source { public float Value { get; set; } }
+public class Dest   { public double Value { get; set; } }
+// Generates: __result.Value = source.Value;  // FKF203: float → double may lose precision
+```
+
 ### FKF210 — Enum cast mapping
 
 | | |
@@ -589,6 +607,33 @@ A member of the source enum type has no matching member (by name) in the destina
 ```csharp
 public enum SourceStatus { Active, Inactive, Pending }
 public enum DestStatus { Active, Inactive }  // FKF212: Pending is missing
+```
+
+### FKF230 — Enum ↔ string mapping applied
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.TypeSafety |
+| **Message** | Member '{0}': enum ↔ string mapping from '{1}' to '{2}'. |
+
+One member is an enum and the other is a string. The generator automatically converts between them:
+- Enum → string: `source.Status.ToString()`
+- String → enum: `Enum.Parse<StatusEnum>(source.Status)` (throws if invalid)
+- With fallback: `Enum.TryParse<StatusEnum>(source.Status, out var result) ? result : fallback` (when `[ForgeMap]` provides a `DefaultValue`)
+
+```csharp
+public class Order { public Status Status { get; set; } }
+public class OrderDto { public string Status { get; set; } }
+// FKF230: Enum → string mapping applied (uses ToString())
+
+public class Order { public string Status { get; set; } }
+public class OrderDto
+{
+    [ForgeMap("Status", DefaultValue = Status.Unknown)]
+    public Status Status { get; set; }
+}
+// FKF230: String → enum mapping applied (uses TryParse with fallback)
 ```
 
 ### FKF220 — Type converter used
