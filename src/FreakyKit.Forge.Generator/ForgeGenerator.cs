@@ -2126,48 +2126,19 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var srcName = sourceType.ToDisplayString();
         var destName = destType.ToDisplayString();
 
-        // Determine lossy conversions based on numeric types
-        // Safe (lossless) implicit conversions:
-        // - byte → short, int, long, float, double, decimal
-        // - sbyte → short, int, long, float, double, decimal
-        // - short → int, long, float, double, decimal
-        // - ushort → int, uint, long, ulong, float, double, decimal
-        // - int → long, float, double, decimal
-        // - uint → long, ulong, float, double, decimal
-        // - long → float, double, decimal
-        // - ulong → float, double, decimal
-        //
-        // Lossy (precision-losing) implicit conversions:
-        // - long → float, double
-        // - ulong → float, double
-        // - float → double (may lose precision when double is then used)
-        // - double → decimal (different precision model)
-        // - float → decimal (different precision model)
+        // Note: This method must stay in sync with ForgeAnalyzer.IsLossyConversion
+        // to ensure FKF203 diagnostic is produced consistently in both analyzer and generator paths.
 
-        // Pattern: if converting FROM a floating-point type TO another floating-point type,
-        // or FROM floating-point TO decimal, it's lossy
-        var isSourceFloat = srcName == "float";
-        var isSourceDouble = srcName == "double";
-        var isSourceDecimal = srcName == "decimal";
-
-        var isDestFloat = destName == "float";
-        var isDestDouble = destName == "double";
-        var isDestDecimal = destName == "decimal";
-
-        // float→double is considered lossy (precision may be lost in some contexts)
-        if (isSourceFloat && (isDestDouble || isDestDecimal))
+        // float→double is considered lossy (precision consideration)
+        if (srcName == "float" && destName == "double")
             return true;
 
-        // double→decimal is lossy (different precision model)
-        if (isSourceDouble && isDestDecimal)
+        // int/uint→float is lossy (24-bit mantissa limits precision)
+        if ((srcName == "int" || srcName == "uint") && destName == "float")
             return true;
 
-        // float→decimal is lossy
-        if (isSourceFloat && isDestDecimal)
-            return true;
-
-        // Converting FROM long/ulong TO float/double is lossy
-        if ((srcName == "long" || srcName == "ulong") && (isDestFloat || isDestDouble))
+        // long/ulong→float/double is lossy (precision loss)
+        if ((srcName == "long" || srcName == "ulong") && (destName == "float" || destName == "double"))
             return true;
 
         return false;
