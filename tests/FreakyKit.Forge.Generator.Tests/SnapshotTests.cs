@@ -37,15 +37,18 @@ public sealed class SnapshotTests : GeneratorTestBase
                 $"Review the output and rename .received.cs to .verified.cs to approve.");
         }
 
-        // Compare
+        // Compare with normalized line endings
         var verified = File.ReadAllText(verifiedPath);
-        if (generated != verified)
+        var normalizedGenerated = NormalizeLineEndings(generated);
+        var normalizedVerified = NormalizeLineEndings(verified);
+
+        if (normalizedGenerated != normalizedVerified)
         {
             throw new Xunit.Sdk.XunitException(
                 $"Snapshot mismatch for {testName}:\n" +
                 $"Expected: {verifiedPath}\n" +
                 $"Received: {receivedPath}\n" +
-                $"Diff:\n{CreateDiff(verified, generated)}");
+                $"Diff:\n{CreateDiff(normalizedVerified, normalizedGenerated)}");
         }
 
         // Clean up received file on success
@@ -73,6 +76,11 @@ public sealed class SnapshotTests : GeneratorTestBase
         }
 
         return diff.ToString();
+    }
+
+    private static string NormalizeLineEndings(string text)
+    {
+        return text.Replace("\r\n", "\n").Replace("\r", "\n");
     }
 
     [Fact]
@@ -445,6 +453,34 @@ public sealed class SnapshotTests : GeneratorTestBase
         // Just check that the TryParse pattern is present with fallback
         Assert.Contains("System.Enum.TryParse<Status>(source.Status, out var __parsed)", generated);
         Assert.Contains("__parsed :", generated);
+    }
+
+    [Fact]
+    public void EnumStringMapping_InheritedMember()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public enum Level { Low, Medium, High }
+                public class Item { public string Level { get; set; } = "Low"; }
+                public class ItemBase { public Level Level { get; set; } }
+                public class ItemDto : ItemBase { }
+
+                [Forge]
+                public static partial class ItemForges
+                {
+                    public static partial ItemDto ToDto(Item source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+
+        // Verify enum-string mapping works for inherited member (destSymbol is null case)
+        Assert.Contains("System.Enum.Parse<Level>(source.Level)", generated);
     }
 
     private static int CountOccurrences(string text, string substring)

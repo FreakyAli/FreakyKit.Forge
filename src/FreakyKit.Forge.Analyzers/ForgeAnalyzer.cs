@@ -1278,27 +1278,16 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         var srcName = sourceType.ToDisplayString();
         var destName = destType.ToDisplayString();
 
-        // Determine lossy conversions based on numeric types
-        var isSourceFloat = srcName == "float";
-        var isSourceDouble = srcName == "double";
-
-        var isDestDouble = destName == "double";
-        var isDestDecimal = destName == "decimal";
-
-        // float→double is considered lossy
-        if (isSourceFloat && (isDestDouble || isDestDecimal))
+        // float→double is considered lossy (precision consideration)
+        if (srcName == "float" && destName == "double")
             return true;
 
-        // double→decimal is lossy
-        if (isSourceDouble && isDestDecimal)
+        // int/uint→float is lossy (24-bit mantissa limits precision)
+        if ((srcName == "int" || srcName == "uint") && destName == "float")
             return true;
 
-        // float→decimal is lossy
-        if (isSourceFloat && isDestDecimal)
-            return true;
-
-        // Converting FROM long/ulong TO float/double is lossy
-        if ((srcName == "long" || srcName == "ulong") && (isDestDouble || destName == "float"))
+        // long/ulong→float/double is lossy (precision loss)
+        if ((srcName == "long" || srcName == "ulong") && (destName == "float" || destName == "double"))
             return true;
 
         return false;

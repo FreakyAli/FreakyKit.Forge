@@ -564,7 +564,10 @@ The source and destination types differ only in nullability. The generator handl
 | **Category** | FreakyKit.Forge.TypeSafety |
 | **Message** | Member '{0}': implicit conversion from '{1}' to '{2}' may lose precision or data. |
 
-A source and destination member differ in type, but an implicit conversion exists that may lose precision or data. For example, `float` → `double` (loss of precision due to representation differences), or `long` → `int` (overflow potential).
+A source and destination member differ in type, but an implicit conversion exists that may lose precision or data. Examples include:
+- `float` → `double`: precision loss due to representation differences
+- `int`/`uint` → `float`: 24-bit mantissa limits precision for large integers
+- `long`/`ulong` → `float`/`double`: significant precision loss
 
 The generator emits this warning to flag lossy conversions. If you're confident the loss is acceptable, you can suppress it or use an explicit `[ForgeConverter]` to document the intentional conversion. Safe implicit widening conversions (e.g., `byte` → `int`) do not emit this warning.
 
@@ -572,6 +575,10 @@ The generator emits this warning to flag lossy conversions. If you're confident 
 public class Source { public float Value { get; set; } }
 public class Dest   { public double Value { get; set; } }
 // Generates: __result.Value = source.Value;  // FKF203: float → double may lose precision
+
+public class Source2 { public int Count { get; set; } }
+public class Dest2   { public float FloatCount { get; set; } }
+// Generates: __result.FloatCount = source.Count;  // FKF203: int → float may lose precision
 ```
 
 ### FKF210 — Enum cast mapping

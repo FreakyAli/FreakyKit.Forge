@@ -445,7 +445,7 @@ public static class ForgeDiagnostics
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "A safe implicit conversion was applied, but it may lose precision (e.g., float→double→decimal).");
+        description: "A safe implicit numeric conversion was applied, but it may lose precision. Examples: float->double, int/uint->float, long/ulong->float/double.");
 
     /// <summary>
     /// FKF210 (Info): An enum cast mapping was applied from source to destination enum type.
@@ -525,7 +525,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor EnumStringMapping = new(
         id: "FKF230",
         title: "Enum ↔ string mapping applied",
-        messageFormat: "Member '{0}': enum ↔ string mapping from '{1}' to '{2}'.",
+        messageFormat: "Member '{0}': enum ↔ string mapping from '{1}' to '{2}'",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,

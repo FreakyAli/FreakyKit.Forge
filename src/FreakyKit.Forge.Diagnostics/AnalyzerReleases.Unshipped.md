@@ -33,12 +33,14 @@ FKF112 | FreakyKit.Forge.MemberMatching | Warning |
 FKF200 | FreakyKit.Forge.TypeSafety | Error |
 FKF201 | FreakyKit.Forge.TypeSafety | Warning |
 FKF202 | FreakyKit.Forge.TypeSafety | Info |
+FKF203 | FreakyKit.Forge.TypeSafety | Warning |
 FKF210 | FreakyKit.Forge.TypeSafety | Info |
 FKF211 | FreakyKit.Forge.TypeSafety | Info |
 FKF212 | FreakyKit.Forge.TypeSafety | Warning |
 FKF220 | FreakyKit.Forge.TypeSafety | Info |
 FKF221 | FreakyKit.Forge.TypeSafety | Warning |
 FKF222 | FreakyKit.Forge.TypeSafety | Warning |
+FKF230 | FreakyKit.Forge.TypeSafety | Info |
 FKF300 | FreakyKit.Forge.Nested | Warning |
 FKF310 | FreakyKit.Forge.Nested | Info |
 FKF311 | FreakyKit.Forge.Nested | Info |

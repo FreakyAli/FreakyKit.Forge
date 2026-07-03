@@ -2801,7 +2801,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             var destEnumName = destEnumType.Name;
 
             // Check for DefaultValue on destSymbol (from [ForgeMap])
-            var defaultValue = GetForgeDefaultValue(destSymbol);
+            var defaultValue = destSymbol != null ? GetForgeDefaultValue(destSymbol) : null;
 
             if (defaultValue != null)
             {
