@@ -172,10 +172,12 @@ When source and destination members share a name but have different types, the g
 1. **Nullable handling** — `Nullable<T>` ↔ `T` conversions
 2. **Enum mapping** — enum-to-enum via cast or name-based switch
 3. **Enum ↔ string mapping** — automatic string serialization for enums
-4. **Collection mapping** — collection-to-collection conversions
-5. **Type converter** — `[ForgeConverter]` methods
-6. **Nested forging** — other forge methods (requires `AllowNestedForging = true`)
-7. **Error** — `FKF200` if nothing resolves the mismatch
+4. **Dictionary mapping** — `Dictionary<K, V1>` → `Dictionary<K, V2>` conversions
+5. **Collection mapping** — collection-to-collection conversions
+6. **Type converter** — `[ForgeConverter]` methods
+7. **Implicit numeric conversions** — safe or lossy implicit conversions (with warnings)
+8. **Nested forging** — other forge methods (requires `AllowNestedForging = true`)
+9. **Error** — `FKF200` if nothing resolves the mismatch
 
 ### Nullable Handling
 
@@ -215,6 +217,22 @@ public static partial class OrderForges
 
 Emits **FKF230** (Info) when enum-string mapping is applied.
 
+### Dictionary Mapping
+
+When both types are dictionaries with matching key types but different value types:
+
+- **Same value type**: `new Dictionary<K, V>(source.Values)`
+- **Different value type with forge method**: `source.Values.ToDictionary(__kvp => __kvp.Key, __kvp => ForgeMethod(__kvp.Value))` (requires `AllowNestedForging = true`)
+- **Reference type source**: Wrapped with null guard: `source.Values != null ? ... : null`
+
+Supports `Dictionary<K, V>` and `IDictionary<K, V>` on both sides. Keys must have the same type; if keys differ, no conversion is attempted.
+
+```csharp
+public class Source { public Dictionary<string, int> Scores { get; set; } }
+public class Dest   { public Dictionary<string, double> Scores { get; set; } }
+// Generates: __result.Scores = source.Scores != null ? source.Scores.ToDictionary(__kvp => __kvp.Key, __kvp => (double)__kvp.Value) : null
+```
+
 ### Collection Mapping
 
 Supported collection types:
@@ -247,6 +265,30 @@ Methods marked with `[ForgeConverter]` are scanned by parameter type → return 
 ```csharp
 __result.Birthday = ConvertDateTime(source.Birthday);
 ```
+
+### Implicit Numeric Conversions
+
+When types differ but an implicit conversion exists, the generator applies it directly. Some implicit conversions may lose precision or data and emit an **FKF203** warning:
+
+**Safe (lossless) implicit conversions** — no warning:
+- `byte` → `short`, `int`, `long`, `float`, `double`, `decimal`
+- `short` → `int`, `long`, `float`, `double`, `decimal`
+- `ushort` → `int`, `uint`, `long`, `ulong`, `float`, `double`, `decimal`
+- `int` → `long`, `double`, `decimal`
+- `uint` → `long`, `ulong`, `double`, `decimal`
+
+**Lossy implicit conversions** — emit **FKF203** (Warning):
+- `float` → `double`: precision may be lost in some contexts
+- `int` / `uint` → `float`: 24-bit mantissa limits precision for large integers
+- `long` / `ulong` → `float` / `double`: significant precision loss
+
+```csharp
+public class Source { public int Count { get; set; } }
+public class Dest   { public float FloatCount { get; set; } }
+// Generates: __result.FloatCount = source.Count;  // FKF203: int → float may lose precision
+```
+
+Use a `[ForgeConverter]` method if you need explicit control over the conversion.
 
 ## Flattening
 
