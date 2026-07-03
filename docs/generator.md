@@ -171,10 +171,13 @@ When source and destination members share a name but have different types, the g
 
 1. **Nullable handling** — `Nullable<T>` ↔ `T` conversions
 2. **Enum mapping** — enum-to-enum via cast or name-based switch
-3. **Collection mapping** — collection-to-collection conversions
-4. **Type converter** — `[ForgeConverter]` methods
-5. **Nested forging** — other forge methods (requires `AllowNestedForging = true`)
-6. **Error** — `FKF200` if nothing resolves the mismatch
+3. **Enum ↔ string mapping** — automatic string serialization for enums
+4. **Dictionary mapping** — `Dictionary<K, V1>` → `Dictionary<K, V2>` conversions
+5. **Collection mapping** — collection-to-collection conversions
+6. **Type converter** — `[ForgeConverter]` methods
+7. **Implicit numeric conversions** — safe or lossy implicit conversions (with warnings)
+8. **Nested forging** — other forge methods (requires `AllowNestedForging = true`)
+9. **Error** — `FKF200` if nothing resolves the mismatch
 
 ### Nullable Handling
 
@@ -188,6 +191,47 @@ When both types are enums:
 
 - **Cast** (default): `(DestEnum)source.Value`
 - **ByName**: switch expression mapping each member by name
+
+### Enum ↔ String Mapping
+
+When one member is an enum and the other is a `string`, automatic conversion is applied:
+
+- **Enum → string**: `source.Status.ToString()`
+- **String → enum**: `Enum.Parse<StatusEnum>(source.Status)` (throws if invalid)
+- **With fallback**: Use `[ForgeMap("Status", DefaultValue = Status.Unknown)]` on the destination property to provide a fallback value when parsing fails: `Enum.TryParse<StatusEnum>(source.Status, out var result) ? result : Status.Unknown`
+
+```csharp
+[Forge]
+public static partial class OrderForges
+{
+    // String → enum (throws if "Cancelled" is not a valid Status value)
+    public static partial Order ToOrder(OrderDto source);
+    // Generates: __result.Status = Enum.Parse<Status>(source.Status);
+    
+    // With fallback value
+    public static partial Order ToOrderSafe(OrderDto source);
+    // If destination property has [ForgeMap(..., DefaultValue = Status.Unknown)],
+    // generates: Enum.TryParse<Status>(source.Status, out var __parsed) ? __parsed : Status.Unknown;
+}
+```
+
+Emits **FKF230** (Info) when enum-string mapping is applied.
+
+### Dictionary Mapping
+
+When both types are dictionaries with matching key types but different value types:
+
+- **Same value type**: `new Dictionary<K, V>(source.Values)`
+- **Different value type with forge method**: `source.Values.ToDictionary(__kvp => __kvp.Key, __kvp => ForgeMethod(__kvp.Value))` (requires `AllowNestedForging = true`)
+- **Reference type source**: Wrapped with null guard: `source.Values != null ? ... : null`
+
+Supports `Dictionary<K, V>` and `IDictionary<K, V>` on both sides. Keys must have the same type; if keys differ, no conversion is attempted.
+
+```csharp
+public class Source { public Dictionary<string, int> Scores { get; set; } }
+public class Dest   { public Dictionary<string, double> Scores { get; set; } }
+// Generates: __result.Scores = source.Scores != null ? source.Scores.ToDictionary(__kvp => __kvp.Key, __kvp => (double)__kvp.Value) : null
+```
 
 ### Collection Mapping
 
@@ -221,6 +265,30 @@ Methods marked with `[ForgeConverter]` are scanned by parameter type → return 
 ```csharp
 __result.Birthday = ConvertDateTime(source.Birthday);
 ```
+
+### Implicit Numeric Conversions
+
+When types differ but an implicit conversion exists, the generator applies it directly. Some implicit conversions may lose precision or data and emit an **FKF203** warning:
+
+**Safe (lossless) implicit conversions** — no warning:
+- `byte` → `short`, `int`, `long`, `float`, `double`, `decimal`
+- `short` → `int`, `long`, `float`, `double`, `decimal`
+- `ushort` → `int`, `uint`, `long`, `ulong`, `float`, `double`, `decimal`
+- `int` → `long`, `double`, `decimal`
+- `uint` → `long`, `ulong`, `double`, `decimal`
+
+**Lossy implicit conversions** — emit **FKF203** (Warning):
+- `float` → `double`: precision may be lost in some contexts
+- `int` / `uint` → `float`: 24-bit mantissa limits precision for large integers
+- `long` / `ulong` → `float` / `double`: significant precision loss
+
+```csharp
+public class Source { public int Count { get; set; } }
+public class Dest   { public float FloatCount { get; set; } }
+// Generates: __result.FloatCount = source.Count;  // FKF203: int → float may lose precision
+```
+
+Use a `[ForgeConverter]` method if you need explicit control over the conversion.
 
 ## Flattening
 
@@ -283,6 +351,37 @@ public static partial void Update(Person source, PersonDto existing)
 }
 ```
 
+## Extension Methods
+
+When `GenerateExtensionMethods = true` (the default) on the `[Forge]` attribute, the generator emits an additional **extension method class** alongside the forge class. This enables idiomatic `this` syntax without requiring static method calls.
+
+The extension class is named `{ForgeClassName}Extensions` and lives in the same namespace as the forge class. Each extension method is a thin wrapper that forwards to the corresponding static forge method:
+
+```csharp
+// User code
+[Forge]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+    public static partial void Update(Person source, PersonDto existing);
+}
+
+// Generated extensions (in PersonForges.Forge.g.cs):
+public static class PersonForgesExtensions
+{
+    public static PersonDto ToDto(this Person source) => PersonForges.ToDto(source);
+    public static void Update(this Person source, PersonDto existing) => PersonForges.Update(source, existing);
+}
+
+// Usage: both forms work
+var dto = person.ToDto();                                    // extension syntax
+var dto2 = PersonForges.ToDto(person);                       // static syntax
+```
+
+Extension methods skip collection/dictionary projection methods — only create and update method shapes are wrapped. Set `GenerateExtensionMethods = false` on `[Forge]` to suppress extension method generation entirely.
+
+Extension methods are **only** generated for top-level forge classes. Nested forge classes (classes declared inside other types) do not generate extensions.
+
 ## Generated File
 
 For each forge class, the generator produces a single `.g.cs` file containing:
@@ -293,6 +392,7 @@ For each forge class, the generator produces a single `.g.cs` file containing:
 - `using System.Linq;`
 - The partial class in the same namespace as the original
 - All forge method implementations
+- (If `GenerateExtensionMethods = true`) The extension method class
 
 The file is named `{FullyQualifiedClassName}.Forge.g.cs` (with `.`, `<`, and `>` replaced by underscores).
 

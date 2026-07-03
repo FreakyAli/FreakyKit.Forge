@@ -764,6 +764,26 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             if (ConverterExists(forgeClass, srcMember.Type, destMember.Type))
                 continue; // Type converter handles this
 
+            // Check for implicit conversion
+            if (TryImplicitConversion(context.Compilation, srcMember.Type, destMember.Type, out var isLossy))
+            {
+                if (isLossy)
+                {
+                    // FKF203: lossy implicit conversion
+                    var loc = forgeMethod.Locations.FirstOrDefault();
+                    if (loc != null)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.LossyImplicitConversion,
+                            loc,
+                            key,
+                            srcMember.Type.ToDisplayString(),
+                            destMember.Type.ToDisplayString()));
+                    }
+                }
+                continue; // Implicit conversion handles this
+            }
+
             // Types differ: check for nested forge
             bool nestedForgeExists = NestedForgeExists(forgeClass, srcMember.Type, destMember.Type);
 
@@ -1230,6 +1250,47 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 m.Parameters.Length == 1 &&
                 m.Parameters[0].Type.ToDisplayString() == sourceType.ToDisplayString() &&
                 m.ReturnType.ToDisplayString() == destType.ToDisplayString());
+    }
+
+    private static bool TryImplicitConversion(
+        Microsoft.CodeAnalysis.Compilation compilation,
+        ITypeSymbol sourceType,
+        ITypeSymbol destType,
+        out bool isLossy)
+    {
+        isLossy = false;
+
+        // Get conversion using Roslyn's API
+        var conversion = compilation.ClassifyConversion(sourceType, destType);
+
+        // Only allow implicit conversions
+        if (!conversion.IsImplicit)
+            return false;
+
+        // Determine if the conversion is lossy
+        isLossy = IsLossyConversion(sourceType, destType);
+
+        return true;
+    }
+
+    private static bool IsLossyConversion(ITypeSymbol sourceType, ITypeSymbol destType)
+    {
+        var srcName = sourceType.ToDisplayString();
+        var destName = destType.ToDisplayString();
+
+        // float→double is considered lossy (precision consideration)
+        if (srcName == "float" && destName == "double")
+            return true;
+
+        // int/uint→float is lossy (24-bit mantissa limits precision)
+        if ((srcName == "int" || srcName == "uint") && destName == "float")
+            return true;
+
+        // long/ulong→float/double is lossy (precision loss)
+        if ((srcName == "long" || srcName == "ulong") && (destName == "float" || destName == "double"))
+            return true;
+
+        return false;
     }
 
     private static bool IsForgeMethodCandidate(IMethodSymbol method)

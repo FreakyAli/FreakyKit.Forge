@@ -15,6 +15,7 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
     public string Accessibility { get; }
     public string FullyQualifiedName { get; }
     public bool HasErrors { get; }
+    public bool GenerateExtensionMethods { get; }
     public IReadOnlyList<ForgeMethodModel> Methods { get; }
 
     /// <summary>
@@ -30,13 +31,15 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
         string fullyQualifiedName,
         bool hasErrors,
         IReadOnlyList<ForgeMethodModel> methods,
-        IReadOnlyList<ContainingTypeInfo>? containingTypes = null)
+        IReadOnlyList<ContainingTypeInfo>? containingTypes = null,
+        bool generateExtensionMethods = true)
     {
         Namespace = @namespace;
         ClassName = className;
         Accessibility = accessibility;
         FullyQualifiedName = fullyQualifiedName;
         HasErrors = hasErrors;
+        GenerateExtensionMethods = generateExtensionMethods;
         Methods = methods;
         ContainingTypes = containingTypes ?? Array.Empty<ContainingTypeInfo>();
     }
@@ -49,6 +52,7 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
             && Accessibility == other.Accessibility
             && FullyQualifiedName == other.FullyQualifiedName
             && HasErrors == other.HasErrors
+            && GenerateExtensionMethods == other.GenerateExtensionMethods
             && Methods.SequenceEqual(other.Methods)
             && ContainingTypes.SequenceEqual(other.ContainingTypes);
     }
@@ -65,6 +69,7 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
             hash = hash * 31 + (Accessibility?.GetHashCode() ?? 0);
             hash = hash * 31 + (FullyQualifiedName?.GetHashCode() ?? 0);
             hash = hash * 31 + HasErrors.GetHashCode();
+            hash = hash * 31 + GenerateExtensionMethods.GetHashCode();
             return hash;
         }
     }

@@ -436,6 +436,18 @@ public static class ForgeDiagnostics
         description: "The source and destination types differ only in nullability. The generator handles this automatically.");
 
     /// <summary>
+    /// FKF203 (Warning): A potentially lossy implicit numeric conversion was applied.
+    /// </summary>
+    public static readonly DiagnosticDescriptor LossyImplicitConversion = new(
+        id: "FKF203",
+        title: "Lossy implicit conversion",
+        messageFormat: "Member '{0}': implicit conversion from '{1}' to '{2}' may lose precision or data",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A safe implicit numeric conversion was applied, but it may lose precision. Examples: float->double, int/uint->float, long/ulong->float/double.");
+
+    /// <summary>
     /// FKF210 (Info): An enum cast mapping was applied from source to destination enum type.
     /// </summary>
     public static readonly DiagnosticDescriptor EnumCastMapping = new(
@@ -506,6 +518,18 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "Two or more methods in the forge class are marked with [ForgeConverter] and handle the same source-to-destination type pair. Only one will be used; the others will be silently ignored by the generator.");
+
+    /// <summary>
+    /// FKF230 (Info): An enum ↔ string mapping was applied for this member.
+    /// </summary>
+    public static readonly DiagnosticDescriptor EnumStringMapping = new(
+        id: "FKF230",
+        title: "Enum ↔ string mapping applied",
+        messageFormat: "Member '{0}': enum ↔ string mapping from '{1}' to '{2}'",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "One member is an enum and the other is a string. The generator automatically converts between them using ToString() for enum→string and Enum.Parse for string→enum.");
 
     // ─── Nested / Collections ────────────────────────────────────────────────
 

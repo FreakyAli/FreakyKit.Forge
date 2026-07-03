@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet test:*)",
+      "Bash(dotnet build:*)",
+      "Bash(find tests/** -name *.trx)",
+      "Bash(cat tests/**/TestResults/*.trx)",
+      "Bash(ls tests/**/*.cs)",
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git branch -l*)",
+      "Bash(gh pr view*)",
+      "Bash(gh issue view*)",
+      "WebFetch(domain:mapperly.riok.app)",
+      "Read(//src/**)",
+      "Read(//tests/**)",
+      "Read(//docs/**)"
+    ]
+  }
+}

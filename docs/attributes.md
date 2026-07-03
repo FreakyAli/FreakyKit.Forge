@@ -47,6 +47,44 @@ public static partial class PersonForges
 }
 ```
 
+#### `GenerateExtensionMethods` (`bool`, default: `true`)
+
+When true, the generator creates an extension method class alongside the forge class, allowing idiomatic chaining syntax like `person.ToDto()` instead of `PersonForges.ToDto(person)`. When false, only static forge methods are generated. Only applies to top-level forge classes — nested forge classes never generate extensions.
+
+The extension methods are thin wrappers that forward to the corresponding static forge methods:
+
+```csharp
+// User code — both styles work when GenerateExtensionMethods = true (default)
+[Forge]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+}
+
+// Generated extension class (PersonForgesExtensions):
+public static class PersonForgesExtensions
+{
+    public static PersonDto ToDto(this Person source) => PersonForges.ToDto(source);
+}
+
+// Usage: idiomatic chaining syntax
+var dto = person.ToDto();
+
+// Both are equivalent; static form still works
+var dto2 = PersonForges.ToDto(person);
+```
+
+Set to `false` to suppress extension method generation:
+
+```csharp
+[Forge(GenerateExtensionMethods = false)]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+    // Only PersonForges.ToDto(person) works; person.ToDto() is not available
+}
+```
+
 ---
 
 ## `[ForgeMethod]`
