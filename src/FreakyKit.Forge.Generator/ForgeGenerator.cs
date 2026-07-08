@@ -49,6 +49,53 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         });
     }
 
+    // ─── Utilities ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Safely get a line number from a method's location. Handles null locations and exceptions.
+    /// </summary>
+    private static int GetSafeLineNumber(IMethodSymbol? method)
+    {
+        if (method?.Locations.Length == 0) return 0;
+        try
+        {
+            var location = method?.Locations[0];
+            if (location == null) return 0;
+            return location.GetLineSpan().StartLinePosition.Line + 1;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Safely get the first location from a method. Returns null if unavailable.
+    /// </summary>
+    private static Location? GetSafeLocation(IMethodSymbol? method)
+    {
+        return method?.Locations.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Build a collection expression with the specified fallback value, avoiding string replacement issues.
+    /// Reconstructs the expression from components rather than post-processing with Replace.
+    /// </summary>
+    private static string BuildCollectionExpressionWithFallback(
+        string sourceAccessor,
+        string? elementForgeMethod,
+        string materializer,
+        string fallback)
+    {
+        string selectPart;
+        if (elementForgeMethod != null)
+            selectPart = $"{sourceAccessor}.Select(x => {elementForgeMethod}(x))";
+        else
+            selectPart = sourceAccessor;
+
+        return $"{sourceAccessor} != null ? {selectPart}{materializer} : {fallback}";
+    }
+
     // ─── Extraction ───────────────────────────────────────────────────────────
 
     private static ForgeClassResult ExtractForgeClass(
@@ -103,7 +150,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ForgeMethodDeclaresBody,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     method.Name));
                 continue;
             }
@@ -125,7 +172,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ForgeMethodNameOverloaded,
-                        m.Locations.FirstOrDefault(),
+                        GetSafeLocation(m),
                         kvp.Key,
                         type.Name));
                 }
@@ -253,7 +300,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // FKF040: info about update mode
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.UpdateModeActivated,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
         }
         else
@@ -280,7 +327,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.ExpressionIncompatibleWithUpdate,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
             generateExpression = false;
         }
@@ -289,7 +336,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.FieldsEnabled,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
         }
 
@@ -320,7 +367,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.UpdateDestinationNoSettableMembers,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     method.Name,
                     destType.Name));
                 return (null, diagnostics);
@@ -372,7 +419,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.FlattenedMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         sourceType.Name,
                         flattenExpr.Replace($"{srcParamName}.", "")));
@@ -432,7 +479,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ShareReferenceConflict,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         srcShareRef.Value ? "true" : "false",
                         destShareRef.Value ? "true" : "false"));
@@ -468,7 +515,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         diagnostics.Add(Diagnostic.Create(
                             ForgeDiagnostics.SameTypeCollectionShared,
-                            method.Locations.FirstOrDefault(),
+                            GetSafeLocation(method),
                             destMember.Name));
                     }
                     // FKF312: warn when a same-type mutable reference type (custom class, not collection)
@@ -484,7 +531,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         diagnostics.Add(Diagnostic.Create(
                             ForgeDiagnostics.SameTypeReferenceShared,
-                            method.Locations.FirstOrDefault(),
+                            GetSafeLocation(method),
                             destMember.Name,
                             srcMember.Type.ToDisplayString()));
                     }
@@ -497,7 +544,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.ExpressionMemberExcluded,
-                                method.Locations.FirstOrDefault(),
+                                GetSafeLocation(method),
                                 destMember.Name,
                                 "IgnoreIfNull has no equivalent in expression trees"));
                         }
@@ -543,7 +590,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     expressionExpr = $"{paramName}.{srcMember.Name}.GetValueOrDefault()";
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.NullableValueTypeMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -598,7 +645,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             // FKF212: source enum member missing in destination
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.EnumMemberMissing,
-                                method.Locations.FirstOrDefault(),
+                                GetSafeLocation(method),
                                 srcField.Name,
                                 srcEnumType.Name,
                                 destEnumType.Name));
@@ -626,7 +673,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.EnumNameMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -646,7 +693,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.EnumCastMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -664,7 +711,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.EnumStringMapping,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     key,
                     srcMember.Type.ToDisplayString(),
                     destMember.Type.ToDisplayString()));
@@ -690,7 +737,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.CollectionMapping,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     key,
                     srcMember.Type.ToDisplayString(),
                     destMember.Type.ToDisplayString()));
@@ -702,7 +749,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name));
                     hasTypeMismatch = true;
                     continue;
@@ -713,15 +760,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.NullFallbackOnValueType,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name));
                 }
 
                 // Apply NullFallback to collection if source is reference type
-                if (srcMember.Type.IsReferenceType && nullFallbackInt == 1) // DefaultConstruct
+                // Generate the correct fallback from the start instead of string replacement
+                if (srcMember.Type.IsReferenceType && nullFallbackInt == 1 && collectionInfo != null) // DefaultConstruct
                 {
-                    // Replace null fallback with [] (empty collection)
-                    collectionExpr = collectionExpr.Replace(" : null", " : []");
+                    // Rebuild the expression with empty collection fallback
+                    collectionExpr = BuildCollectionExpressionWithFallback(
+                        collectionInfo.SourceAccessor!,
+                        collectionInfo.ElementForgeMethod,
+                        collectionInfo.ExpressionMaterializer!,
+                        fallback: "[]");
                 }
 
                 // Expression-mode translatability rules:
@@ -749,7 +801,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         : "non-translatable collection materializer";
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ExpressionMemberExcluded,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         reason));
                 }
@@ -772,7 +824,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 // Type converter found
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ConverterUsed,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     key, converterName!,
                     srcMember.Type.ToDisplayString(),
                     destMember.Type.ToDisplayString()));
@@ -783,7 +835,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ExpressionMemberExcluded,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         $"custom converter '{converterName}' is not translatable to SQL"));
                 }
@@ -802,7 +854,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.LossyImplicitConversion,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -832,7 +884,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         diagnostics.Add(Diagnostic.Create(
                             ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
-                            method.Locations.FirstOrDefault(),
+                            GetSafeLocation(method),
                             destMember.Name));
                         hasTypeMismatch = true;
                         continue;
@@ -843,7 +895,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         diagnostics.Add(Diagnostic.Create(
                             ForgeDiagnostics.NullFallbackOnValueType,
-                            method.Locations.FirstOrDefault(),
+                            GetSafeLocation(method),
                             destMember.Name));
                     }
 
@@ -886,7 +938,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     // FKF200: incompatible types, no forge conversion available — block generation
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.IncompatibleMemberTypes,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -915,7 +967,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 beforeHookName = beforeName;
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.BeforeHookDetected,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     beforeName, method.Name));
             }
             if (m.IsStatic && m.IsPartialDefinition && m.ReturnsVoid && m.Name == afterName &&
@@ -928,7 +980,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 afterHookName = afterName;
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.AfterHookDetected,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     afterName, method.Name));
             }
         }
@@ -938,12 +990,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.ExpressionIgnoresHooks,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
         }
 
         var accessibility = AccessibilityToString(method.DeclaredAccessibility);
-        var sourceLocation = method.Locations.FirstOrDefault();
+        var sourceLocation = GetSafeLocation(method);
         var lineSpan = sourceLocation?.GetLineSpan();
 
         var methodModel = new ForgeMethodModel(
@@ -1002,7 +1054,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.IncompatibleMemberTypes,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     method.Name,
                     srcElemDisplay,
                     destElemDisplay));
@@ -1048,7 +1100,17 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             fullExpr = projExpr;
         }
 
-        var location = method.Locations.FirstOrDefault();
+        var location = GetSafeLocation(method);
+        var lineNumber = 0;
+        try
+        {
+            lineNumber = location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0;
+        }
+        catch
+        {
+            lineNumber = 0;
+        }
+
         var model = new ForgeMethodModel(
             methodName: method.Name,
             accessibility: accessibility,
@@ -1062,7 +1124,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
             methodKind: ForgeMethodKind.CollectionProject,
             sourceFilePath: location?.SourceTree?.FilePath,
-            sourceLineNumber: location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0,
+            sourceLineNumber: lineNumber,
             collectionProjectExpression: fullExpr);
 
         return (model, diagnostics);
@@ -1089,7 +1151,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.IncompatibleMemberTypes,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name,
                 srcKeyType.ToDisplayString(),
                 destKeyType.ToDisplayString()));
@@ -1112,14 +1174,24 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.IncompatibleMemberTypes,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name,
                 srcValDisplay,
                 destValDisplay));
             return (null, diagnostics);
         }
 
-        var location = method.Locations.FirstOrDefault();
+        var location = GetSafeLocation(method);
+        var lineNumber = 0;
+        try
+        {
+            lineNumber = location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0;
+        }
+        catch
+        {
+            lineNumber = 0;
+        }
+
         var model = new ForgeMethodModel(
             methodName: method.Name,
             accessibility: accessibility,
@@ -1133,7 +1205,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
             methodKind: ForgeMethodKind.DictionaryProject,
             sourceFilePath: location?.SourceTree?.FilePath,
-            sourceLineNumber: location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0,
+            sourceLineNumber: lineNumber,
             collectionProjectExpression: valueTransform,
             concreteDictInstantiationName: concreteDictShort);
 

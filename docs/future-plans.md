@@ -1,34 +1,150 @@
 # Future Plans
 
-Features under consideration for future versions of FreakyKit.Forge. Each section includes enough detail to serve as a starting point for implementation.
+Features and fixes under consideration for future versions of FreakyKit.Forge. Each section includes enough detail to serve as a starting point for implementation.
+
+**Completed:**
+- ✅ Null-object fallback (NullFallback enum) — P1
+- ✅ Circular forge detection (FKF301) — P2
+- ✅ String injection in null fallback — P1
+- ✅ Null reference safety in symbol resolution — P1
 
 ## Priority Matrix
 
 Each feature is prioritized using an **Impact × Effort** matrix:
 
-- **P1 — Do first.** High user impact with low-to-medium implementation effort. These deliver the most value per engineering hour and should be tackled before adding complex features. Includes both user-facing features (extension methods, numeric conversions) and infrastructure (snapshot testing) that protects future work.
-- **P2 — Do next.** Either high impact but requiring significant effort (cross-class nested forging, conditional mapping), or moderate impact with low effort (circular detection, tri-state fix). Worth doing once P1 items are shipped.
-- **P3 — Backlog.** Valuable features with open design questions, high complexity, or niche use cases. These need more design work before implementation (polymorphic mapping, generic methods, dictionary mapping) or have dependency on other features being built first.
+- **P1 — Do first.** Critical bugs or high-impact features with low-to-medium implementation effort. Correctness, security, and infrastructure issues belong here.
+- **P2 — Do next.** Either high-impact features requiring significant effort (cross-class nested forging, conditional mapping), or moderate-impact fixes/features with low effort.
+- **P3 — Backlog.** Valuable features with open design questions, high complexity, or niche use cases. Need more design work before implementation.
 
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
-| 1 | Production benchmark suite | P2 | Medium | Medium | Partially done already |
-| 2 | Polymorphic mapping | P3 | Medium | Medium | Niche but valuable for EF Core TPH |
-| 3 | Computed properties | P2 | High | Medium | Common need, clean design |
-| 4 | Dictionary mapping | P3 | Medium | Medium | Fundamentally different member discovery |
-| 5 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class pipeline changes |
-| 6 | Reverse mapping | P3 | Medium | Medium | Many open design questions |
-| 7 | Circular forge detection | P2 | Medium | Low | Prevents runtime stack overflows |
-| 8 | Tri-state ShareReference | P2 | Low | Low | Breaking API change, narrow edge case |
-| 9 | Generic forge methods | P3 | High | High | Complex type parameter resolution |
-| 10 | Conditional/predicate mapping | P2 | High | Medium | Essential for PATCH/update scenarios |
-| 11 | Multi-level deep flattening | P2 | Medium | Medium | Common in deep domain models |
-| 12 | Cross-class nested forge | P2 | High | Medium-High | Enables better code organization |
-| 13 | Null-object fallback | P1 | Medium | Low | One-line change to existing ternary |
+| 1 | Redundant cycle detection removal | P2 | Medium | Low | Cleanup, remove FKF507 duplicate logic |
+| 2 | Expression assignment mutability | P2 | Medium | Low | Refactor to immutable pattern |
+| 3 | Missing edge case tests | P2 | Medium | Medium | Large member counts, deep generics |
+| 4 | Production benchmark suite | P2 | Medium | Medium | Real-world scenario benchmarking |
+| 5 | Computed properties | P2 | High | Medium | `[ForgeComputed]` for derived members |
+| 6 | Conditional/predicate mapping | P2 | High | Medium | `IgnoreIfDefault` + custom predicates |
+| 7 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
+| 8 | Cross-class nested forge | P2 | High | Medium-High | Discover methods in other classes |
+| 9 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
+| 10 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
+| 11 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
+| 12 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
+| 13 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
+| 14 | Generic forge methods | P3 | High | High | Type parameter support |
 
 ---
 
-## 1. Production-Grade Benchmark Suite — `P2`
+## Remaining Fixes & Features (P2+)
+
+### 1. Redundant Cycle Detection in Expression Inlining — `P2`
+
+**Goal:** Remove duplicate cycle detection from `InlineNestedExpression()` now that `DetectCircularNestedForge()` runs first.
+
+**Issue:** Two independent cycle detectors:
+- `DetectCircularNestedForge()` at line 167 (detects cycles, blocks generation with FKF301)
+- `InlineNestedExpression()` at line 1204+ (re-detects cycles with FKF507)
+
+This is redundant because if FKF301 catches a cycle, we never reach expression inlining. If we DO reach inlining, it means the first detector passed, so FKF507 should never fire.
+
+**Fix:**
+- Remove the cycle detection logic from `InlineNestedExpression()` (lines ~1220-1240)
+- Keep FKF507 diagnostic descriptor in `ForgeDiagnostics.cs` but mark it as "unused / reserved"
+- Add comment explaining why: "Cycles are caught by DetectCircularNestedForge() before reaching this phase"
+
+**Files to modify:**
+- `ForgeGenerator.cs:InlineNestedExpression()` — Remove visited set and cycle checks
+- `ForgeDiagnostics.cs` — Add comment to FKF507 descriptor
+
+**Test impact:** Update `ExpressionGeneratorTests.Phase5_NestedForge_CycleEmitsFKF507_BlocksGeneration()` comment (already done) to reflect this is caught earlier
+
+---
+
+### 2. Expression Assignment Mutability — `P2`
+
+**Goal:** Refactor `ExpressionAssignment` field from mutable to immutable pattern.
+
+**Issue:** `MemberAssignmentModel.cs:23` has mutable field:
+```csharp
+public string? ExpressionAssignment { get; set; } // Can be mutated!
+```
+Mutated in `ForgeGenerator.cs:1338, 1372`:
+```csharp
+assignment.ExpressionAssignment = inlined; // Late mutation
+```
+
+This violates immutability principle and makes caching risky.
+
+**Fix Options:**
+
+1. **Immutable reconstruction** — Create new `MemberAssignmentModel` with updated expression in `ResolveExpressionInlining()`
+2. **Separate builder class** — Keep extraction immutable, use mutable builder for inlining
+3. **Builder pattern** — Construct assignments with inline expressions already resolved
+
+**Recommended:** Option 1 (immutable reconstruction). Add helper method:
+```csharp
+public MemberAssignmentModel WithExpressionAssignment(string expr) =>
+    new(DestMemberName, SourceExpression, ..., expressionAssignment: expr);
+```
+
+**Files to modify:**
+- `MemberAssignmentModel.cs` — Change setter to init-only, add `WithExpressionAssignment()` method
+- `ForgeGenerator.cs:ResolveExpressionInlining()` — Replace mutations with reconstructions
+
+**Test impact:** No test changes needed (existing tests still pass)
+
+---
+
+### 3. Missing Edge Case Tests — `P2`
+
+**Goal:** Add parameterized tests for extreme scenarios to catch performance cliffs and edge cases.
+
+**Missing scenarios:**
+
+1. **Large member counts** — Methods with 50, 100, 200+ members
+   - Why: Risk of O(n²) member matching or string concatenation
+   - Test: Benchmark time/memory as member count increases
+
+2. **Deeply nested generics** — `Generic<Generic<Generic<T>>>`
+   - Why: Type resolution could fail or produce invalid generated code
+   - Test: Verify code generates and compiles correctly
+
+3. **ForgeMap name conflicts** — Two members mapping to same name
+   - Why: Should emit FKF105 (duplicate target), not silent overwrite
+   - Test: Verify diagnostic is emitted
+
+4. **Expression property suppression** — All members excluded from expression
+   - Why: Should skip property emission entirely
+   - Test: Verify only imperative method generated, no expression property
+
+5. **NullFallback string boundary case** — Collection with complex nested ternary
+   - Why: The string replacement bug (issue #1) could corrupt nested expressions
+   - Test: Verify ` : null` at end only, nested ternaries preserved
+
+6. **Circular collection element forge** — Collections with circular element converters
+   - Why: FKF301 should catch this
+   - Test: Multiple nested collection levels with cycle
+
+**Files to add:**
+- `tests/FreakyKit.Forge.Generator.Tests/EdgeCaseGeneratorTests.cs` — Parameterized test class
+
+**Suggested structure:**
+```csharp
+[Theory]
+[InlineData(10)]
+[InlineData(50)]
+[InlineData(100)]
+public void LargeMemberCount_GeneratesValidCode(int memberCount)
+{
+    // Generate class with N properties, verify generation succeeds
+}
+```
+
+---
+
+## Features (P2+)
+
+### 4. Production-Grade Benchmark Suite — `P2`
 
 **Goal:** Expand the benchmark suite beyond synthetic micro-benchmarks to include real-world mapping scenarios sourced from open-source production codebases, giving a more honest picture of performance under realistic conditions.
 
@@ -54,7 +170,7 @@ The current benchmarks cover well-defined scenarios — simple flat mappings, fi
 
 ---
 
-## 2. Derived Type / Polymorphic Mapping — `P3`
+## 7. Derived Type / Polymorphic Mapping — `P3`
 
 **Goal:** Map a base type to different destination DTOs based on a discriminator property, supporting EF Core / TPH inheritance hierarchies.
 
@@ -118,7 +234,7 @@ public static partial class AnimalForges
 
 ---
 
-## 3. Computed Properties via `[ForgeComputed]` — `P2`
+## 8. Computed Properties via `[ForgeComputed]` — `P2`
 
 **Goal:** Allow users to define computed destination properties using type-safe methods on the forge class, rather than string-based expressions.
 
@@ -170,7 +286,7 @@ A string-based approach like `[ForgeMap(Compute = "source.FirstName + ...")]` wa
 
 ---
 
-## 4. Dictionary Mapping — `P3`
+## 9. Dictionary Mapping — `P3`
 
 **Goal:** Map between `Dictionary<string, T>` and typed objects by matching dictionary keys to member names.
 
@@ -243,7 +359,7 @@ public static partial class MyForges
 
 ---
 
-## 5. Mapping Profiles / Inheritance — `P3`
+## 10. Mapping Profiles / Inheritance — `P3`
 
 **Goal:** Allow a forge class to reuse mappings defined in another forge class via an `[ForgeIncludes]` attribute.
 
@@ -299,7 +415,7 @@ public static partial class PersonForges
 
 ---
 
-## 6. Reverse Mapping — `P3`
+## 11. Reverse Mapping — `P3`
 
 **Goal:** Automatically generate a reverse mapping method (Dest → Source) from an existing forward mapping (Source → Dest).
 
@@ -351,7 +467,7 @@ With `AllowNestedForging = true`, the generator inlines calls to other forge met
 
 ---
 
-## 8. Tri-State `ShareReference` / `IgnoreIfNull` on `[ForgeMap]` — `P2`
+## 12. Tri-State `ShareReference` / `IgnoreIfNull` on `[ForgeMap]` — `P2`
 
 **Goal:** Allow per-member `[ForgeMap(ShareReference = false)]` to override a method-level `[ForgeMethod(ShareReference = true)]`.
 
@@ -394,7 +510,7 @@ Don't set `ShareReference = true` at the method level if you need per-member con
 
 ---
 
-## 9. Generic / Open-Generic Forge Methods — `P3`
+## 13. Generic / Open-Generic Forge Methods — `P3`
 
 **Goal:** Support forge methods with type parameters for mapping generic wrapper types like `Result<T>`, `ApiResponse<T>`, or `PagedList<T>`.
 
@@ -424,7 +540,7 @@ public static partial class MyForges
 
 ---
 
-## 10. Conditional / Predicate-Based Mapping — `P2`
+## 14. Conditional / Predicate-Based Mapping — `P2`
 
 **Goal:** Extend `IgnoreIfNull` with `IgnoreIfDefault` and custom predicate support for partial-update scenarios.
 
@@ -463,7 +579,7 @@ public class PatchDto
 
 ---
 
-## 11. Multi-Level Deep Flattening — `P2`
+## 15. Multi-Level Deep Flattening — `P2`
 
 **Goal:** Extend `AllowFlattening` to support 2+ levels of nesting (e.g., `source.Customer.BillingAddress.PostalCode` → `dest.CustomerBillingAddressPostalCode`).
 
@@ -485,7 +601,7 @@ Each intermediate step adds null-safety: `source.Customer?.BillingAddress?.Posta
 
 ---
 
-## 12. Cross-Class Nested Forge Method Discovery — `P2`
+## 16. Cross-Class Nested Forge Method Discovery — `P2`
 
 **Goal:** Allow `AllowNestedForging` to discover forge methods in other `[Forge]`-decorated classes, not just the current one.
 

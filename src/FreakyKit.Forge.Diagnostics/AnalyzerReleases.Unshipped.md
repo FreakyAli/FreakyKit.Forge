@@ -42,10 +42,13 @@ FKF221 | FreakyKit.Forge.TypeSafety | Warning
 FKF222 | FreakyKit.Forge.TypeSafety | Warning
 FKF230 | FreakyKit.Forge.TypeSafety | Info
 FKF300 | FreakyKit.Forge.Nested | Warning
+FKF301 | FreakyKit.Forge.Nested | Error
 FKF310 | FreakyKit.Forge.Nested | Info
 FKF311 | FreakyKit.Forge.Nested | Info
 FKF312 | FreakyKit.Forge.Nested | Info
 FKF313 | FreakyKit.Forge.Nested | Warning
+FKF314 | FreakyKit.Forge.Nested | Warning
+FKF315 | FreakyKit.Forge.Nested | Error
 FKF400 | FreakyKit.Forge.MemberDiscovery | Warning
 FKF401 | FreakyKit.Forge.MemberDiscovery | Info
 FKF500 | FreakyKit.Forge.Construction | Error
