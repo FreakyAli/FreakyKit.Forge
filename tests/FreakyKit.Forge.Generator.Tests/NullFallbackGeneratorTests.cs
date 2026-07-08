@@ -265,4 +265,102 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
         // Both imperative and expression should include the fallback
         Assert.Contains("source.Home != null ? ToAddressDto(source.Home) : new AddressDto()", generated);
     }
+
+    [Fact]
+    public void NullFallback_WithHashSet_GeneratesCorrectly()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            using System.Collections.Generic;
+            namespace TestNs
+            {
+                public class Item { public int Id { get; set; } }
+                public class ItemDto { public int Id { get; set; } }
+                public class Source { public HashSet<Item> Items { get; set; } = new(); }
+                public class Dest
+                {
+                    [ForgeMap("Items", NullFallback = NullFallback.DefaultConstruct)]
+                    public HashSet<ItemDto> Items { get; set; } = new();
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowNestedForging = true)]
+                    public static partial Dest ToDest(Source source);
+                    public static partial ItemDto ToItemDto(Item item);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("source.Items != null", generated);
+        Assert.Contains("Enumerable.Empty<object>()", generated);
+    }
+
+    [Fact]
+    public void NullFallback_WithImmutableList_GeneratesCorrectly()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            using System.Collections.Immutable;
+            namespace TestNs
+            {
+                public class Item { public int Id { get; set; } }
+                public class ItemDto { public int Id { get; set; } }
+                public class Source { public ImmutableList<Item> Items { get; set; } = ImmutableList<Item>.Empty; }
+                public class Dest
+                {
+                    [ForgeMap("Items", NullFallback = NullFallback.DefaultConstruct)]
+                    public ImmutableList<ItemDto> Items { get; set; } = ImmutableList<ItemDto>.Empty;
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowNestedForging = true)]
+                    public static partial Dest ToDest(Source source);
+                    public static partial ItemDto ToItemDto(Item item);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("source.Items != null", generated);
+        Assert.Contains("Enumerable.Empty<object>()", generated);
+    }
+
+    [Fact]
+    public void NullFallback_AllMembersIgnored_SkipsExpressionProperty()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Id { get; set; } }
+                public class Dest
+                {
+                    [ForgeMap("Id", IgnoreIfNull = true)]
+                    public int Id { get; set; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(GenerateExpression = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // When all members are ignored, expression property should not be generated
+        Assert.DoesNotContain("public static System.Linq.Expressions.Expression<System.Func<Source, Dest>>", generated);
+    }
 }
