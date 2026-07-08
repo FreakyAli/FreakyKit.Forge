@@ -317,6 +317,37 @@ The nested forge method must:
 - Take the source member's type as its parameter
 - Return the destination member's type
 
+### Null Fallback Behavior
+
+By default, when a source member is null, the nested forge returns null for the destination member. You can customize this with `[ForgeMap(NullFallback = ...)]` on the destination member:
+
+```csharp
+public class Dest
+{
+    // Default behavior: source.Home null → result.Home = null
+    public AddressDto Home { get; set; }
+
+    // Custom behavior: source.Home null → result.Home = new AddressDto()
+    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
+    public AddressDto OtherHome { get; set; }
+}
+
+// Generates:
+// __result.Home = source.Home != null ? ToAddressDto(source.Home) : null;
+// __result.OtherHome = source.Home != null ? ToAddressDto(source.Home) : new AddressDto();
+```
+
+`NullFallback` also works with collections, using `[]` (collection expression syntax) to create an empty collection:
+
+```csharp
+[ForgeMap("Addresses", NullFallback = NullFallback.DefaultConstruct)]
+public List<AddressDto> Addresses { get; set; }
+
+// Generates: __result.Addresses = source.Addresses != null ? ... : [];
+```
+
+For more details, see [`[ForgeMap]` NullFallback](attributes.md#nullfallback) in the attributes reference.
+
 ## Before/After Hooks
 
 The generator scans the forge class for convention-based partial methods:

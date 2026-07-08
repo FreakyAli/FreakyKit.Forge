@@ -689,6 +689,35 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     srcMember.Type.ToDisplayString(),
                     destMember.Type.ToDisplayString()));
 
+                var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
+
+                // FKF313: Error if both IgnoreIfNull and NullFallback are set
+                if (memberIgnoreIfNull && nullFallbackInt != 0)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
+                        method.Locations.FirstOrDefault(),
+                        destMember.Name));
+                    hasTypeMismatch = true;
+                    continue;
+                }
+
+                // FKF314: Warning if NullFallback on value type
+                if (nullFallbackInt != 0 && !srcMember.Type.IsReferenceType)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.NullFallbackOnValueType,
+                        method.Locations.FirstOrDefault(),
+                        destMember.Name));
+                }
+
+                // Apply NullFallback to collection if source is reference type
+                if (srcMember.Type.IsReferenceType && nullFallbackInt == 1) // DefaultConstruct
+                {
+                    // Replace null fallback with [] (empty collection)
+                    collectionExpr = collectionExpr.Replace(" : null", " : []");
+                }
+
                 // Expression-mode translatability rules:
                 //  - Materializer must be .ToList() or .ToArray() (others not translated by EF)
                 //  - IgnoreIfNull semantics have no expression-tree equivalent
@@ -729,7 +758,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     collectionElementForgeMethod: needsInlining ? collectionInfo?.ElementForgeMethod : null,
                     collectionSourceAccessor: needsInlining ? collectionInfo?.SourceAccessor : null,
                     collectionMaterializer: needsInlining ? collectionInfo?.ExpressionMaterializer : null,
-                    collectionSourceIsRefType: needsInlining && collectionInfo != null && collectionInfo.SourceIsRefType));
+                    collectionSourceIsRefType: needsInlining && collectionInfo != null && collectionInfo.SourceIsRefType,
+                    nestedForgeNullFallback: nullFallbackInt));
             }
             else if (FindConverterMethod(forgeClass, srcMember.Type, destMember.Type, out var converterName))
             {
@@ -789,11 +819,42 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 if (nestedForgeExists && allowNested && nestedMethodName != null)
                 {
                     var srcAccess = $"{srcParamName}.{srcMember.Name}";
+                    var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
+
+                    // FKF313: Error if both IgnoreIfNull and NullFallback are set
+                    if (memberIgnoreIfNull && nullFallbackInt != 0)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
+                            method.Locations.FirstOrDefault(),
+                            destMember.Name));
+                        hasTypeMismatch = true;
+                        continue;
+                    }
+
+                    // FKF314: Warning if NullFallback on value type
+                    if (nullFallbackInt != 0 && !srcMember.Type.IsReferenceType)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.NullFallbackOnValueType,
+                            method.Locations.FirstOrDefault(),
+                            destMember.Name));
+                    }
+
                     string nestedExpr;
                     // Null-safe nested access: if source member is a reference type, guard against null
                     if (srcMember.Type.IsReferenceType)
                     {
-                        nestedExpr = $"{srcAccess} != null ? {nestedMethodName}({srcAccess}) : null";
+                        string fallbackExpr;
+                        if (nullFallbackInt == 1) // DefaultConstruct
+                        {
+                            fallbackExpr = $"new {destMember.Type.Name}()";
+                        }
+                        else // 0 = Null (default)
+                        {
+                            fallbackExpr = "null";
+                        }
+                        nestedExpr = $"{srcAccess} != null ? {nestedMethodName}({srcAccess}) : {fallbackExpr}";
                     }
                     else
                     {
@@ -811,7 +872,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         isInitOnly: initOnly,
                         nestedForgeMethodName: nestedMethodName,
                         nestedForgeSourceAccessor: srcAccess,
-                        nestedForgeSourceIsRefType: srcMember.Type.IsReferenceType));
+                        nestedForgeSourceIsRefType: srcMember.Type.IsReferenceType,
+                        nestedForgeNullFallback: nullFallbackInt));
                 }
                 else if (!nestedForgeExists)
                 {
@@ -2576,6 +2638,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 return b;
         }
         return null;
+    }
+
+    private static int GetForgeMapNullFallback(ISymbol? member)
+    {
+        if (member == null) return 0; // NullFallback.Null
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
+        if (attr == null) return 0;
+        foreach (var namedArg in attr.NamedArguments)
+        {
+            if (namedArg.Key == "NullFallback" && namedArg.Value.Value is int intVal)
+                return intVal;
+        }
+        return 0;
     }
 
     private static string FormatLiteral(object value)

@@ -44,6 +44,12 @@ public sealed class ForgeMapAttribute : Attribute
     /// </summary>
     public bool ShareReference { get; set; }
 
+    /// <summary>
+    /// Controls what happens when a source member is null during nested forging.
+    /// Only applies when the source member is a reference type and <see cref="ForgeMethodAttribute.AllowNestedForging"/> is true.
+    /// </summary>
+    public NullFallback NullFallback { get; set; }
+
     public ForgeMapAttribute(string name)
     {
         Name = name;

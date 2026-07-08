@@ -819,6 +819,55 @@ public class Dest
 
 To silence the warning, remove one of the conflicting attributes.
 
+### FKF314 — NullFallback has no effect on value type
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}': NullFallback has no effect because the source member is a value type and cannot be null. |
+
+`NullFallback` is set on a destination member whose source counterpart is a value type. Value types cannot be null, so the fallback strategy is never invoked. Remove the `NullFallback` attribute to silence this warning.
+
+```csharp
+public struct Address { public string City { get; set; } }
+public class Dest
+{
+    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]  // FKF314
+    public AddressDto Home { get; set; }
+}
+```
+
+### FKF315 — IgnoreIfNull and NullFallback cannot both be set
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}': Both IgnoreIfNull and NullFallback are set. These attributes are mutually exclusive — choose one strategy for handling null values. |
+
+Both `IgnoreIfNull` and `NullFallback` are set on the same member. These attributes represent different strategies for handling null values and cannot be combined:
+
+- **`IgnoreIfNull = true`** — skip the assignment if the source is null (preserve existing value)
+- **`NullFallback = DefaultConstruct`** — construct a default instance if the source is null
+
+Choose one:
+
+```csharp
+// Wrong — FKF315
+[ForgeMap("Home", IgnoreIfNull = true, NullFallback = NullFallback.DefaultConstruct)]
+public AddressDto Home { get; set; }
+
+// Correct — pick one strategy
+[ForgeMap("Home", IgnoreIfNull = true)]
+public AddressDto Home { get; set; }
+
+// OR
+
+[ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
+public AddressDto Home { get; set; }
+```
+
 ---
 
 ## Construction

@@ -596,6 +596,32 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "When source-side and destination-side [ForgeMap] both explicitly set ShareReference with different values, the destination-side wins (the DTO author's intent for ownership semantics). Remove one of the conflicting attributes to silence this warning.");
 
+    /// <summary>
+    /// FKF314 (Warning): NullFallback is set on a value type member, which has no effect
+    /// since value types cannot be null.
+    /// </summary>
+    public static readonly DiagnosticDescriptor NullFallbackOnValueType = new(
+        id: "FKF314",
+        title: "NullFallback has no effect on value type",
+        messageFormat: "Member '{0}': NullFallback has no effect because the source member is a value type and cannot be null.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "NullFallback only applies to reference type members. Value types cannot be null, so the fallback strategy is never used. Remove the NullFallback attribute.");
+
+    /// <summary>
+    /// FKF315 (Error): Both IgnoreIfNull and NullFallback are set on the same member.
+    /// These attributes conflict because they represent different null-handling strategies.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IgnoreIfNullAndNullFallbackConflict = new(
+        id: "FKF315",
+        title: "IgnoreIfNull and NullFallback cannot both be set",
+        messageFormat: "Member '{0}': Both IgnoreIfNull and NullFallback are set. These attributes are mutually exclusive — choose one strategy for handling null values.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "IgnoreIfNull skips assignment when null; NullFallback provides a fallback value when null. Only one can be used per member.");
+
     // ─── Construction ─────────────────────────────────────────────────────────
 
     /// <summary>
