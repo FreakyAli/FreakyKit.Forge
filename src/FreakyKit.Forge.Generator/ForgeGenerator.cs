@@ -162,6 +162,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         if (hasErrors)
             return new ForgeClassResult(null, diagnostics, hasErrors: true);
 
+        // Detect circular nested forge before expression inlining
+        DetectCircularNestedForge(methodModels, forgeMethods, diagnostics);
+        var circularErrors = diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Id == "FKF301");
+        if (circularErrors)
+            return new ForgeClassResult(null, diagnostics, hasErrors: true);
+
         // Phase 5 (expression projections): resolve nested-forge inlining.
         // Walks each GenerateExpression method's assignments and replaces nested-forge markers
         // with inlined expression bodies. Detects cycles (FKF507) and emits info for deep nesting (FKF508).
@@ -1187,6 +1193,108 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             };
         }
         return type.Name;
+    }
+
+    // ─── Circular nested forge detection ───────────────────────────────────────
+
+    /// <summary>
+    /// Detects circular nested forge dependencies and emits FKF301 errors.
+    /// Only checks methods that use nested forging (have assignments with NestedForgeMethodName set).
+    /// </summary>
+    private static void DetectCircularNestedForge(
+        List<ForgeMethodModel> methodModels,
+        List<IMethodSymbol> originalMethods,
+        List<Diagnostic> diagnostics)
+    {
+        var methodSymbolLookup = originalMethods.ToDictionary(m => m.Name, m => m);
+
+        // Build adjacency graph: method name -> set of method names it calls via nested forge
+        var graph = new Dictionary<string, HashSet<string>>();
+        foreach (var method in methodModels)
+        {
+            var callees = new HashSet<string>();
+            foreach (var assignment in method.Assignments)
+            {
+                if (assignment.NestedForgeMethodName != null)
+                    callees.Add(assignment.NestedForgeMethodName);
+                if (assignment.CollectionElementForgeMethod != null)
+                    callees.Add(assignment.CollectionElementForgeMethod);
+            }
+            if (callees.Count > 0)
+                graph[method.MethodName] = callees;
+        }
+
+        var cyclesFound = new HashSet<string>();
+
+        // DFS from each node in the graph to detect cycles
+        foreach (var startMethod in graph.Keys.ToList())
+        {
+            if (cyclesFound.Contains(startMethod)) continue;
+
+            var recursionStack = new HashSet<string>();
+            var path = new List<string>();
+
+            if (DetectCycleDfs(startMethod, graph, recursionStack, path, out var cycle))
+            {
+                var cycleStr = string.Join(" → ", cycle);
+                var methodSym = methodSymbolLookup.TryGetValue(cycle[0], out var sym) ? sym : null;
+
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.CircularNestedForge,
+                    methodSym?.Locations.FirstOrDefault(),
+                    cycleStr));
+
+                // Mark all methods in the cycle as found to avoid duplicate reports
+                foreach (var m in cycle)
+                    cyclesFound.Add(m);
+            }
+        }
+    }
+
+    /// <summary>
+    /// DFS helper to detect cycles in the nested forge graph.
+    /// Uses recursion stack to detect back edges (cycles).
+    /// Returns true if a cycle is found, with the cycle nodes in order.
+    /// </summary>
+    private static bool DetectCycleDfs(
+        string node,
+        Dictionary<string, HashSet<string>> graph,
+        HashSet<string> recursionStack,
+        List<string> path,
+        out List<string> cycle)
+    {
+        cycle = new List<string>();
+
+        if (recursionStack.Contains(node))
+        {
+            // Cycle detected: build the cycle from node to current position
+            var cycleStart = path.IndexOf(node);
+            if (cycleStart >= 0)
+                cycle = new List<string>(path.Skip(cycleStart));
+            cycle.Add(node);
+            return true;
+        }
+
+        recursionStack.Add(node);
+        path.Add(node);
+
+        if (graph.TryGetValue(node, out var callees))
+        {
+            foreach (var callee in callees)
+            {
+                if (DetectCycleDfs(callee, graph, recursionStack, path, out var foundCycle))
+                {
+                    cycle = foundCycle;
+                    recursionStack.Remove(node);
+                    path.RemoveAt(path.Count - 1);
+                    return true;
+                }
+            }
+        }
+
+        recursionStack.Remove(node);
+        path.RemoveAt(path.Count - 1);
+        return false;
     }
 
     // ─── Expression inlining (Phase 5: nested forging) ────────────────────────

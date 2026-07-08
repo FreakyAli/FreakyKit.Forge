@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 46 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 58 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -731,6 +731,35 @@ public static partial class MyForges
     [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonDto ToDtoFixed(Person source);  // OK
 }
+```
+
+### FKF301 — Circular nested forge detected
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Circular nested forge detected: {0}. Circular references prevent code generation. Break the cycle by setting AllowNestedForging=false on one of the methods, or by not using nested forging for one of the member assignments. |
+
+A cycle exists in the nested forge call graph—one forge method calls (directly or indirectly) another forge method that calls back to the first. Since nested forging resolves at compile time, cycles cannot be unwound and block generation for the entire forge class.
+
+To fix it, break the cycle by disabling nested forging on one of the member assignments or on one of the methods:
+
+```csharp
+// Wrong — circular cycle: ToPersonDto → ToAddressDto → ToPersonDto
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToPersonDto(Person source);  // calls ToAddressDto
+
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial AddressDto ToAddressDto(Address source);  // calls ToPersonDto → FKF301
+}
+
+// Fix: Disable nested forging on one method
+[ForgeMethod(AllowNestedForging = false)]
+public static partial AddressDto ToAddressDto(Address source);
 ```
 
 ### FKF310 — Collection mapping applied

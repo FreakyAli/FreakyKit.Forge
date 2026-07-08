@@ -348,6 +348,32 @@ public List<AddressDto> Addresses { get; set; }
 
 For more details, see [`[ForgeMap]` NullFallback](attributes.md#nullfallback) in the attributes reference.
 
+### Circular Forge Detection
+
+The generator detects circular dependencies in nested forging—situations where a forge method with `AllowNestedForging = true` calls another forge method that (directly or indirectly) calls back to the first method. Circles cannot be resolved at compile time and block generation entirely with error **FKF301**.
+
+Example:
+
+```csharp
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToPersonDto(Person source);  // calls ToAddressDto
+
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial AddressDto ToAddressDto(Address source);  // calls ToPersonDto → FKF301 cycle
+}
+
+// Generated code is blocked: "Circular nested forge detected: ToPersonDto → ToAddressDto → ToPersonDto"
+```
+
+To break the cycle, either:
+1. Set `AllowNestedForging = false` on one of the methods
+2. Use `[ForgeMap(..., IgnoreIfNull = true)]` to skip nested forging for a specific member
+
+See [FKF301 — Circular nested forge detected](diagnostics.md#fkf301--circular-nested-forge-detected) for details and examples.
+
 ## Before/After Hooks
 
 The generator scans the forge class for convention-based partial methods:

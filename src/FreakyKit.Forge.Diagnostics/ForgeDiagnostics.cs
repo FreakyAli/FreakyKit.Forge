@@ -547,6 +547,19 @@ public static class ForgeDiagnostics
         description: "Nested forging allows the generator to call another forge method to convert a nested member. Enable it explicitly with AllowNestedForging = true.");
 
     /// <summary>
+    /// FKF301 (Error): Circular nested forge detected—a forge method with AllowNestedForging=true
+    /// calls another forge method that (directly or indirectly) calls back to the first method.
+    /// </summary>
+    public static readonly DiagnosticDescriptor CircularNestedForge = new(
+        id: "FKF301",
+        title: "Circular nested forge detected",
+        messageFormat: "Circular nested forge detected: {0}. Circular references prevent code generation. Break the cycle by setting AllowNestedForging=false on one of the methods, or by not using nested forging for one of the member assignments.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Nested forging creates a directed graph of method-to-method calls. A cycle in this graph (e.g., ToDto calls ToAddressDto which calls back to ToDto) cannot be resolved at compile time. Break the cycle by disabling nested forging on one of the members in the cycle, or by using a distinct type that breaks the loop.");
+
+    /// <summary>
     /// FKF310 (Info): A collection mapping was applied for this member.
     /// </summary>
     public static readonly DiagnosticDescriptor CollectionMapping = new(

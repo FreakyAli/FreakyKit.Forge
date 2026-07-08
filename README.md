@@ -86,7 +86,7 @@ For most projects, add two packages:
 </ItemGroup>
 ```
 
-`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 44 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
+`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 58 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
 
 See the [full installation guide](docs/installation.md) for lightweight setups, the optional conventions package, local development without NuGet, and custom Roslyn tooling.
 
@@ -110,7 +110,8 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 52 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 58 diagnostics across 7 categories guide you at build time
+- **Circular forge detection** — detects and reports circular dependencies in nested forge methods at compile time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
 - **Top-level dictionary projection** — declare a `Dictionary<string, Dest> ToDict(Dictionary<string, Source> source)` method and the generator produces an efficient `foreach`-based conversion
 - **EF Core / IQueryable projection expressions** — add `GenerateExpression = true` and the generator emits a static `Expression<Func<TSource, TDest>>` property alongside the partial method, usable directly in `IQueryable.Select(...)`. Requires EF Core 8+. See [docs/projections.md](docs/projections.md).
