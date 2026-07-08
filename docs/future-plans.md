@@ -312,26 +312,79 @@ Applications using Entity Framework with Table-Per-Hierarchy (TPH) inheritance p
 
 **Design**
 
-Add `[ForgePolymorphic]` attribute (repeatable) on a forge method to generate a switch expression with type patterns:
+Add `[ForgePolymorphic]` attribute (repeatable) on a forge method to generate a switch expression with type patterns. The return type contract must be satisfied by all switch arms.
+
+**Return Type Contract:**
+
+The method's declared return type `TReturn` constrains what each `[ForgePolymorphic]` method can return:
+
+1. **Inheritance hierarchy** (recommended): Each `[ForgePolymorphic]` method returns a type derived from `TReturn`
+   - `AnimalDto` is the base class
+   - `DogDto : AnimalDto` and `CatDto : AnimalDto`
+   - Switch arms return derived types; implicit upcast to `AnimalDto`
+
+2. **Common interface**: Each `[ForgePolymorphic]` method returns a type implementing `TReturn` (if `TReturn` is an interface)
+   - `IAnimalDto` is the common interface
+   - `DogDto : IAnimalDto` and `CatDto : IAnimalDto`
+   - Switch arms return implementing types; implicit conversion to interface
+
+3. **Explicit cast** (fallback if no inheritance): Generated code upcasts each arm
+   - Less type-safe but allows loose coupling
 
 ```csharp
+// Pattern 1: Inheritance hierarchy (recommended)
 [Forge]
 public static partial class AnimalForges
 {
     public static partial AnimalDto MapBase(Animal source);
-    public static partial DogDto MapDog(Dog source);
-    public static partial CatDto MapCat(Cat source);
+    public static partial DogDto MapDog(Dog source) where Dog : Animal;  // returns DogDto : AnimalDto
+    public static partial CatDto MapCat(Cat source) where Cat : Animal;  // returns CatDto : AnimalDto
 
     [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
     [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
     public static partial AnimalDto MapAny(Animal source);
 }
-// Generates: return source switch { Dog => MapDog(...), Cat => MapCat(...), _ => MapBase(...) };
+// Generates:
+// return source switch
+// {
+//     Dog dog => MapDog(dog),      // Returns DogDto, implicitly upcast to AnimalDto
+//     Cat cat => MapCat(cat),      // Returns CatDto, implicitly upcast to AnimalDto
+//     _ => MapBase(source)         // Returns AnimalDto
+// };
 ```
+
+```csharp
+// Pattern 2: Common interface
+[Forge]
+public static partial class AnimalForges
+{
+    public static partial IAnimalDto MapBase(Animal source);
+    public static partial DogDto MapDog(Dog source);      // Returns DogDto : IAnimalDto
+    public static partial CatDto MapCat(Cat source);      // Returns CatDto : IAnimalDto
+
+    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
+    public static partial IAnimalDto MapAny(Animal source);
+}
+// Generates:
+// return source switch
+// {
+//     Dog dog => MapDog(dog),      // Returns DogDto (implicitly implements IAnimalDto)
+//     Cat cat => MapCat(cat),      // Returns CatDto (implicitly implements IAnimalDto)
+//     _ => MapBase(source)         // Returns IAnimalDto
+// };
+```
+
+**Validation & Diagnostics:**
+
+Before generating switch expression, the generator must validate:
+- Each `[ForgePolymorphic]` method's return type is assignable to the method's declared return type
+- If not assignable: emit FKF8xx diagnostic "Return type mismatch" and skip polymorphic generation
+- If no inheritance or interface: emit FKF8xx diagnostic "Polymorphic method return type not compatible with target method" with suggestion to use inheritance or interface
 
 **Complexity**
 
-Medium. Main challenges: verify derived types are assignable, verify referenced methods exist, order patterns (derived before base), handle fallback.
+Medium. Main challenges: return type compatibility validation, switch expression generation with implicit upcasting, pattern ordering (derived before base), unreachable pattern detection.
 
 **Impact**
 
@@ -340,15 +393,22 @@ Medium. Solves EF Core TPH scenarios; eliminates hand-written dispatch logic.
 **Files to Modify**
 
 - `src/FreakyKit.Forge/Attributes/ForgePolymorphicAttribute.cs` — New attribute with `AllowMultiple = true`
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Detect `[ForgePolymorphic]`, generate switch expression
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `IReadOnlyList<PolymorphicMapping> PolymorphicMappings`
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostics for unreachable patterns, invalid method refs
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Detect `[ForgePolymorphic]`, validate return types, generate switch expression
+- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `IReadOnlyList<PolymorphicMapping> PolymorphicMappings`, `bool IsPolymorphicDispatch`
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostics: return type mismatch, unreachable patterns, invalid method refs
 
 **Suggested Approach**
 
-1. Define `[ForgePolymorphic(Type derivedType, string mappingMethodName)]` attribute
+1. Define `[ForgePolymorphic(Type derivedSourceType, string mappingMethodName)]` attribute
 2. In `ExtractMethod`, collect all `[ForgePolymorphic]` attributes
-3. Validate: each derived type is assignable from source parameter, mapping method exists and has correct signature
+3. **Validation phase:**
+   - Verify each derived source type is assignable from method's source parameter type
+   - Verify mapping method exists and has signature `MethodName(derivedSourceType) → ReturnType`
+   - **Verify mapping method's return type is assignable to the main method's return type** (inheritance, interface, or error)
+4. If validation passes, emit switch expression:
+   - Generate pattern for each `[ForgePolymorphic]` mapping (ordered: derived types first)
+   - Generate default arm calling `MapBase` or throwing
+5. Emit FKF8xx diagnostics for return type mismatches, unreachable patterns, invalid references
 4. Generate switch expression: order patterns by inheritance depth (derived first)
 5. Default arm calls base mapping or throws `InvalidOperationException`
 6. Add analyzer diagnostics: unreachable patterns, missing methods, type mismatches
@@ -363,48 +423,124 @@ Many APIs return data as dictionaries (JSON deserialization, configuration syste
 
 **Design**
 
-Detect when method parameter or return type is `Dictionary<string, T>` and generate appropriate key-based access patterns:
+Detect when method parameter or return type is `Dictionary<string, T>` and generate type-safe, policy-driven access patterns. Behavior controlled via optional `[ForgeDictionary]` attribute on the method or destination type.
 
-**Dictionary to object:**
+**Dictionary to object (dict→object):**
 ```csharp
+[ForgeDictionary(KeyCasing = KeyCasingPolicy.Exact, MissingKeyBehavior = MissingKeyPolicy.Throw)]
 public static partial PersonDto FromDict(Dictionary<string, object> source);
-// Generates:
-// __result.Name = (string)source["Name"];
-// __result.Age = (int)source["Age"];
+// Generates (for each destination member):
+// if (!source.ContainsKey("Name")) throw new KeyNotFoundException("Name");
+// __result.Name = (string)source["Name"];  // Direct cast for object dict
+//
+// For numeric: if (!source.ContainsKey("Age")) throw ...;
+// __result.Age = (int)source["Age"];  // Cast to target type
 ```
 
-**Object to dictionary:**
+**Dictionary to object with string values (parse mode):**
 ```csharp
+[ForgeDictionary(KeyCasing = KeyCasingPolicy.Exact, MissingKeyBehavior = MissingKeyPolicy.UseDefault)]
+public static partial PersonDto FromDict(Dictionary<string, string> source);
+// Generates:
+// __result.Name = source.ContainsKey("Name") ? source["Name"] : null;
+// __result.Age = source.ContainsKey("Age") ? int.Parse(source["Age"]) : 0;
+```
+
+**Object to dictionary (object→dict):**
+```csharp
+[ForgeDictionary(KeyCasing = KeyCasingPolicy.Exact, NullValueBehavior = NullValuePolicy.Include)]
 public static partial Dictionary<string, object> ToDict(PersonDto source);
 // Generates:
 // var __result = new Dictionary<string, object>();
-// __result["Name"] = source.Name;
+// __result["Name"] = source.Name;  // Always include, even if null
 // __result["Age"] = source.Age;
 ```
 
+**Type Conversion & Error Policy:**
+
+**Dict-to-object conversions:**
+1. **Dictionary<string, object>**: Direct cast `(TargetType)source["Key"]`
+   - Runtime cast failure if value is wrong type or null → InvalidCastException propagates
+   - For nullable destination: null values are allowed, propagate directly
+   - For non-nullable destination: null values cause InvalidCastException
+
+2. **Dictionary<string, string>**: Parse or convert with fallback
+   - Primitive types: `int.Parse()`, `bool.Parse()`, `decimal.Parse()`, etc.
+   - Enum types: `Enum.Parse<EnumType>(value)`
+   - Parse failures throw `FormatException` (propagate or use MissingKeyBehavior fallback)
+   - DateTime: `DateTime.Parse()` or `DateTime.TryParse()` with MissingKeyBehavior fallback
+   - Nullable types: if value is null or missing, null is assigned; otherwise parse
+
+3. **Unsupported type conversions** (emit diagnostic, skip member):
+   - Complex types without custom converter → FKF7xx diagnostic, member excluded
+   - Collections (List<T>, IEnumerable<T>) from dict values → FKF7xx diagnostic
+   - Nested objects requiring deep mapping → suggest using nested forge instead
+
+**Missing key behavior (configurable via `[ForgeDictionary]`):**
+- `Throw` (default): `if (!source.ContainsKey(key)) throw new KeyNotFoundException(key);`
+- `UseDefault`: `__result.Member = source.ContainsKey(key) ? source[key] : default(T);`
+- `Skip`: No assignment at all if key missing (member left uninitialized or at default)
+- `ReturnNull`: Only valid for nullable destination types; assign null if key missing
+
+**Key casing policy (configurable via `[ForgeDictionary]`):**
+- `Exact` (default): Match member name exactly (`Name` → `"Name"`)
+- `IgnoreCase`: Case-insensitive lookup via `source.Keys.FirstOrDefault(k => k.Equals(memberName, StringComparison.OrdinalIgnoreCase))`
+- `CamelCase`: Convert to camelCase (`PersonFirstName` → `"personFirstName"`)
+- `SnakeCase`: Convert to snake_case (`PersonFirstName` → `"person_first_name"`)
+
+**Null value behavior in object-to-dict (configurable via `[ForgeDictionary]`):**
+- `Include` (default): All values included, even if null → `__result["Name"] = source.Name;`
+- `Skip`: Skip null values → `if (source.Name != null) __result["Name"] = source.Name;`
+
 **Complexity**
 
-Medium. Member discovery logic is inverted (for dict→object, destination members become the key source). Type conversion requires cast expressions for `object` and parse expressions for `string` keys. Construction uses indexer syntax.
+Medium-high. Type conversion logic must handle primitives (cast vs parse), enums, nullable types, and error cases. Key lookup with casing options adds conditional logic. Member discovery is inverted for dict→object. Validation must reject unsupported types with clear diagnostics.
 
 **Impact**
 
-Medium. Solves dynamic-to-static mapping scenarios; commonly needed for API integrations.
+Medium. Solves dynamic-to-static mapping scenarios; commonly needed for JSON deserialization, configuration readers, and API integrations.
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Detect dictionary types, generate indexer-based assignments
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `bool IsDictionaryMapping`
-- `src/FreakyKit.Forge/Attributes/ForgeDictionaryAttribute.cs` — Optional attribute for configuration (key casing, missing-key behavior)
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostics for unsupported dictionary types
+- `src/FreakyKit.Forge/Enums/KeyCasingPolicy.cs` — New enum: Exact, IgnoreCase, CamelCase, SnakeCase
+- `src/FreakyKit.Forge/Enums/MissingKeyPolicy.cs` — New enum: Throw, UseDefault, Skip, ReturnNull
+- `src/FreakyKit.Forge/Enums/NullValuePolicy.cs` — New enum: Include, Skip
+- `src/FreakyKit.Forge/Attributes/ForgeDictionaryAttribute.cs` — New attribute with properties: `KeyCasingPolicy`, `MissingKeyPolicy`, `NullValuePolicy`
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — 
+  - Detect dictionary type in `ExtractMethod`
+  - New private method `GenerateDictToObjectAssignment()` for dict→object conversions
+  - New private method `GenerateObjectToDictAssignment()` for object→dict conversions
+  - Type support validation: reject unsupported types with FKF7xx diagnostic
+- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `bool IsDictionaryMapping`, `DictionaryMappingInfo DictInfo` (stores conversion mode, policies)
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics:
+  - FKF7xx: Unsupported dictionary value type (complex type, collection, etc.)
+  - FKF7xx: Dictionary<TKey, TValue> with non-string key type not supported
+  - FKF7xx: Parse error for Dictionary<string, string> with incompatible destination type
 
 **Suggested Approach**
 
-1. In `ExtractMethod`, detect `Dictionary<TKey, TValue>` parameters/returns
-2. For dict→object: use destination type members as keys (keys inferred from member names)
-3. For object→dict: use source type members (values assigned from source)
-4. Generate `(TargetType)source["Key"]` for object extraction with `ContainsKey` checks
-5. Generate `__result["Key"] = source.Property` for dict building
-6. Support typed dictionaries (`Dictionary<string, object>` and `Dictionary<string, string>`) in v1
+1. Define policy enums: `KeyCasingPolicy`, `MissingKeyPolicy`, `NullValuePolicy`
+2. Define `[ForgeDictionary]` attribute with configurable policies (defaults to safe: Exact, Throw, Include)
+3. In `ExtractMethod`, detect dictionary types:
+   - Accept `Dictionary<string, object>`, `Dictionary<string, string>`, `IReadOnlyDictionary<string, T>` variants
+   - Reject any other TKey or unsupported TValue types with FKF7xx diagnostic
+4. Validate all destination members for type convertibility (reject complex types, collections)
+5. Emit conversion code based on dictionary value type:
+   - `Dictionary<string, object>`: Direct cast `(TargetType)source[GetKey(keyName)]`
+   - `Dictionary<string, string>`: Conditional parse `source.ContainsKey(key) ? TypeConvert(source[key]) : default`
+6. Implement key lookup with casing policy:
+   - Exact: `source[memberName]`
+   - IgnoreCase: `source[source.Keys.FirstOrDefault(k => k.Equals(memberName, OrdinalIgnoreCase))]`
+   - CamelCase/SnakeCase: Transform member name before lookup
+7. Implement missing-key handling:
+   - Throw: Guard with ContainsKey check, throw if not found
+   - UseDefault: Ternary with default(T)
+   - Skip: Emit no assignment
+   - ReturnNull: Ternary with null (only for nullable types, else emit diagnostic)
+8. For object→dict, respect NullValuePolicy:
+   - Include: Always assign
+   - Skip: Guard with null check before assignment
+9. Emit FKF7xx diagnostics for unsupported conversions, impossible combinations (ReturnNull on non-nullable), parse failures on string dict
 
 ---
 
@@ -473,42 +609,78 @@ Many applications need bidirectional mapping — e.g., entity→DTO for API resp
 
 **Design**
 
-Auto-generate a reverse method from an existing forward mapping:
+Auto-generate a reverse method from an existing forward mapping, with explicit validation of invertibility:
 
 ```csharp
 [ForgeMethod(GenerateReverse = true)]
 public static partial PersonDto ToDto(Person source);
 // Also generates: public static partial Person FromDto(PersonDto source);
+// Only if forward mapping is invertible per validation rules below
 ```
 
-The reverse method must correctly handle:
-- `[ForgeMap]` name remappings (if `FirstName` → `FullName`, reverse maps `FullName` → `FirstName`)
-- One-way properties (some members should not be reverse-mapped)
-- Constructor vs property setters on the reverse target type
+**Invertibility Validation (Gating):**
+
+Before generating reverse method, validate that the forward mapping contains **only** these safe patterns:
+- Direct 1:1 member assignments (same type or compatible conversion)
+- `[ForgeMap]` name remappings (reversible: `FirstName → FullName` reverses to `FullName → FirstName`)
+- `[ForgeIgnoreReverse]` marked members (explicitly one-way)
+- Simple nested forge calls where reverse method exists (e.g., if forward calls `ToAddressDto`, reverse calls `FromAddressDto`)
+
+**Non-invertible patterns (emit diagnostic, skip reverse generation):**
+- `[ForgeComputed]` members (computed properties have no source to reverse from)
+- `IgnoreIfNull` or `IgnoreIfDefault` on any member (reverse doesn't know original null/default state)
+- `Condition` (predicate-based) mappings (reverse can't invert conditional logic)
+- Custom `[ForgeConverter]` converters (not guaranteed to be reversible)
+- Nested forge with `AllowFlattening = true` (multi-level flattening not invertible)
+- Members with `[ForgeIgnore]` on source side (those members unmapped in forward)
+
+**Reverse Method Generation (Separate Code Path):**
+
+1. In `ForgeGenerator`, after validating forward mapping is invertible, emit reverse method **separately**
+2. Reverse method does NOT share code paths with forward generation
+3. Build bidirectional mapping table: track each forward `srcMember → dstMember` and emit reverse `dstMember → srcMember`
+4. For nested forge calls: emit corresponding reverse call (e.g., `ToDto` → `FromDto`)
+5. Constructor handling: may differ from forward (destination's constructor in reverse may not match source's)
+6. Preserve null-safety: reverse method honors the same `ShareReference` and value-type handling as forward
 
 **Complexity**
 
-Medium. Main challenges: bidirectional name mapping tracking, one-way property declarations, constructor handling on reverse direction, nested reverse forge methods.
+Medium. Main challenges: exhaustive validation of forward mapping for invertibility, maintaining bidirectional name mapping state, detecting when reverse nested forge methods don't exist, constructor inference on reverse type.
 
 **Impact**
 
-Medium-high. Common pattern in real-world applications; eliminates significant boilerplate.
+Medium-high. Common pattern in real-world applications; eliminates significant boilerplate for read-write APIs.
 
 **Files to Modify**
 
 - `src/FreakyKit.Forge/Attributes/ForgeMethodAttribute.cs` — Add `bool GenerateReverse`, optional `string ReverseMethodName`
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `bool ShouldGenerateReverse`, `string? ReverseMethodName`
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — After generating forward method, generate reverse with inverted member mappings
 - `src/FreakyKit.Forge/Attributes/ForgeIgnoreReverseAttribute.cs` — New attribute for one-way members
+- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `bool ShouldGenerateReverse`, `string? ReverseMethodName`, `bool IsInvertible` (computed during extraction)
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — 
+  - New private method `ValidateInvertible(ForgeMethodModel)` returns bool + diagnostics list
+  - New private method `GenerateReverseMethod(ForgeMethodModel)` as separate code path from `GenerateMethodBody`
+  - In main extraction, after forward body generation, call `ValidateInvertible` before attempting reverse
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics:
+  - FKF6xx: Non-invertible mapping (computed, conditional, flattened, etc.)
+  - FKF6xx: Reverse forge method not found (for nested reverse calls)
+  - FKF6xx: GenerateReverse requires explicit `ReverseMethodName` when name inference impossible
 
 **Suggested Approach**
 
-1. Add `GenerateReverse` flag to `[ForgeMethod]`
-2. After generating forward method, track all name mappings in a bidirectional map
-3. Generate reverse method with inverted mappings (B → A where forward was A → B)
-4. Support `[ForgeIgnoreReverse]` on members to exclude them from reverse
-5. Handle constructor-based construction on reverse (may differ from forward)
-6. For nested forging, recursively look up reverse forge methods
+1. Add `GenerateReverse` flag to `[ForgeMethod]` (default false)
+2. Add `ReverseMethodName` optional string property (defaults to null; auto-infer `ToX` → `FromX` if possible)
+3. In `ExtractMethod`, after collecting member mappings for forward method:
+   - Call `ValidateInvertible(method)` which checks each member assignment against invertibility rules
+   - If any non-invertible pattern found, return false + emit diagnostic
+   - Store result in `ForgeMethodModel.IsInvertible`
+4. If `GenerateReverse = true` AND `IsInvertible = false`, emit diagnostic and skip reverse generation
+5. If `GenerateReverse = true` AND `IsInvertible = true`:
+   - Call separate `GenerateReverseMethod` with no code sharing with forward path
+   - Build name map: for each forward `src.X → dst.Y`, record reverse `dst.Y → src.X`
+   - For each mapped member, emit reverse assignment
+   - For nested forge members, emit reverse method call (validate reverse method exists)
+6. Infer reverse method name: if forward is `ToDto`, reverse is `FromDto`; if inference fails and `ReverseMethodName` not provided, emit diagnostic
+7. Add `[ForgeIgnoreReverse]` support: members with this attribute are skipped in reverse generation (one-way mapping)
 
 ---
 
@@ -520,39 +692,62 @@ Users frequently need to map generic wrapper types (`Result<T>`, `ApiResponse<T>
 
 **Design**
 
-Support type parameters on forge methods:
+Support type parameters on forge methods with deterministic nested type mapping discovery:
 
 ```csharp
 public static partial ApiResponse<TDto> MapResponse<TEntity, TDto>(
     ApiResponse<TEntity> source) 
     where TDto : class;
 // Generates:
-// __result.Data = /* discover mapping TEntity → TDto */;
+// if (source.Data != null)
+// {
+//     __result.Data = MapResponse<Company, CompanyDto>(source.Data);
+// }
 // __result.StatusCode = source.StatusCode;
 // __result.Message = source.Message;
 ```
 
-Type parameter resolution: for nested member `Data : TEntity`, discover a forge method that maps `TEntity → TDto`. Can be parameterized over the same method or a different method.
+**Type Parameter Resolution Rule (V1):**
+
+When a nested member has type `TEntity` (a type parameter), the generator:
+1. Identifies the corresponding type parameter `TDto` from the method signature
+2. Emits a call to the **same generic method** with substituted type arguments
+3. At call sites like `MapResponse<Person, PersonDto>(apiResp)`, the concrete types are `TEntity=Person, TDto=PersonDto`
+4. If nested `Data` contains a `Company`, the generated call becomes `MapResponse<Company, CompanyDto>(nestedData)` — **that overload must exist**
+5. Constraint validation ensures `CompanyDto` satisfies any where clauses (e.g., `where TDto : class`)
+
+**Forbidden patterns** (emit diagnostics):
+- Nested member of unconstrained type parameter (no matching T_dto)
+- Type parameter used in nested forging without a paired mapping parameter
+- Circular type parameter chains
+
+This is **self-recursive generic mapping only in V1** — no discovery of unrelated generic methods.
 
 **Complexity**
 
-High. Must resolve type parameters, validate constraints, generate type-safe code for all instantiations. A reasonable v1 scope: support single or two type parameters with known mapping method names (constraint-based discovery).
+High. Type parameter tracking through nested member resolution, validation of generic method availability at all instantiation points, code generation with preserved type parameter names, and circular dependency detection.
 
 **Impact**
 
-High. Enables generic mapping scenarios with zero boilerplate.
+High. Enables generic mapping scenarios with zero boilerplate for wrapper types and generic DTOs.
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Parse type parameters, resolve in nested forge discovery, validate constraints
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `IReadOnlyList<TypeParameter> TypeParameters`
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostics for unresolved type params, constraint violations
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Parse type parameters, substitute in nested forge discovery, emit generic method calls with substituted type arguments
+- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `IReadOnlyList<TypeParameter> TypeParameters`, add `TypeParameter[] TypeParameterMap` for tracking TEntity↔TDto pairs
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostics: unresolved type params, unpaired type parameters, constraint violations, missing generic overloads
 
 **Suggested Approach**
 
-1. In `ExtractMethod`, detect and parse type parameters and where clauses
-2. For nested forge member of type `TEntity`, try to discover mapping method for `TEntity → TDto`
+1. In `ExtractMethod`, detect and parse type parameters; build TEntity↔TDto mapping from method signature
+2. In nested forge discovery, when encountering a nested member of type `TParam` (a type parameter):
+   - Look up the paired type parameter from the map (e.g., `TEntity` pairs with `TDto`)
+   - Emit a call to the same method name with substituted type arguments: `MethodName<NestedType, PairedType>(nestedMember)`
+   - Verify that overload exists (may be discovered in same pass or assumed to exist by caller)
 3. Validate type parameters satisfy where clause constraints
-4. In code generation, preserve type parameter names in generated code
-5. For v1, require explicit type arguments or constraint-based discovery (no inference ambiguity)
-6. Emit diagnostics: unresolved type params, violated constraints, ambiguous mappings
+4. In code generation, preserve type parameter names exactly as written in the method signature
+5. For V1, do NOT support:
+   - Cross-method generic discovery (e.g., calling a different generic method)
+   - Inference of type parameters from usage (require explicit type arguments at call sites)
+   - Partial generic application (all type parameters must be provided)
+6. Emit diagnostics: unresolved type params, unpaired type parameters, missing generic overloads, constraint violations, circular type dependencies
