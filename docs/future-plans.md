@@ -7,6 +7,11 @@ Features and fixes under consideration for future versions of FreakyKit.Forge. E
 - ✅ Circular forge detection (FKF301) — P2
 - ✅ String injection in null fallback — P1
 - ✅ Null reference safety in symbol resolution — P1
+- ✅ Redundant cycle detection removal (FKF507 dead code) — P2
+- ✅ Edge case tests (partial: large members, deep generics, null fallback boundary) — P2
+
+**Pending Removal (marked for deprecation):**
+- FKF507 diagnostic descriptor — kept for backward compatibility in v1.x, scheduled for removal in v2.0
 
 ## Priority Matrix
 
@@ -18,49 +23,25 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
-| 1 | Redundant cycle detection removal | P2 | Medium | Low | Cleanup, remove FKF507 duplicate logic |
-| 2 | Expression assignment mutability | P2 | Medium | Low | Refactor to immutable pattern |
-| 3 | Missing edge case tests | P2 | Medium | Medium | Large member counts, deep generics |
-| 4 | Production benchmark suite | P2 | Medium | Medium | Real-world scenario benchmarking |
-| 5 | Computed properties | P2 | High | Medium | `[ForgeComputed]` for derived members |
-| 6 | Conditional/predicate mapping | P2 | High | Medium | `IgnoreIfDefault` + custom predicates |
-| 7 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
-| 8 | Cross-class nested forge | P2 | High | Medium-High | Discover methods in other classes |
-| 9 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
-| 10 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
-| 11 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
-| 12 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
-| 13 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
-| 14 | Generic forge methods | P3 | High | High | Type parameter support |
+| 1 | Expression assignment mutability | P2 | Medium | Low | Refactor to immutable pattern |
+| 2 | Missing edge case tests | P2 | Medium | Medium | Large member counts, deep generics |
+| 3 | Production benchmark suite | P2 | Medium | Medium | Real-world scenario benchmarking |
+| 4 | Computed properties | P2 | High | Medium | `[ForgeComputed]` for derived members |
+| 5 | Conditional/predicate mapping | P2 | High | Medium | `IgnoreIfDefault` + custom predicates |
+| 6 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
+| 7 | Cross-class nested forge | P2 | High | Medium-High | Discover methods in other classes |
+| 8 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
+| 9 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
+| 10 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
+| 11 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
+| 12 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
+| 13 | Generic forge methods | P3 | High | High | Type parameter support |
 
 ---
 
 ## Remaining Fixes & Features (P2+)
 
-### 1. Redundant Cycle Detection in Expression Inlining — `P2`
-
-**Goal:** Remove duplicate cycle detection from `InlineNestedExpression()` now that `DetectCircularNestedForge()` runs first.
-
-**Issue:** Two independent cycle detectors:
-- `DetectCircularNestedForge()` at line 167 (detects cycles, blocks generation with FKF301)
-- `InlineNestedExpression()` at line 1204+ (re-detects cycles with FKF507)
-
-This is redundant because if FKF301 catches a cycle, we never reach expression inlining. If we DO reach inlining, it means the first detector passed, so FKF507 should never fire.
-
-**Fix:**
-- Remove the cycle detection logic from `InlineNestedExpression()` (lines ~1220-1240)
-- Keep FKF507 diagnostic descriptor in `ForgeDiagnostics.cs` but mark it as "unused / reserved"
-- Add comment explaining why: "Cycles are caught by DetectCircularNestedForge() before reaching this phase"
-
-**Files to modify:**
-- `ForgeGenerator.cs:InlineNestedExpression()` — Remove visited set and cycle checks
-- `ForgeDiagnostics.cs` — Add comment to FKF507 descriptor
-
-**Test impact:** Update `ExpressionGeneratorTests.Phase5_NestedForge_CycleEmitsFKF507_BlocksGeneration()` comment (already done) to reflect this is caught earlier
-
----
-
-### 2. Expression Assignment Mutability — `P2`
+### 1. Expression Assignment Mutability — `P2`
 
 **Goal:** Refactor `ExpressionAssignment` field from mutable to immutable pattern.
 
@@ -95,7 +76,7 @@ public MemberAssignmentModel WithExpressionAssignment(string expr) =>
 
 ---
 
-### 3. Missing Edge Case Tests — `P2`
+### 2. Missing Edge Case Tests — `P2`
 
 **Goal:** Add parameterized tests for extreme scenarios to catch performance cliffs and edge cases.
 
@@ -125,26 +106,22 @@ public MemberAssignmentModel WithExpressionAssignment(string expr) =>
    - Why: FKF301 should catch this
    - Test: Multiple nested collection levels with cycle
 
-**Files to add:**
-- `tests/FreakyKit.Forge.Generator.Tests/EdgeCaseGeneratorTests.cs` — Parameterized test class
+**Status:**
+- ✅ `tests/FreakyKit.Forge.Generator.Tests/EdgeCaseGeneratorTests.cs` — Created with 3 tests:
+  - `LargeMemberCount_GeneratesValidCode` — 50-property classes for O(n²) validation
+  - `DeeplyNestedGenerics_GeneratesValidCode` — `List<List<List<int>>>` for type resolution depth
+  - `NullFallback_CollectionFallback_UsesVersionCompatibleSyntax` — Verifies fallback uses `Enumerable.Empty<object>()` not C# 12 `[]`
 
-**Suggested structure:**
-```csharp
-[Theory]
-[InlineData(10)]
-[InlineData(50)]
-[InlineData(100)]
-public void LargeMemberCount_GeneratesValidCode(int memberCount)
-{
-    // Generate class with N properties, verify generation succeeds
-}
-```
+**Remaining scenarios** (can be added as follow-ups):
+- ForgeMap name conflicts (FKF105 emission)
+- Expression property suppression (all members excluded)
+- Circular collection element forge (FKF301 on collections)
 
 ---
 
 ## Features (P2+)
 
-### 4. Production-Grade Benchmark Suite — `P2`
+### 3. Production-Grade Benchmark Suite — `P2`
 
 **Goal:** Expand the benchmark suite beyond synthetic micro-benchmarks to include real-world mapping scenarios sourced from open-source production codebases, giving a more honest picture of performance under realistic conditions.
 

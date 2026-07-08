@@ -16,7 +16,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = FreakyKit.Forge.NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -48,7 +48,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = FreakyKit.Forge.NullFallback.Null)]
+                    [ForgeMap("Home", NullFallback = NullFallback.Null)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -80,7 +80,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = FreakyKit.Forge.NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -110,7 +110,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", IgnoreIfNull = true, NullFallback = FreakyKit.Forge.NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", IgnoreIfNull = true, NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -141,7 +141,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public List<Address> Homes { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Homes", NullFallback = FreakyKit.Forge.NullFallback.DefaultConstruct)]
+                    [ForgeMap("Homes", NullFallback = NullFallback.DefaultConstruct)]
                     public List<AddressDto> Homes { get; set; } = new();
                 }
 
@@ -158,7 +158,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains(": []", generated);
+        Assert.Contains(": Enumerable.Empty<object>()", generated);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = FreakyKit.Forge.NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -209,10 +209,10 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = FreakyKit.Forge.NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
 
-                    [ForgeMap("Work", NullFallback = FreakyKit.Forge.NullFallback.Null)]
+                    [ForgeMap("Work", NullFallback = NullFallback.Null)]
                     public AddressDto Work { get; set; } = new();
                 }
 
@@ -245,7 +245,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = FreakyKit.Forge.NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 

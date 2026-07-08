@@ -368,9 +368,7 @@ public static partial class MyForges
 // Generated code is blocked: "Circular nested forge detected: ToPersonDto → ToAddressDto → ToPersonDto"
 ```
 
-To break the cycle, either:
-1. Set `AllowNestedForging = false` on one of the methods
-2. Use `[ForgeMap(..., IgnoreIfNull = true)]` to skip nested forging for a specific member
+To break the cycle, set `AllowNestedForging = false` on one of the involved methods. (Note: `IgnoreIfNull` does not break the static dependency and won't prevent FKF301.)
 
 See [FKF301 — Circular nested forge detected](diagnostics.md#fkf301--circular-nested-forge-detected) for details and examples.
 

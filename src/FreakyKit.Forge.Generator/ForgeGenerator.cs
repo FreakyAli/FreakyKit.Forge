@@ -744,7 +744,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
 
-                // FKF313: Error if both IgnoreIfNull and NullFallback are set
+                // FKF315: Error if both IgnoreIfNull and NullFallback are set
                 if (memberIgnoreIfNull && nullFallbackInt != 0)
                 {
                     diagnostics.Add(Diagnostic.Create(
@@ -768,12 +768,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 // Generate the correct fallback from the start instead of string replacement
                 if (srcMember.Type.IsReferenceType && nullFallbackInt == 1 && collectionInfo != null) // DefaultConstruct
                 {
-                    // Rebuild the expression with empty collection fallback
+                    // Rebuild the expression with empty collection fallback.
+                    // Use Enumerable.Empty<object>() for C# version compatibility (works on all versions).
                     collectionExpr = BuildCollectionExpressionWithFallback(
                         collectionInfo.SourceAccessor!,
                         collectionInfo.ElementForgeMethod,
-                        collectionInfo.ExpressionMaterializer!,
-                        fallback: "[]");
+                        collectionInfo.DestinationSuffix,
+                        fallback: "Enumerable.Empty<object>()");
                 }
 
                 // Expression-mode translatability rules:
@@ -879,7 +880,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     var srcAccess = $"{srcParamName}.{srcMember.Name}";
                     var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
 
-                    // FKF313: Error if both IgnoreIfNull and NullFallback are set
+                    // FKF315: Error if both IgnoreIfNull and NullFallback are set
                     if (memberIgnoreIfNull && nullFallbackInt != 0)
                     {
                         diagnostics.Add(Diagnostic.Create(
@@ -1101,15 +1102,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         var location = GetSafeLocation(method);
-        var lineNumber = 0;
-        try
-        {
-            lineNumber = location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0;
-        }
-        catch
-        {
-            lineNumber = 0;
-        }
+        var lineNumber = GetSafeLineNumber(method);
 
         var model = new ForgeMethodModel(
             methodName: method.Name,
@@ -1182,15 +1175,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         var location = GetSafeLocation(method);
-        var lineNumber = 0;
-        try
-        {
-            lineNumber = location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0;
-        }
-        catch
-        {
-            lineNumber = 0;
-        }
+        var lineNumber = GetSafeLineNumber(method);
 
         var model = new ForgeMethodModel(
             methodName: method.Name,
@@ -1375,7 +1360,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     /// Post-extraction pass that resolves nested-forge inlining for every method with
     /// <see cref="ForgeMethodModel.GenerateExpression"/> = true. Replaces each nested
     /// assignment's <see cref="MemberAssignmentModel.ExpressionAssignment"/> with the
-    /// fully inlined expression body. Cycles → FKF507 (error); depth &gt; 5 → FKF508 (info).
+    /// fully inlined expression body. Cycles are caught by DetectCircularNestedForge before
+    /// this phase, so this pass can assume the graph is acyclic. Depth &gt; 5 → FKF508 (info).
     /// </summary>
     private static void ResolveExpressionInlining(
         List<ForgeMethodModel> methodModels,
@@ -1480,17 +1466,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     {
         if (!lookup.TryGetValue(nestedMethodName, out var nested))
             return null;
-
-        if (visitedChain.Contains(nestedMethodName))
-        {
-            var path = string.Join(" -> ", visitedChain) + " -> " + nestedMethodName;
-            diagnostics.Add(Diagnostic.Create(
-                ForgeDiagnostics.ExpressionNestedCycle,
-                location: null,
-                outerMethodName,
-                path));
-            return null;
-        }
 
         if (nested.MethodKind != ForgeMethodKind.Create) return null;
 
@@ -2469,6 +2444,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 elementForgeMethod: null,
                 sourceAccessor: srcAccessor,
                 expressionMaterializer: expressionMaterializer,
+                destinationSuffix: suffix,
                 sourceIsRefType: srcIsRefType,
                 sameElementType: true);
             return true;
@@ -2486,6 +2462,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 elementForgeMethod: nestedName,
                 sourceAccessor: srcAccessor,
                 expressionMaterializer: expressionMaterializer,
+                destinationSuffix: suffix,
                 sourceIsRefType: srcIsRefType,
                 sameElementType: false);
             return true;
@@ -2500,13 +2477,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         public string? ElementForgeMethod { get; }
         public string? SourceAccessor { get; }
         public string? ExpressionMaterializer { get; }
+        public string DestinationSuffix { get; }
         public bool SourceIsRefType { get; }
         public bool SameElementType { get; }
-        public CollectionMappingInfo(string? elementForgeMethod, string? sourceAccessor, string? expressionMaterializer, bool sourceIsRefType, bool sameElementType)
+        public CollectionMappingInfo(string? elementForgeMethod, string? sourceAccessor, string? expressionMaterializer, string destinationSuffix, bool sourceIsRefType, bool sameElementType)
         {
             ElementForgeMethod = elementForgeMethod;
             SourceAccessor = sourceAccessor;
             ExpressionMaterializer = expressionMaterializer;
+            DestinationSuffix = destinationSuffix;
             SourceIsRefType = sourceIsRefType;
             SameElementType = sameElementType;
         }

@@ -616,7 +616,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor NullFallbackOnValueType = new(
         id: "FKF314",
         title: "NullFallback has no effect on value type",
-        messageFormat: "Member '{0}': NullFallback has no effect because the source member is a value type and cannot be null.",
+        messageFormat: "Member '{0}': NullFallback has no effect because the source member is a value type and cannot be null",
         category: Category_Nested,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
@@ -725,7 +725,8 @@ public static class ForgeDiagnostics
         description: "Some mapping cases (custom converters, conditional null skipping, non-translatable collection materializers) have no equivalent encoding inside an Expression<Func<,>>. The member is mapped normally by the imperative method but omitted from the generated expression property.");
 
     /// <summary>
-    /// FKF507 (Error): A cycle was detected while inlining nested forge methods into an expression property.
+    /// FKF507 (Error): RESERVED — Cycles are now caught by DetectCircularNestedForge (FKF301) before reaching expression inlining.
+    /// This descriptor is kept for diagnostic ID stability but will never be emitted.
     /// </summary>
     public static readonly DiagnosticDescriptor ExpressionNestedCycle = new(
         id: "FKF507",

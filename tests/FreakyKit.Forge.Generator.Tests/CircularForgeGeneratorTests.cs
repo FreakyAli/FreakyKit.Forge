@@ -211,20 +211,22 @@ public sealed class CircularForgeGeneratorTests : GeneratorTestBase
             namespace TestNs
             {
                 public class Person { public Address Home { get; set; } = new(); }
-                public class PersonDto { public Address Home { get; set; } = new(); }
+                public class PersonDto { public AddressDto Home { get; set; } = new(); }
                 public class Address { public Person Owner { get; set; } = new(); }
+                public class AddressDto { public PersonDto Owner { get; set; } = new(); }
 
                 [Forge]
                 public static partial class MyForges
                 {
                     [ForgeMethod(AllowNestedForging = false)]
                     public static partial PersonDto ToPersonDto(Person source);
+                    public static partial AddressDto ToAddressDto(Address source);
                 }
             }
             """;
 
         var result = RunGenerator(source);
-        // Should not detect a cycle since AllowNestedForging = false
+        // Should not detect a cycle since AllowNestedForging = false prevents nested forge edge discovery
         var circularDiags = result.Diagnostics.ToList().Where(d => d.Id == "FKF301").ToList();
         Assert.Empty(circularDiags);
     }
