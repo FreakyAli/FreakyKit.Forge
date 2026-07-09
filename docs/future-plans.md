@@ -316,20 +316,21 @@ Add `[ForgePolymorphic]` attribute (repeatable) on a forge method to generate a 
 
 **Return Type Contract:**
 
-The method's declared return type `TReturn` constrains what each `[ForgePolymorphic]` method can return:
+The method's declared return type `TReturn` must be satisfied by ALL `[ForgePolymorphic]` method return types. Only two patterns are valid:
 
 1. **Inheritance hierarchy** (recommended): Each `[ForgePolymorphic]` method returns a type derived from `TReturn`
    - `AnimalDto` is the base class
    - `DogDto : AnimalDto` and `CatDto : AnimalDto`
    - Switch arms return derived types; implicit upcast to `AnimalDto`
+   - Validation: Check `ISymbol.IsAssignableTo(TReturn)` for each method's return type
 
 2. **Common interface**: Each `[ForgePolymorphic]` method returns a type implementing `TReturn` (if `TReturn` is an interface)
    - `IAnimalDto` is the common interface
    - `DogDto : IAnimalDto` and `CatDto : IAnimalDto`
    - Switch arms return implementing types; implicit conversion to interface
+   - Validation: Check `ISymbol.AllInterfaces.Contains(TReturn)` for each method's return type
 
-3. **Explicit cast** (fallback if no inheritance): Generated code upcasts each arm
-   - Less type-safe but allows loose coupling
+**No explicit casting, no sibling types**: All switch arms must be directly assignable to `TReturn` without cast expressions. Unrelated sibling types (e.g., `DogDto` and `CatDto` both deriving from separate base) are not permitted.
 
 ```csharp
 // Pattern 1: Inheritance hierarchy (recommended)
@@ -375,12 +376,19 @@ public static partial class AnimalForges
 // };
 ```
 
-**Validation & Diagnostics:**
+**Validation & Diagnostics (Strict Assignability Enforcement):**
 
-Before generating switch expression, the generator must validate:
-- Each `[ForgePolymorphic]` method's return type is assignable to the method's declared return type
-- If not assignable: emit FKF8xx diagnostic "Return type mismatch" and skip polymorphic generation
-- If no inheritance or interface: emit FKF8xx diagnostic "Polymorphic method return type not compatible with target method" with suggestion to use inheritance or interface
+Before generating switch expression, the generator must validate that **each** `[ForgePolymorphic]` method's return type is directly assignable to `TReturn`:
+
+1. For each `[ForgePolymorphic(derivedType, methodName)]` mapping:
+   - Resolve the method symbol
+   - Get the method's return type `MethodReturnType`
+   - Check: Is `MethodReturnType` assignable to `TReturn`?
+     - If `TReturn` is a class: `MethodReturnType` must be a derived class (inheritance check)
+     - If `TReturn` is an interface: `MethodReturnType` must implement that interface
+     - If unrelated: emit FKF8xx diagnostic and skip polymorphic generation
+2. If any method fails assignability check: emit diagnostic with specific type mismatch details
+3. If all pass: emit switch expression with all arms directly assignable (no casts)
 
 **Complexity**
 
@@ -484,9 +492,16 @@ public static partial Dictionary<string, object> ToDict(PersonDto source);
 
 **Key casing policy (configurable via `[ForgeDictionary]`):**
 - `Exact` (default): Match member name exactly (`Name` → `"Name"`)
-- `IgnoreCase`: Case-insensitive lookup via `source.Keys.FirstOrDefault(k => k.Equals(memberName, StringComparison.OrdinalIgnoreCase))`
-- `CamelCase`: Convert to camelCase (`PersonFirstName` → `"personFirstName"`)
-- `SnakeCase`: Convert to snake_case (`PersonFirstName` → `"person_first_name"`)
+  - Direct key lookup: `source["Name"]`
+  - If key not found, triggers `MissingKeyPolicy` (Throw, UseDefault, Skip, ReturnNull)
+- `IgnoreCase`: Case-insensitive key lookup with fallback to `MissingKeyPolicy`
+  - Lookup: `source.Keys.FirstOrDefault(k => k.Equals(memberName, StringComparison.OrdinalIgnoreCase))`
+  - If `FirstOrDefault` returns null (no matching key), triggers `MissingKeyPolicy` instead of throwing KeyNotFoundException
+  - Code pattern: `var resolvedKey = source.Keys.FirstOrDefault(...); if (resolvedKey == null) { apply MissingKeyPolicy } else { access source[resolvedKey] }`
+- `CamelCase`: Transform member name to camelCase (`PersonFirstName` → `"personFirstName"`), then apply exact lookup
+  - Triggers `MissingKeyPolicy` if transformed key not found
+- `SnakeCase`: Transform member name to snake_case (`PersonFirstName` → `"person_first_name"`), then apply exact lookup
+  - Triggers `MissingKeyPolicy` if transformed key not found
 
 **Null value behavior in object-to-dict (configurable via `[ForgeDictionary]`):**
 - `Include` (default): All values included, even if null → `__result["Name"] = source.Name;`
@@ -629,6 +644,7 @@ Before generating reverse method, validate that the forward mapping contains **o
 **Non-invertible patterns (emit diagnostic, skip reverse generation):**
 - `[ForgeComputed]` members (computed properties have no source to reverse from)
 - `IgnoreIfNull` or `IgnoreIfDefault` on any member (reverse doesn't know original null/default state)
+- `NullFallback` with `DefaultConstruct` (reverse can't distinguish null from constructed default)
 - `Condition` (predicate-based) mappings (reverse can't invert conditional logic)
 - Custom `[ForgeConverter]` converters (not guaranteed to be reversible)
 - Nested forge with `AllowFlattening = true` (multi-level flattening not invertible)
