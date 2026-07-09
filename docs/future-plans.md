@@ -338,8 +338,8 @@ The method's declared return type `TReturn` must be satisfied by ALL `[ForgePoly
 public static partial class AnimalForges
 {
     public static partial AnimalDto MapBase(Animal source);
-    public static partial DogDto MapDog(Dog source) where Dog : Animal;  // returns DogDto : AnimalDto
-    public static partial CatDto MapCat(Cat source) where Cat : Animal;  // returns CatDto : AnimalDto
+    public static partial DogDto MapDog(Dog source);  // returns DogDto : AnimalDto
+    public static partial CatDto MapCat(Cat source);  // returns CatDto : AnimalDto
 
     [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
     [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
@@ -472,11 +472,12 @@ public static partial Dictionary<string, object> ToDict(PersonDto source);
    - For nullable destination: null values are allowed, propagate directly
    - For non-nullable destination: null values cause InvalidCastException
 
-2. **Dictionary<string, string>**: Parse or convert with fallback
+2. **Dictionary<string, string>**: Parse or convert with proper error handling
+   - Missing key: guarded by ContainsKey; use MissingKeyBehavior (Throw, UseDefault)
+   - Parse failures: when value is present but malformed, throws `FormatException`; not caught by MissingKeyBehavior
    - Primitive types: `int.Parse()`, `bool.Parse()`, `decimal.Parse()`, etc.
    - Enum types: `Enum.Parse<EnumType>(value)`
-   - Parse failures throw `FormatException` (propagate or use MissingKeyBehavior fallback)
-   - DateTime: `DateTime.Parse()` or `DateTime.TryParse()` with MissingKeyBehavior fallback
+   - DateTime: requires explicit culture and styles, e.g. `DateTime.Parse(value, CultureInfo.InvariantCulture)` or `DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result)`
    - Nullable types: if value is null or missing, null is assigned; otherwise parse
 
 3. **Unsupported type conversions** (emit diagnostic, skip member):
@@ -729,8 +730,10 @@ When a nested member has type `TEntity` (a type parameter), the generator:
 1. Identifies the corresponding type parameter `TDto` from the method signature
 2. Emits a call to the **same generic method** with substituted type arguments
 3. At call sites like `MapResponse<Person, PersonDto>(apiResp)`, the concrete types are `TEntity=Person, TDto=PersonDto`
-4. If nested `Data` contains a `Company`, the generated call becomes `MapResponse<Company, CompanyDto>(nestedData)` — **that overload must exist**
-5. Constraint validation ensures `CompanyDto` satisfies any where clauses (e.g., `where TDto : class`)
+4. If nested `Data` contains a `Company`, the generator looks for a **dedicated mapper** (e.g., `MapCompany`) for `Company -> CompanyDto`
+   - If no dedicated mapper exists, emits FKF diagnostic and excludes the nested member
+   - The generated call becomes `MapCompany(nestedData)`, NOT a generic wrapper like `MapResponse<Company, CompanyDto>`
+5. Constraint validation ensures mapped types satisfy any where clauses on the dedicated mapper
 
 **Forbidden patterns** (emit diagnostics):
 - Nested member of unconstrained type parameter (no matching T_dto)
@@ -773,38 +776,6 @@ High. Enables generic mapping scenarios with zero boilerplate for wrapper types 
 ## Technical Debt & Bug Fixes
 
 Critical correctness bugs and usability improvements identified through code audit. Organized by severity.
-
-### Critical Bugs
-
-#### Collection Fallback Type Safety — Type Mismatch
-
-**Why**
-
-When `NullFallback == DefaultConstruct` is set on a collection member (e.g., `List<Address>`), the generated fallback uses hardcoded `Enumerable.Empty<object>()` instead of `Enumerable.Empty<ElementType>()`. This causes type mismatches and runtime cast failures when the destination collection has a specific element type.
-
-**Design**
-
-Infer the correct element type from the destination collection type (e.g., if destination is `List<AddressDto>`, use `Enumerable.Empty<AddressDto>()`). The fallback type must match the collection's element type for type-safe code generation.
-
-**Complexity**
-
-Low. Extract element type from destination collection INamedTypeSymbol and substitute into fallback expression.
-
-**Impact**
-
-Critical for correctness. Generated code compiles but fails at runtime with InvalidCastException.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Compute element type when generating collection fallback expressions (lines 769-778)
-
-**Suggested Approach**
-
-1. When building `NullFallback` expression for collection, extract destination collection's element type
-2. Replace hardcoded `Enumerable.Empty<object>()` with `Enumerable.Empty<ElementType>()`
-3. Add tests verifying null-fallback collections type-check and run correctly
-
----
 
 ### Medium-Priority Bugs
 

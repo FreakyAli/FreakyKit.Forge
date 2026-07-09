@@ -788,13 +788,24 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 // Generate the correct fallback from the start instead of string replacement
                 if (srcMember.Type.IsReferenceType && nullFallbackInt == 1 && collectionInfo != null) // DefaultConstruct
                 {
-                    // Rebuild the expression with empty collection fallback.
-                    // Use Enumerable.Empty<object>() for C# version compatibility (works on all versions).
+                    // Generate typed fallback matching the destination collection shape
+                    var destElem = GetCollectionElementType(destMember.Type);
+                    var elemName = destElem?.Name ?? "object";
+                    string typedFallback = collectionInfo.DestinationSuffix switch
+                    {
+                        ".ToArray()" => $"Array.Empty<{elemName}>()",
+                        ".ToHashSet()" => $"new HashSet<{elemName}>()",
+                        ".ToImmutableArray()" => $"ImmutableArray<{elemName}>.Empty",
+                        ".ToImmutableList()" => $"ImmutableList<{elemName}>.Empty",
+                        ".ToImmutableHashSet()" => $"ImmutableHashSet<{elemName}>.Empty",
+                        ".ToList().AsReadOnly()" => $"new List<{elemName}>().AsReadOnly()",
+                        _ => $"new List<{elemName}>()"  // default to List<T> if suffix is unrecognized
+                    };
                     collectionExpr = BuildCollectionExpressionWithFallback(
                         collectionInfo.SourceAccessor!,
                         collectionInfo.ElementForgeMethod,
                         collectionInfo.DestinationSuffix,
-                        fallback: "Enumerable.Empty<object>()");
+                        fallback: typedFallback);
                 }
 
                 // Expression-mode translatability rules:
@@ -1552,7 +1563,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>
     /// <summary>
     /// Word-boundary substitution of a parameter identifier with a replacement expression.
     /// Used to rewrite a nested forge method's body to refer to the outer source accessor.

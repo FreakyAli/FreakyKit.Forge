@@ -110,8 +110,8 @@ public class EdgeCaseGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
 
-        // Verify the fallback uses version-compatible syntax (Enumerable.Empty<object>()) not C# 12 "[]"
-        Assert.Contains("Enumerable.Empty<object>()", generated);
+        // Verify the fallback uses typed empty collection syntax matching destination type, not C# 12 "[]"
+        Assert.Contains("new List<ItemDto>()", generated);
         Assert.DoesNotContain(": []", generated);
     }
 }

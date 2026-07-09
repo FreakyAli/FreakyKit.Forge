@@ -337,13 +337,16 @@ public class Dest
 // __result.OtherHome = source.Home != null ? ToAddressDto(source.Home) : new AddressDto();
 ```
 
-`NullFallback` also works with collections, using `[]` (collection expression syntax) to create an empty collection:
+`NullFallback` also works with collections, generating typed empty collections matching the destination type:
 
 ```csharp
 [ForgeMap("Addresses", NullFallback = NullFallback.DefaultConstruct)]
 public List<AddressDto> Addresses { get; set; }
 
-// Generates: __result.Addresses = source.Addresses != null ? ... : [];
+// Generates: __result.Addresses = source.Addresses != null ? ... : new List<AddressDto>();
+// For arrays: Array.Empty<AddressDto>()
+// For HashSet: new HashSet<AddressDto>()
+// For ImmutableList: ImmutableList<AddressDto>.Empty
 ```
 
 For more details, see [`[ForgeMap]` NullFallback](attributes.md#nullfallback) in the attributes reference.

@@ -158,7 +158,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains(": Enumerable.Empty<object>()", generated);
+        Assert.Contains(": new List<AddressDto>()", generated);
     }
 
     [Fact]
@@ -297,7 +297,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("source.Items != null", generated);
-        Assert.Contains("Enumerable.Empty<object>()", generated);
+        Assert.Contains("new HashSet<ItemDto>()", generated);
     }
 
     [Fact]
@@ -331,7 +331,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("source.Items != null", generated);
-        Assert.Contains("Enumerable.Empty<object>()", generated);
+        Assert.Contains("ImmutableList<ItemDto>.Empty", generated);
     }
 
     [Fact]
