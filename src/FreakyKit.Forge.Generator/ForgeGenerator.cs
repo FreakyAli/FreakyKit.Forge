@@ -1547,10 +1547,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// <summary>
     /// Word-boundary substitution of a parameter identifier with a replacement expression.
     /// Used to rewrite a nested forge method's body to refer to the outer source accessor.
+    /// SECURITY NOTE: Uses regex escaping for safety, but is inherently fragile for string-based code generation.
+    /// Consider migrating to expression-tree or SyntaxFactory APIs for future robustness.
     /// </summary>
-    private static string SubstituteParam(string expr, string oldParam, string newAccessor)
+    internal static string SubstituteParam(string expr, string oldParam, string newAccessor)
     {
         return Regex.Replace(expr, $@"\b{Regex.Escape(oldParam)}\b", newAccessor.Replace("$", "$$"));
     }

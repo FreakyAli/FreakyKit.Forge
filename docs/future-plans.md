@@ -767,3 +767,319 @@ High. Enables generic mapping scenarios with zero boilerplate for wrapper types 
    - Inference of type parameters from usage (require explicit type arguments at call sites)
    - Partial generic application (all type parameters must be provided)
 6. Emit diagnostics: unresolved type params, unpaired type parameters, missing generic overloads, constraint violations, circular type dependencies
+
+---
+
+## Technical Debt & Bug Fixes
+
+Critical correctness bugs and usability improvements identified through code audit. Organized by severity.
+
+### Critical Bugs
+
+#### Collection Fallback Type Safety — Type Mismatch
+
+**Why**
+
+When `NullFallback == DefaultConstruct` is set on a collection member (e.g., `List<Address>`), the generated fallback uses hardcoded `Enumerable.Empty<object>()` instead of `Enumerable.Empty<ElementType>()`. This causes type mismatches and runtime cast failures when the destination collection has a specific element type.
+
+**Design**
+
+Infer the correct element type from the destination collection type (e.g., if destination is `List<AddressDto>`, use `Enumerable.Empty<AddressDto>()`). The fallback type must match the collection's element type for type-safe code generation.
+
+**Complexity**
+
+Low. Extract element type from destination collection INamedTypeSymbol and substitute into fallback expression.
+
+**Impact**
+
+Critical for correctness. Generated code compiles but fails at runtime with InvalidCastException.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Compute element type when generating collection fallback expressions (lines 769-778)
+
+**Suggested Approach**
+
+1. When building `NullFallback` expression for collection, extract destination collection's element type
+2. Replace hardcoded `Enumerable.Empty<object>()` with `Enumerable.Empty<ElementType>()`
+3. Add tests verifying null-fallback collections type-check and run correctly
+
+---
+
+### Medium-Priority Bugs
+
+#### Flattening Members Silently Excluded From Expression Properties
+
+**Why**
+
+When flattening is applied and the destination member uses an expression property (`GenerateExpression = true`), the code converts null-conditional chaining (`?.`) to nested ternaries for imperative code (required for expression-tree compatibility). However, the expression path sets `exprAssign = null`, silently excluding the flattened member from the expression property with no diagnostic warning.
+
+**Design**
+
+Either: (1) Set `exprAssign` to the ternary expression so flattened members ARE included in expression properties, OR (2) Emit FKF506 diagnostic to warn users that flattened members cannot be used in `IQueryable.Select()` expressions.
+
+**Complexity**
+
+Low. Either add ternary expression support to expression paths or emit diagnostic after conversion.
+
+**Impact**
+
+Medium. Silent exclusion causes users to assume flattened members work in LINQ queries, leading to runtime query failures.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Lines 418-449 (TryResolveFlattenedMapping); either generate ternary for `exprAssign` or emit FKF506
+
+**Suggested Approach**
+
+1. In `TryResolveFlattenedMapping`, after converting flatten expression to ternary, check if `GenerateExpression = true`
+2. Option A: Set `exprAssign` to the ternary expression (convert nested ternaries to expression-tree compatible form)
+3. Option B: If conversion is complex, emit FKF506 and skip expression property for this member
+4. Add test cases for flattening + expression properties
+
+---
+
+#### Diagnostic ID Allocation Scheme Missing
+
+**Why**
+
+Diagnostic IDs are assigned sequentially (FKF001-508) without a reserved-range policy. Future features (P2, P3) will need new diagnostics, but there's no pre-allocated range. This risks ID collisions or out-of-order assignments that break backward compatibility.
+
+**Design**
+
+Define a structured diagnostic ID allocation scheme with reserved ranges for future features. Document which ranges are reserved for what purpose (e.g., FKF501-600 for new features).
+
+**Complexity**
+
+Low. Documentation only; no code changes.
+
+**Impact**
+
+Medium. Enables safe diagnostic ID allocation in future versions.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Add comments documenting reserved ID ranges
+
+**Suggested Approach**
+
+1. Document diagnostic ID ranges:
+   - FKF001-099: Mode & class-level validation (existing)
+   - FKF100-199: Member matching & discovery (existing)
+   - FKF200-299: Type conversion & compatibility (existing)
+   - FKF300-399: Nested forging & circularity (existing)
+   - FKF400-499: Deprecated/reserved
+   - FKF500-599: **RESERVED for future P2/P3 features**
+   - FKF600-699: **RESERVED for performance/optimization warnings**
+2. Add header comment explaining the scheme
+3. Mark FKF507 as permanently deprecated with note
+
+---
+
+### Low-Priority Issues
+
+#### Expression Nesting Depth Limit Not Enforced
+
+**Why**
+
+FKF508 (ExpressionDeepNesting) is emitted as Info when nesting depth exceeds 5. However, there's no hard limit—arbitrarily deep nesting is allowed, just warned about. Very deep nesting can generate megabytes of source code, causing compiler errors with unclear root causes.
+
+**Design**
+
+Implement a hard expression-depth limit (e.g., 10 levels). When exceeded, emit Error FKF5xx and either truncate the expression or fall back to method calls instead of inlining.
+
+**Complexity**
+
+Low. Add a configurable depth check in the expression inlining loop.
+
+**Impact**
+
+Low. Prevents surprise compiler errors on deeply nested mappings.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Expression inlining depth tracking (lines 1440-1447)
+
+**Suggested Approach**
+
+1. Define const MAX_EXPRESSION_DEPTH = 10
+2. When depth exceeds limit, emit Error FKF5xx "Expression nesting depth limit exceeded"
+3. Alternatively, auto-fallback to method calls for deep chains instead of inlining
+4. Add tests with various nesting depths to verify limit enforcement
+
+---
+
+#### Missing Validation: Constructor Parameter Accessibility
+
+**Why**
+
+When resolving parameterized constructors, the code verifies that constructor parameters can be satisfied from source members, but does NOT verify that parameters themselves are accessible (e.g., `internal` parameters in types from other assemblies). Generated code compiles but fails at runtime with "inaccessible due to protection level."
+
+**Design**
+
+Before using a constructor parameter in generated code, verify the parameter's `DeclaredAccessibility` is `Public`. Emit diagnostic if not.
+
+**Complexity**
+
+Low. Add accessibility check in `DetermineConstruction`.
+
+**Impact**
+
+Low. Edge case affecting cross-assembly scenarios.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — DetermineConstruction method (lines 1606-1676); add accessibility validation
+
+**Suggested Approach**
+
+1. For each constructor parameter, check `parameter.DeclaredAccessibility == Accessibility.Public`
+2. If not, emit diagnostic FKF5xx "Constructor parameter inaccessible from public generated code"
+3. Skip this constructor and try others if available
+
+---
+
+#### Diagnostic Aggregation Masks Primary Errors
+
+**Why**
+
+The generator collects diagnostics throughout extraction and continues processing even after critical errors. This causes multiple confusing diagnostics to appear (e.g., FKF020 "has a body" + FKF100 "member missing source") when only FKF020 is the real blocker. Users must fix FKF020 first before understanding the actual mapping issues.
+
+**Design**
+
+Implement early termination per method on critical errors. Stop analyzing a problematic method after emitting a fatal diagnostic, preventing cascading secondary errors.
+
+**Complexity**
+
+Low. Add early-return logic after critical diagnostics.
+
+**Impact**
+
+Low. Improves usability by reducing noise.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Error collection and early return (lines 186-210)
+
+**Suggested Approach**
+
+1. When FKF020 (has a body), FKF003-005 (invalid class), or other fatal diagnostics are emitted, return immediately from method processing
+2. Skip member-mapping analysis for that method
+3. Prevents secondary "missing member" diagnostics from appearing
+
+---
+
+#### Message Clarity: NullableValueType Fallback Not Mentioned
+
+**Why**
+
+When a nullable value type (e.g., `int?`) maps to non-nullable (e.g., `int`) without `DefaultValue`, FKF201 warns that `.Value` may throw. However, the diagnostic message doesn't mention that setting `DefaultValue` on `[ForgeMap]` prevents the warning entirely.
+
+**Design**
+
+Update FKF201 diagnostic message to mention `DefaultValue` as an escape hatch.
+
+**Complexity**
+
+Low. Update diagnostic message.
+
+**Impact**
+
+Low. Users may miss that `DefaultValue` solves the problem.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — FKF201 diagnostic descriptor
+
+**Suggested Approach**
+
+1. Update FKF201 message to include: "... or set DefaultValue on [ForgeMap] to provide a fallback value instead."
+
+---
+
+#### Missing Validator: [ForgeConverter] Discoverability
+
+**Why**
+
+FKF221 validates that a `[ForgeConverter]` method has correct signature (static, non-void, non-generic, 1 param). However, it doesn't validate that the method is discoverable (public/internal visibility). If a converter is private or has inaccessible parameter types, the generator silently skips it and later emits FKF200 (incompatible types) instead.
+
+**Design**
+
+When validating `[ForgeConverter]`, also check that the method is publicly or internally accessible.
+
+**Complexity**
+
+Low. Add visibility checks to FKF221 validation.
+
+**Impact**
+
+Low. Users add a `[ForgeConverter]` expecting it to work, but if it's private, it's silently ignored.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Analyzer/` — ForgeConverterValidator (wherever FKF221 is emitted)
+
+**Suggested Approach**
+
+1. In FKF221 validation, add checks: method must be `public` or `internal`; parameter/return types must be accessible
+2. Emit FKF221 with additional detail if visibility is wrong
+
+---
+
+#### Documentation Gap: Attribute Feature Interaction Matrix
+
+**Why**
+
+Documentation explains what `AllowNestedForging` and `AllowFlattening` do individually, but doesn't provide guidance on when to use each. Users are confused: "Should I use nested forging or flattening for `Customer.Address.City` → `CustomerAddressCity`?"
+
+**Design**
+
+Add a decision matrix in docs explaining the trade-offs and recommending flattening for DTO fields, nested forging for type mismatches.
+
+**Complexity**
+
+Low. Documentation only.
+
+**Impact**
+
+Low. Improves user onboarding.
+
+**Files to Modify**
+
+- `docs/attributes.md` — Add "Design Decision: Flattening vs Nested Forging" section
+
+**Suggested Approach**
+
+1. Create comparison table: Flattening (one-level, implicit) vs Nested Forging (type-aware, multi-level)
+2. Add examples for each use case
+3. Document when to use which feature
+
+---
+
+#### Documentation Gap: ShareReference Semantics on Collections
+
+**Why**
+
+`ShareReference` on `[ForgeMethodAttribute]` affects "mutable same-type collections" (documented as a concept, but the exact list of collection types is only in private helper code `IsMutableSameTypeCollection()`). Users can't reliably predict which collection types are deep-copied vs reference-shared without reading source.
+
+**Design**
+
+Add a table to `[ForgeMethod]` documentation listing all collection types affected by `ShareReference`.
+
+**Complexity**
+
+Low. Documentation only.
+
+**Impact**
+
+Low. Users can predict behavior without reading source code.
+
+**Files to Modify**
+
+- `docs/attributes.md` — [ForgeMethod] documentation; add table of mutable collection types
+
+**Suggested Approach**
+
+1. List all collection types checked by `IsMutableSameTypeCollection()`: List<T>, HashSet<T>, LinkedList<T>, Stack<T>, Queue<T>, etc.
+2. Document which types trigger `ShareReference` behavior
+3. Clarify which types are always copied (IEnumerable, IList, etc.)
