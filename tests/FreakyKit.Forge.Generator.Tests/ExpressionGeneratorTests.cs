@@ -907,9 +907,10 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
-    public void Phase5_NestedForge_CycleEmitsFKF507_BlocksGeneration()
+    public void Phase5_NestedForge_CycleEmitsFKF301_BlocksGeneration()
     {
         // Address.Parent references Address → ToAddressDto inlining loops forever.
+        // Now detected as FKF301 (circular nested forge) instead of FKF507 (expression inlining cycle).
         const string source = """
             using FreakyKit.Forge;
             #nullable enable
@@ -927,7 +928,7 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
             """;
 
         var result = RunGenerator(source);
-        AssertHasError(result, "FKF507");
+        AssertHasError(result, "FKF301");
         AssertNoGeneratedSource(result);
     }
 

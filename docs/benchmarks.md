@@ -185,7 +185,7 @@ Source code: [`benchmarks/FreakyKit.Forge.Benchmarks`](../benchmarks/FreakyKit.F
 
 ## Real-World Scenarios
 
-> Benchmark run: 2026-05-14 — commit: `1cfa763`
+> Benchmark run: 2026-07-08 — commit: `b6adf8c`
 > Source: [`benchmarks/FreakyKit.Forge.Benchmarks.RealWorld`](../benchmarks/FreakyKit.Forge.Benchmarks.RealWorld)
 > Raw BDN reports: [`BenchmarkDotNet.Artifacts/results/`](../benchmarks/FreakyKit.Forge.Benchmarks.RealWorld/BenchmarkDotNet.Artifacts/results/)
 
@@ -207,7 +207,7 @@ for the opt-out flag.
 | | |
 |---|---|
 | Runtime | .NET 8.0.11 (Arm64 RyuJIT armv8.0-a) |
-| Machine | Apple M4 Pro, 14 cores, macOS Tahoe 26.4.1 |
+| Machine | Apple M4 Pro, 14 cores, macOS Tahoe 26.5.0 |
 | Benchmark tool | BenchmarkDotNet v0.15.8 |
 | Iterations | 10 warmup × 50 iterations (Banking: 8 × 30 — large collection) |
 
@@ -215,93 +215,93 @@ for the opt-out flag.
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 232.8 ns | 1.00x | 1 | 2.05 KB |
-| Mapster | 266.0 ns | 1.14x | 2 | 2.05 KB |
-| Mapperly | 295.8 ns | 1.27x | 3 | 2.13 KB |
-| **Forge** | **297.0 ns** | **1.28x** | **3** | **2.20 KB** |
-| AutoMapper | 388.1 ns | 1.67x | 4 | 2.30 KB |
-| Facet | 1,446.2 ns | 6.21x | 5 | 7.59 KB |
+| Hand-written | 233.0 ns | 1.00x | 1 | 2.05 KB |
+| Mapster | 257.3 ns | 1.11x | 2 | 2.05 KB |
+| **Forge** | **282.9 ns** | **1.22x** | **3** | **2.20 KB** |
+| AutoMapper | 377.7 ns | 1.62x | 4 | 2.30 KB |
+| Mapperly | 429.7 ns | 1.85x | 4 | 2.13 KB |
+| Facet | 1,426.1 ns | 6.13x | 5 | 7.59 KB |
 
 ### Real-World: CRM Contact Import (dictionary + 3 unbounded collections)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Mapperly | 164.3 ns | 0.81x | 1 | 1.00 KB |
+| Mapperly | 163.0 ns | 0.80x | 1 | 1.00 KB |
 | Hand-written | 203.0 ns | 1.00x | 2 | 1.41 KB |
-| **Forge** | **277.6 ns** | **1.37x** | **3** | **1.62 KB** |
-| Mapster | 364.5 ns | 1.80x | 4 | 2.00 KB |
-| AutoMapper | 391.0 ns | 1.93x | 5 | 2.06 KB |
-| Facet | 862.4 ns | 4.25x | 6 | 4.03 KB |
+| **Forge** | **272.6 ns** | **1.34x** | **3** | **1.62 KB** |
+| Mapster | 364.2 ns | 1.79x | 4 | 2.00 KB |
+| AutoMapper | 399.8 ns | 1.97x | 5 | 2.06 KB |
+| Facet | 829.1 ns | 4.09x | 6 | 4.03 KB |
 
 ### Real-World: Healthcare Patient (FHIR-shaped)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 211.5 ns | 1.00x | 1 | 1.46 KB |
-| Mapster | 224.6 ns | 1.06x | 2 | 1.46 KB |
-| Mapperly | 250.6 ns | 1.18x | 3 | 1.58 KB |
-| **Forge** | **282.6 ns** | **1.34x** | **4** | **1.67 KB** |
-| AutoMapper | 296.1 ns | 1.40x | 5 | 1.55 KB |
-| Facet | 1,144.3 ns | 5.41x | 6 | 5.52 KB |
+| Hand-written | 183.1 ns | 1.00x | 1 | 1.86 KB |
+| Mapster | 201.0 ns | 1.10x | 2 | 1.86 KB |
+| **Forge** | **222.4 ns** | **1.21x** | **3** | **2.00 KB** |
+| Mapperly | 225.0 ns | 1.23x | 3 | 1.94 KB |
+| AutoMapper | 271.1 ns | 1.48x | 4 | 2.04 KB |
+| Facet | 1,145.0 ns | 6.25x | 5 | 6.30 KB |
 
 ### Real-World: Banking Ledger (500 decimal-dense transactions)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| **Forge** | **5,560 ns** | **0.91x** | **1** | **62.82 KB** |
-| Mapster | 6,228 ns | 1.02x | 2 | 62.75 KB |
-| Hand-written | 6,088 ns | 1.00x | 2 | 62.75 KB |
-| Mapperly | 6,863 ns | 1.13x | 3 | 62.79 KB |
-| AutoMapper | 7,081 ns | 1.16x | 4 | 66.98 KB |
-| Facet | 32,622 ns | 5.36x | 5 | 186.93 KB |
+| Hand-written | 5.764 us | 1.00x | 1 | 62.75 KB |
+| **Forge** | **5.912 us** | **1.03x** | **1** | **62.82 KB** |
+| Mapster | 6.025 us | 1.05x | 1 | 62.75 KB |
+| AutoMapper | 6.913 us | 1.20x | 2 | 66.98 KB |
+| Mapperly | 6.970 us | 1.21x | 2 | 62.79 KB |
+| Facet | 32.446 us | 5.63x | 3 | 186.93 KB |
 
-> **Note:** Forge edges out hand-written here at high collection throughput. The generated code's tight straight-line loop wins back the per-call setup overhead at 500 rows. Top three are within a 12% band.
+> **Note:** Top three (Hand-written, Forge, Mapster) within 5% band. At 500-row throughput both Forge and Hand-written leverage their tight straight-line IL, with negligible per-call setup overhead difference.
 
 ### Real-World: CMS Content Tree (12 mixed-type blocks + i18n)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 186.0 ns | 1.00x | 1 | 1.86 KB |
-| Mapster | 201.1 ns | 1.08x | 2 | 1.86 KB |
-| Mapperly | 220.7 ns | 1.19x | 3 | 1.94 KB |
-| **Forge** | **222.3 ns** | **1.20x** | **3** | **2.00 KB** |
-| AutoMapper | 269.2 ns | 1.45x | 4 | 2.04 KB |
-| Facet | 1,156.9 ns | 6.22x | 5 | 6.30 KB |
+| Hand-written | 206.1 ns | 1.00x | 1 | 1.46 KB |
+| Mapster | 229.1 ns | 1.11x | 2 | 1.46 KB |
+| Mapperly | 246.1 ns | 1.20x | 3 | 1.58 KB |
+| **Forge** | **274.3 ns** | **1.33x** | **4** | **1.67 KB** |
+| AutoMapper | 306.8 ns | 1.49x | 5 | 1.55 KB |
+| Facet | 1,144.3 ns | 5.56x | 6 | 5.52 KB |
 
 ### Real-World: Identity / User Provisioning (8 nullables + 4 collections)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 191.6 ns | 1.00x | 1 | 1.33 KB |
-| Mapster | 213.1 ns | 1.11x | 2 | 1.33 KB |
-| Mapperly | 226.8 ns | 1.18x | 3 | 1.48 KB |
-| AutoMapper | 277.7 ns | 1.45x | 4 | 1.51 KB |
-| **Forge** | **287.0 ns** | **1.50x** | **5** | **1.61 KB** |
-| Facet | 1,526.7 ns | 7.97x | 6 | 6.59 KB |
+| Hand-written | 199.1 ns | 1.00x | 1 | 1.33 KB |
+| Mapster | 215.0 ns | 1.08x | 2 | 1.33 KB |
+| Mapperly | 232.7 ns | 1.17x | 3 | 1.48 KB |
+| AutoMapper | 283.8 ns | 1.43x | 4 | 1.51 KB |
+| **Forge** | **289.4 ns** | **1.45x** | **4** | **1.61 KB** |
+| Facet | 1,553.9 ns | 7.80x | 5 | 6.59 KB |
 
 ### Real-World: Inventory / Warehouse Movement (collection-of-collections)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Hand-written | 269.5 ns | 1.00x | 1 | 1.91 KB |
-| Mapster | 311.5 ns | 1.16x | 2 | 1.91 KB |
-| Mapperly | 324.6 ns | 1.20x | 3 | 2.10 KB |
-| AutoMapper | 376.0 ns | 1.40x | 4 | 2.01 KB |
-| **Forge** | **407.7 ns** | **1.51x** | **5** | **2.26 KB** |
-| Facet | 2,188.6 ns | 8.12x | 6 | 8.71 KB |
+| Hand-written | 289.2 ns | 1.00x | 1 | 1.91 KB |
+| Mapster | 308.6 ns | 1.07x | 2 | 1.91 KB |
+| Mapperly | 327.2 ns | 1.13x | 3 | 2.10 KB |
+| AutoMapper | 374.8 ns | 1.30x | 4 | 2.01 KB |
+| **Forge** | **402.9 ns** | **1.39x** | **5** | **2.26 KB** |
+| Facet | 2,166.6 ns | 7.50x | 6 | 8.71 KB |
 
-> **Note:** Forge's worst-case ratio across the suite (1.51x). Collection-of-collections nesting amplifies the per-element overhead from explicit `new List<T>(capacity)` pre-sizing and helper method invocations.
+> **Note:** Forge's worst-case ratio across the suite (1.39x). Collection-of-collections nesting amplifies per-element overhead from explicit `new List<T>(capacity)` pre-sizing and helper method invocations.
 
 ### Real-World: Public API Response (paged envelope + 20 resources)
 
 | Method | Mean | Ratio | Rank | Allocated |
 |--------|-----:|------:|-----:|----------:|
-| Mapperly | 1,563 ns | 0.96x | 1 | 9.09 KB |
-| Hand-written | 1,627 ns | 1.00x | 2 | 9.79 KB |
-| **Forge** | **2,100 ns** | **1.29x** | **3** | **11.34 KB** |
-| AutoMapper | 2,106 ns | 1.29x | 3 | 10.56 KB |
-| Mapster | 3,391 ns | 2.08x | 4 | 9.79 KB |
-| Facet | 10,584 ns | 6.51x | 5 | 38.90 KB |
+| Mapperly | 1.552 us | 0.96x | 1 | 9.09 KB |
+| Hand-written | 1.622 us | 1.00x | 2 | 9.79 KB |
+| **Forge** | **2.092 us** | **1.29x** | **4** | **11.34 KB** |
+| AutoMapper | 2.139 us | 1.32x | 4 | 10.56 KB |
+| Mapster | 1.699 us | 1.05x | 3 | 9.79 KB |
+| Facet | 10.977 us | 6.77x | 5 | 38.90 KB |
 
 > **Note:** Forge allocates more here (+1.55 KB vs hand-written) because each of the 20 resources has a `List<string> Categories` member that now gets deep-copied per the new default. Add `[ForgeMethod(ShareReference = true)]` on the response method to drop ~1.5 KB and ~300 ns if reference-sharing the inner Categories lists is acceptable for your use case.
 

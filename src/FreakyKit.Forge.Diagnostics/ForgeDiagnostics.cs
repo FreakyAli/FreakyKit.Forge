@@ -547,6 +547,19 @@ public static class ForgeDiagnostics
         description: "Nested forging allows the generator to call another forge method to convert a nested member. Enable it explicitly with AllowNestedForging = true.");
 
     /// <summary>
+    /// FKF301 (Error): Circular nested forge detected—a forge method with AllowNestedForging=true
+    /// calls another forge method that (directly or indirectly) calls back to the first method.
+    /// </summary>
+    public static readonly DiagnosticDescriptor CircularNestedForge = new(
+        id: "FKF301",
+        title: "Circular nested forge detected",
+        messageFormat: "Circular nested forge detected: {0}. Circular references prevent code generation. Break the cycle by setting AllowNestedForging=false on one of the methods, or by not using nested forging for one of the member assignments.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Nested forging creates a directed graph of method-to-method calls. A cycle in this graph (e.g., ToDto calls ToAddressDto which calls back to ToDto) cannot be resolved at compile time. Break the cycle by disabling nested forging on one of the members in the cycle, or by using a distinct type that breaks the loop.");
+
+    /// <summary>
     /// FKF310 (Info): A collection mapping was applied for this member.
     /// </summary>
     public static readonly DiagnosticDescriptor CollectionMapping = new(
@@ -595,6 +608,32 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "When source-side and destination-side [ForgeMap] both explicitly set ShareReference with different values, the destination-side wins (the DTO author's intent for ownership semantics). Remove one of the conflicting attributes to silence this warning.");
+
+    /// <summary>
+    /// FKF314 (Warning): NullFallback is set on a value type member, which has no effect
+    /// since value types cannot be null.
+    /// </summary>
+    public static readonly DiagnosticDescriptor NullFallbackOnValueType = new(
+        id: "FKF314",
+        title: "NullFallback has no effect on value type",
+        messageFormat: "Member '{0}': NullFallback has no effect because the source member is a value type and cannot be null",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "NullFallback only applies to reference type members. Value types cannot be null, so the fallback strategy is never used. Remove the NullFallback attribute.");
+
+    /// <summary>
+    /// FKF315 (Error): Both IgnoreIfNull and NullFallback are set on the same member.
+    /// These attributes conflict because they represent different null-handling strategies.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IgnoreIfNullAndNullFallbackConflict = new(
+        id: "FKF315",
+        title: "IgnoreIfNull and NullFallback cannot both be set",
+        messageFormat: "Member '{0}': Both IgnoreIfNull and NullFallback are set. These attributes are mutually exclusive — choose one strategy for handling null values.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "IgnoreIfNull skips assignment when null; NullFallback provides a fallback value when null. Only one can be used per member.");
 
     // ─── Construction ─────────────────────────────────────────────────────────
 
@@ -686,7 +725,8 @@ public static class ForgeDiagnostics
         description: "Some mapping cases (custom converters, conditional null skipping, non-translatable collection materializers) have no equivalent encoding inside an Expression<Func<,>>. The member is mapped normally by the imperative method but omitted from the generated expression property.");
 
     /// <summary>
-    /// FKF507 (Error): A cycle was detected while inlining nested forge methods into an expression property.
+    /// FKF507 (Error): RESERVED — Cycles are now caught by DetectCircularNestedForge (FKF301) before reaching expression inlining.
+    /// This descriptor is kept for diagnostic ID stability but will never be emitted.
     /// </summary>
     public static readonly DiagnosticDescriptor ExpressionNestedCycle = new(
         id: "FKF507",

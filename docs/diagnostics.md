@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 46 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 58 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -733,6 +733,35 @@ public static partial class MyForges
 }
 ```
 
+### FKF301 — Circular nested forge detected
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Circular nested forge detected: {0}. Circular references prevent code generation. Break the cycle by setting AllowNestedForging=false on one of the methods, or by not using nested forging for one of the member assignments. |
+
+A cycle exists in the nested forge call graph—one forge method calls (directly or indirectly) another forge method that calls back to the first. Since nested forging resolves at compile time, cycles cannot be unwound and block generation for the entire forge class.
+
+To fix it, break the cycle by disabling nested forging on one of the member assignments or on one of the methods:
+
+```csharp
+// Wrong — circular cycle: ToPersonDto → ToAddressDto → ToPersonDto
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToPersonDto(Person source);  // calls ToAddressDto
+
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial AddressDto ToAddressDto(Address source);  // calls ToPersonDto → FKF301
+}
+
+// Fix: Disable nested forging on one method
+[ForgeMethod(AllowNestedForging = false)]
+public static partial AddressDto ToAddressDto(Address source);
+```
+
 ### FKF310 — Collection mapping applied
 
 | | |
@@ -818,6 +847,55 @@ public class Dest
 ```
 
 To silence the warning, remove one of the conflicting attributes.
+
+### FKF314 — NullFallback has no effect on value type
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}': NullFallback has no effect because the source member is a value type and cannot be null. |
+
+`NullFallback` is set on a destination member whose source counterpart is a value type. Value types cannot be null, so the fallback strategy is never invoked. Remove the `NullFallback` attribute to silence this warning.
+
+```csharp
+public struct Address { public string City { get; set; } }
+public class Dest
+{
+    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]  // FKF314
+    public AddressDto Home { get; set; }
+}
+```
+
+### FKF315 — IgnoreIfNull and NullFallback cannot both be set
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}': Both IgnoreIfNull and NullFallback are set. These attributes are mutually exclusive — choose one strategy for handling null values. |
+
+Both `IgnoreIfNull` and `NullFallback` are set on the same member. These attributes represent different strategies for handling null values and cannot be combined:
+
+- **`IgnoreIfNull = true`** — skip the assignment if the source is null (preserve existing value)
+- **`NullFallback = DefaultConstruct`** — construct a default instance if the source is null
+
+Choose one:
+
+```csharp
+// Wrong — FKF315
+[ForgeMap("Home", IgnoreIfNull = true, NullFallback = NullFallback.DefaultConstruct)]
+public AddressDto Home { get; set; }
+
+// Correct — pick one strategy
+[ForgeMap("Home", IgnoreIfNull = true)]
+public AddressDto Home { get; set; }
+
+// OR
+
+[ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
+public AddressDto Home { get; set; }
+```
 
 ---
 

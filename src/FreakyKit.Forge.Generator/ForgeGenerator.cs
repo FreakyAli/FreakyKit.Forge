@@ -49,6 +49,87 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         });
     }
 
+    // ─── Utilities ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Safely get a line number from a method's location. Handles null locations and exceptions.
+    /// </summary>
+    private static int GetSafeLineNumber(IMethodSymbol? method)
+    {
+        if (method?.Locations.Length == 0) return 0;
+        try
+        {
+            var location = method?.Locations[0];
+            if (location == null) return 0;
+            return location.GetLineSpan().StartLinePosition.Line + 1;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Safely get the first location from a method. Returns null if unavailable.
+    /// </summary>
+    private static Location? GetSafeLocation(IMethodSymbol? method)
+    {
+        return method?.Locations.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Build a collection expression with the specified fallback value, avoiding string replacement issues.
+    /// Reconstructs the expression from components rather than post-processing with Replace.
+    /// </summary>
+    private static string BuildCollectionExpressionWithFallback(
+        string sourceAccessor,
+        string? elementForgeMethod,
+        string materializer,
+        string fallback)
+    {
+        string selectPart;
+        if (elementForgeMethod != null)
+            selectPart = $"{sourceAccessor}.Select(x => {elementForgeMethod}(x))";
+        else
+            selectPart = sourceAccessor;
+
+        return $"{sourceAccessor} != null ? {selectPart}{materializer} : {fallback}";
+    }
+
+    /// <summary>
+    /// Validate NullFallback preconditions and emit diagnostics for conflicts.
+    /// Returns true if a fatal error (FKF315) was found and assignment should be skipped.
+    /// </summary>
+    private static bool ValidateNullFallbackConflicts(
+        bool memberIgnoreIfNull,
+        int nullFallbackInt,
+        string destMemberName,
+        ITypeSymbol srcType,
+        IMethodSymbol method,
+        List<Diagnostic> diagnostics)
+    {
+        // FKF315: Error if both IgnoreIfNull and NullFallback are set
+        if (memberIgnoreIfNull && nullFallbackInt != 0)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
+                GetSafeLocation(method),
+                destMemberName));
+            return true;
+        }
+
+        // FKF314: Warning if NullFallback on value type
+        if (nullFallbackInt != 0 && !srcType.IsReferenceType)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.NullFallbackOnValueType,
+                GetSafeLocation(method),
+                destMemberName));
+        }
+
+        return false;
+    }
+
     // ─── Extraction ───────────────────────────────────────────────────────────
 
     private static ForgeClassResult ExtractForgeClass(
@@ -103,7 +184,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ForgeMethodDeclaresBody,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     method.Name));
                 continue;
             }
@@ -125,7 +206,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ForgeMethodNameOverloaded,
-                        m.Locations.FirstOrDefault(),
+                        GetSafeLocation(m),
                         kvp.Key,
                         type.Name));
                 }
@@ -160,6 +241,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         if (hasErrors)
+            return new ForgeClassResult(null, diagnostics, hasErrors: true);
+
+        // Detect circular nested forge before expression inlining
+        DetectCircularNestedForge(methodModels, forgeMethods, diagnostics);
+        var circularErrors = diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Id == "FKF301");
+        if (circularErrors)
             return new ForgeClassResult(null, diagnostics, hasErrors: true);
 
         // Phase 5 (expression projections): resolve nested-forge inlining.
@@ -247,7 +334,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // FKF040: info about update mode
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.UpdateModeActivated,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
         }
         else
@@ -274,7 +361,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.ExpressionIncompatibleWithUpdate,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
             generateExpression = false;
         }
@@ -283,7 +370,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.FieldsEnabled,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
         }
 
@@ -314,7 +401,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.UpdateDestinationNoSettableMembers,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     method.Name,
                     destType.Name));
                 return (null, diagnostics);
@@ -366,7 +453,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.FlattenedMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         sourceType.Name,
                         flattenExpr.Replace($"{srcParamName}.", "")));
@@ -426,7 +513,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ShareReferenceConflict,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         srcShareRef.Value ? "true" : "false",
                         destShareRef.Value ? "true" : "false"));
@@ -462,7 +549,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         diagnostics.Add(Diagnostic.Create(
                             ForgeDiagnostics.SameTypeCollectionShared,
-                            method.Locations.FirstOrDefault(),
+                            GetSafeLocation(method),
                             destMember.Name));
                     }
                     // FKF312: warn when a same-type mutable reference type (custom class, not collection)
@@ -478,7 +565,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         diagnostics.Add(Diagnostic.Create(
                             ForgeDiagnostics.SameTypeReferenceShared,
-                            method.Locations.FirstOrDefault(),
+                            GetSafeLocation(method),
                             destMember.Name,
                             srcMember.Type.ToDisplayString()));
                     }
@@ -491,7 +578,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.ExpressionMemberExcluded,
-                                method.Locations.FirstOrDefault(),
+                                GetSafeLocation(method),
                                 destMember.Name,
                                 "IgnoreIfNull has no equivalent in expression trees"));
                         }
@@ -537,7 +624,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     expressionExpr = $"{paramName}.{srcMember.Name}.GetValueOrDefault()";
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.NullableValueTypeMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -592,7 +679,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             // FKF212: source enum member missing in destination
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.EnumMemberMissing,
-                                method.Locations.FirstOrDefault(),
+                                GetSafeLocation(method),
                                 srcField.Name,
                                 srcEnumType.Name,
                                 destEnumType.Name));
@@ -620,7 +707,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.EnumNameMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -640,7 +727,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.EnumCastMapping,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -658,7 +745,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.EnumStringMapping,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     key,
                     srcMember.Type.ToDisplayString(),
                     destMember.Type.ToDisplayString()));
@@ -684,10 +771,42 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.CollectionMapping,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     key,
                     srcMember.Type.ToDisplayString(),
                     destMember.Type.ToDisplayString()));
+
+                var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
+
+                if (ValidateNullFallbackConflicts(memberIgnoreIfNull, nullFallbackInt, destMember.Name, srcMember.Type, method, diagnostics))
+                {
+                    hasTypeMismatch = true;
+                    continue;
+                }
+
+                // Apply NullFallback to collection if source is reference type
+                // Generate the correct fallback from the start instead of string replacement
+                if (srcMember.Type.IsReferenceType && nullFallbackInt == 1 && collectionInfo != null) // DefaultConstruct
+                {
+                    // Generate typed fallback matching the destination collection shape
+                    var destElem = GetCollectionElementType(destMember.Type);
+                    var elemName = destElem?.Name ?? "object";
+                    string typedFallback = collectionInfo.DestinationSuffix switch
+                    {
+                        ".ToArray()" => $"Array.Empty<{elemName}>()",
+                        ".ToHashSet()" => $"new HashSet<{elemName}>()",
+                        ".ToImmutableArray()" => $"ImmutableArray<{elemName}>.Empty",
+                        ".ToImmutableList()" => $"ImmutableList<{elemName}>.Empty",
+                        ".ToImmutableHashSet()" => $"ImmutableHashSet<{elemName}>.Empty",
+                        ".ToList().AsReadOnly()" => $"new List<{elemName}>().AsReadOnly()",
+                        _ => $"new List<{elemName}>()"  // default to List<T> if suffix is unrecognized
+                    };
+                    collectionExpr = BuildCollectionExpressionWithFallback(
+                        collectionInfo.SourceAccessor!,
+                        collectionInfo.ElementForgeMethod,
+                        collectionInfo.DestinationSuffix,
+                        fallback: typedFallback);
+                }
 
                 // Expression-mode translatability rules:
                 //  - Materializer must be .ToList() or .ToArray() (others not translated by EF)
@@ -714,7 +833,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         : "non-translatable collection materializer";
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ExpressionMemberExcluded,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         reason));
                 }
@@ -729,14 +848,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     collectionElementForgeMethod: needsInlining ? collectionInfo?.ElementForgeMethod : null,
                     collectionSourceAccessor: needsInlining ? collectionInfo?.SourceAccessor : null,
                     collectionMaterializer: needsInlining ? collectionInfo?.ExpressionMaterializer : null,
-                    collectionSourceIsRefType: needsInlining && collectionInfo != null && collectionInfo.SourceIsRefType));
+                    collectionSourceIsRefType: needsInlining && collectionInfo != null && collectionInfo.SourceIsRefType,
+                    nestedForgeNullFallback: nullFallbackInt));
             }
             else if (FindConverterMethod(forgeClass, srcMember.Type, destMember.Type, out var converterName))
             {
                 // Type converter found
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ConverterUsed,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     key, converterName!,
                     srcMember.Type.ToDisplayString(),
                     destMember.Type.ToDisplayString()));
@@ -747,7 +867,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ExpressionMemberExcluded,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         destMember.Name,
                         $"custom converter '{converterName}' is not translatable to SQL"));
                 }
@@ -766,7 +886,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.LossyImplicitConversion,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -789,11 +909,28 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 if (nestedForgeExists && allowNested && nestedMethodName != null)
                 {
                     var srcAccess = $"{srcParamName}.{srcMember.Name}";
+                    var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
+
+                    if (ValidateNullFallbackConflicts(memberIgnoreIfNull, nullFallbackInt, destMember.Name, srcMember.Type, method, diagnostics))
+                    {
+                        hasTypeMismatch = true;
+                        continue;
+                    }
+
                     string nestedExpr;
                     // Null-safe nested access: if source member is a reference type, guard against null
                     if (srcMember.Type.IsReferenceType)
                     {
-                        nestedExpr = $"{srcAccess} != null ? {nestedMethodName}({srcAccess}) : null";
+                        string fallbackExpr;
+                        if (nullFallbackInt == 1) // DefaultConstruct
+                        {
+                            fallbackExpr = $"new {destMember.Type.Name}()";
+                        }
+                        else // 0 = Null (default)
+                        {
+                            fallbackExpr = "null";
+                        }
+                        nestedExpr = $"{srcAccess} != null ? {nestedMethodName}({srcAccess}) : {fallbackExpr}";
                     }
                     else
                     {
@@ -811,14 +948,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         isInitOnly: initOnly,
                         nestedForgeMethodName: nestedMethodName,
                         nestedForgeSourceAccessor: srcAccess,
-                        nestedForgeSourceIsRefType: srcMember.Type.IsReferenceType));
+                        nestedForgeSourceIsRefType: srcMember.Type.IsReferenceType,
+                        nestedForgeNullFallback: nullFallbackInt));
                 }
                 else if (!nestedForgeExists)
                 {
                     // FKF200: incompatible types, no forge conversion available — block generation
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.IncompatibleMemberTypes,
-                        method.Locations.FirstOrDefault(),
+                        GetSafeLocation(method),
                         key,
                         srcMember.Type.ToDisplayString(),
                         destMember.Type.ToDisplayString()));
@@ -847,7 +985,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 beforeHookName = beforeName;
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.BeforeHookDetected,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     beforeName, method.Name));
             }
             if (m.IsStatic && m.IsPartialDefinition && m.ReturnsVoid && m.Name == afterName &&
@@ -860,7 +998,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 afterHookName = afterName;
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.AfterHookDetected,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     afterName, method.Name));
             }
         }
@@ -870,12 +1008,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.ExpressionIgnoresHooks,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name));
         }
 
         var accessibility = AccessibilityToString(method.DeclaredAccessibility);
-        var sourceLocation = method.Locations.FirstOrDefault();
+        var sourceLocation = GetSafeLocation(method);
         var lineSpan = sourceLocation?.GetLineSpan();
 
         var methodModel = new ForgeMethodModel(
@@ -934,7 +1072,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.IncompatibleMemberTypes,
-                    method.Locations.FirstOrDefault(),
+                    GetSafeLocation(method),
                     method.Name,
                     srcElemDisplay,
                     destElemDisplay));
@@ -980,7 +1118,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             fullExpr = projExpr;
         }
 
-        var location = method.Locations.FirstOrDefault();
+        var location = GetSafeLocation(method);
+        var lineNumber = GetSafeLineNumber(method);
+
         var model = new ForgeMethodModel(
             methodName: method.Name,
             accessibility: accessibility,
@@ -994,7 +1134,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
             methodKind: ForgeMethodKind.CollectionProject,
             sourceFilePath: location?.SourceTree?.FilePath,
-            sourceLineNumber: location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0,
+            sourceLineNumber: lineNumber,
             collectionProjectExpression: fullExpr);
 
         return (model, diagnostics);
@@ -1021,7 +1161,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.IncompatibleMemberTypes,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name,
                 srcKeyType.ToDisplayString(),
                 destKeyType.ToDisplayString()));
@@ -1044,14 +1184,16 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.IncompatibleMemberTypes,
-                method.Locations.FirstOrDefault(),
+                GetSafeLocation(method),
                 method.Name,
                 srcValDisplay,
                 destValDisplay));
             return (null, diagnostics);
         }
 
-        var location = method.Locations.FirstOrDefault();
+        var location = GetSafeLocation(method);
+        var lineNumber = GetSafeLineNumber(method);
+
         var model = new ForgeMethodModel(
             methodName: method.Name,
             accessibility: accessibility,
@@ -1065,7 +1207,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
             methodKind: ForgeMethodKind.DictionaryProject,
             sourceFilePath: location?.SourceTree?.FilePath,
-            sourceLineNumber: location?.GetLineSpan().StartLinePosition.Line + 1 ?? 0,
+            sourceLineNumber: lineNumber,
             collectionProjectExpression: valueTransform,
             concreteDictInstantiationName: concreteDictShort);
 
@@ -1127,13 +1269,116 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return type.Name;
     }
 
+    // ─── Circular nested forge detection ───────────────────────────────────────
+
+    /// <summary>
+    /// Detects circular nested forge dependencies and emits FKF301 errors.
+    /// Only checks methods that use nested forging (have assignments with NestedForgeMethodName set).
+    /// </summary>
+    private static void DetectCircularNestedForge(
+        List<ForgeMethodModel> methodModels,
+        List<IMethodSymbol> originalMethods,
+        List<Diagnostic> diagnostics)
+    {
+        var methodSymbolLookup = originalMethods.ToDictionary(m => m.Name, m => m);
+
+        // Build adjacency graph: method name -> set of method names it calls via nested forge
+        var graph = new Dictionary<string, HashSet<string>>();
+        foreach (var method in methodModels)
+        {
+            var callees = new HashSet<string>();
+            foreach (var assignment in method.Assignments)
+            {
+                if (assignment.NestedForgeMethodName != null)
+                    callees.Add(assignment.NestedForgeMethodName);
+                if (assignment.CollectionElementForgeMethod != null)
+                    callees.Add(assignment.CollectionElementForgeMethod);
+            }
+            if (callees.Count > 0)
+                graph[method.MethodName] = callees;
+        }
+
+        var cyclesFound = new HashSet<string>();
+
+        // DFS from each node in the graph to detect cycles
+        foreach (var startMethod in graph.Keys.ToList())
+        {
+            if (cyclesFound.Contains(startMethod)) continue;
+
+            var recursionStack = new HashSet<string>();
+            var path = new List<string>();
+
+            if (DetectCycleDfs(startMethod, graph, recursionStack, path, out var cycle))
+            {
+                var cycleStr = string.Join(" → ", cycle);
+                var methodSym = methodSymbolLookup.TryGetValue(cycle[0], out var sym) ? sym : null;
+
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.CircularNestedForge,
+                    GetSafeLocation(methodSym),
+                    cycleStr));
+
+                // Mark all methods in the cycle as found to avoid duplicate reports
+                foreach (var m in cycle)
+                    cyclesFound.Add(m);
+            }
+        }
+    }
+
+    /// <summary>
+    /// DFS helper to detect cycles in the nested forge graph.
+    /// Uses recursion stack to detect back edges (cycles).
+    /// Returns true if a cycle is found, with the cycle nodes in order.
+    /// </summary>
+    private static bool DetectCycleDfs(
+        string node,
+        Dictionary<string, HashSet<string>> graph,
+        HashSet<string> recursionStack,
+        List<string> path,
+        out List<string> cycle)
+    {
+        cycle = new List<string>();
+
+        if (recursionStack.Contains(node))
+        {
+            // Cycle detected: build the cycle from node to current position
+            var cycleStart = path.IndexOf(node);
+            if (cycleStart >= 0)
+                cycle = new List<string>(path.Skip(cycleStart));
+            cycle.Add(node);
+            return true;
+        }
+
+        recursionStack.Add(node);
+        path.Add(node);
+
+        if (graph.TryGetValue(node, out var callees))
+        {
+            foreach (var callee in callees)
+            {
+                if (DetectCycleDfs(callee, graph, recursionStack, path, out var foundCycle))
+                {
+                    cycle = foundCycle;
+                    recursionStack.Remove(node);
+                    path.RemoveAt(path.Count - 1);
+                    return true;
+                }
+            }
+        }
+
+        recursionStack.Remove(node);
+        path.RemoveAt(path.Count - 1);
+        return false;
+    }
+
     // ─── Expression inlining (Phase 5: nested forging) ────────────────────────
 
     /// <summary>
     /// Post-extraction pass that resolves nested-forge inlining for every method with
     /// <see cref="ForgeMethodModel.GenerateExpression"/> = true. Replaces each nested
     /// assignment's <see cref="MemberAssignmentModel.ExpressionAssignment"/> with the
-    /// fully inlined expression body. Cycles → FKF507 (error); depth &gt; 5 → FKF508 (info).
+    /// fully inlined expression body. Cycles are caught by DetectCircularNestedForge before
+    /// this phase, so this pass can assume the graph is acyclic. Depth &gt; 5 → FKF508 (info).
     /// </summary>
     private static void ResolveExpressionInlining(
         List<ForgeMethodModel> methodModels,
@@ -1239,17 +1484,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         if (!lookup.TryGetValue(nestedMethodName, out var nested))
             return null;
 
-        if (visitedChain.Contains(nestedMethodName))
-        {
-            var path = string.Join(" -> ", visitedChain) + " -> " + nestedMethodName;
-            diagnostics.Add(Diagnostic.Create(
-                ForgeDiagnostics.ExpressionNestedCycle,
-                location: null,
-                outerMethodName,
-                path));
-            return null;
-        }
-
         if (nested.MethodKind != ForgeMethodKind.Create) return null;
 
         if (depth > maxDepth) maxDepth = depth;
@@ -1332,8 +1566,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     /// <summary>
     /// Word-boundary substitution of a parameter identifier with a replacement expression.
     /// Used to rewrite a nested forge method's body to refer to the outer source accessor.
+    /// SECURITY NOTE: Uses regex escaping for safety, but is inherently fragile for string-based code generation.
+    /// Consider migrating to expression-tree or SyntaxFactory APIs for future robustness.
     /// </summary>
-    private static string SubstituteParam(string expr, string oldParam, string newAccessor)
+    internal static string SubstituteParam(string expr, string oldParam, string newAccessor)
     {
         return Regex.Replace(expr, $@"\b{Regex.Escape(oldParam)}\b", newAccessor.Replace("$", "$$"));
     }
@@ -1370,7 +1606,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.NoViableConstructor,
-                forgeMethod.Locations.FirstOrDefault(),
+                GetSafeLocation(forgeMethod),
                 destType.Name,
                 sourceName));
             return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
@@ -1448,7 +1684,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.ConstructorAmbiguity,
-                forgeMethod.Locations.FirstOrDefault(),
+                GetSafeLocation(forgeMethod),
                 destType.Name));
             return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
         }
@@ -1473,7 +1709,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.MissingConstructorParameter,
-                        forgeMethod.Locations.FirstOrDefault(),
+                        GetSafeLocation(forgeMethod),
                         param.Name,
                         destType.Name,
                         sourceName));
@@ -1484,7 +1720,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.NoViableConstructor,
-                forgeMethod.Locations.FirstOrDefault(),
+                GetSafeLocation(forgeMethod),
                 destType.Name,
                 sourceName));
         }
@@ -1863,7 +2099,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.DuplicateForgeMapTarget,
-                                forgeMethod.Locations.FirstOrDefault(),
+                                GetSafeLocation(forgeMethod),
                                 key, prop.Name, type.Name));
                         }
                     }
@@ -1881,7 +2117,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.FieldIgnored,
-                                forgeMethod.Locations.FirstOrDefault(),
+                                GetSafeLocation(forgeMethod),
                                 field.Name,
                                 type.Name));
                         }
@@ -1896,7 +2132,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.DuplicateForgeMapTarget,
-                                forgeMethod.Locations.FirstOrDefault(),
+                                GetSafeLocation(forgeMethod),
                                 key, field.Name, type.Name));
                         }
                     }
@@ -2227,6 +2463,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 elementForgeMethod: null,
                 sourceAccessor: srcAccessor,
                 expressionMaterializer: expressionMaterializer,
+                destinationSuffix: suffix,
                 sourceIsRefType: srcIsRefType,
                 sameElementType: true);
             return true;
@@ -2244,6 +2481,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 elementForgeMethod: nestedName,
                 sourceAccessor: srcAccessor,
                 expressionMaterializer: expressionMaterializer,
+                destinationSuffix: suffix,
                 sourceIsRefType: srcIsRefType,
                 sameElementType: false);
             return true;
@@ -2258,13 +2496,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         public string? ElementForgeMethod { get; }
         public string? SourceAccessor { get; }
         public string? ExpressionMaterializer { get; }
+        public string DestinationSuffix { get; }
         public bool SourceIsRefType { get; }
         public bool SameElementType { get; }
-        public CollectionMappingInfo(string? elementForgeMethod, string? sourceAccessor, string? expressionMaterializer, bool sourceIsRefType, bool sameElementType)
+        public CollectionMappingInfo(string? elementForgeMethod, string? sourceAccessor, string? expressionMaterializer, string destinationSuffix, bool sourceIsRefType, bool sameElementType)
         {
             ElementForgeMethod = elementForgeMethod;
             SourceAccessor = sourceAccessor;
             ExpressionMaterializer = expressionMaterializer;
+            DestinationSuffix = destinationSuffix;
             SourceIsRefType = sourceIsRefType;
             SameElementType = sameElementType;
         }
@@ -2576,6 +2816,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 return b;
         }
         return null;
+    }
+
+    private static int GetForgeMapNullFallback(ISymbol? member)
+    {
+        if (member == null) return 0; // NullFallback.Null
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
+        if (attr == null) return 0;
+        foreach (var namedArg in attr.NamedArguments)
+        {
+            if (namedArg.Key == "NullFallback" && namedArg.Value.Value is int intVal)
+                return intVal;
+        }
+        return 0;
     }
 
     private static string FormatLiteral(object value)

@@ -65,7 +65,13 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
     /// </summary>
     public bool CollectionSourceIsRefType { get; }
 
-    public MemberAssignmentModel(string destMemberName, string sourceExpression, bool ignoreIfNull = false, string? nullCheckExpression = null, bool isInitOnly = false, string? expressionAssignment = null, string? nestedForgeMethodName = null, string? nestedForgeSourceAccessor = null, bool nestedForgeSourceIsRefType = false, string? collectionElementForgeMethod = null, string? collectionSourceAccessor = null, string? collectionMaterializer = null, bool collectionSourceIsRefType = false)
+    /// <summary>
+    /// For nested-forge members: the null fallback strategy (0 = Null, 1 = DefaultConstruct).
+    /// Defaults to 0 (Null). Only applies to reference type sources.
+    /// </summary>
+    public int NestedForgeNullFallback { get; }
+
+    public MemberAssignmentModel(string destMemberName, string sourceExpression, bool ignoreIfNull = false, string? nullCheckExpression = null, bool isInitOnly = false, string? expressionAssignment = null, string? nestedForgeMethodName = null, string? nestedForgeSourceAccessor = null, bool nestedForgeSourceIsRefType = false, string? collectionElementForgeMethod = null, string? collectionSourceAccessor = null, string? collectionMaterializer = null, bool collectionSourceIsRefType = false, int nestedForgeNullFallback = 0)
     {
         DestMemberName = destMemberName;
         SourceExpression = sourceExpression;
@@ -80,6 +86,7 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
         CollectionSourceAccessor = collectionSourceAccessor;
         CollectionMaterializer = collectionMaterializer;
         CollectionSourceIsRefType = collectionSourceIsRefType;
+        NestedForgeNullFallback = nestedForgeNullFallback;
     }
 
     public bool Equals(MemberAssignmentModel other)
@@ -97,7 +104,8 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
             && CollectionElementForgeMethod == other.CollectionElementForgeMethod
             && CollectionSourceAccessor == other.CollectionSourceAccessor
             && CollectionMaterializer == other.CollectionMaterializer
-            && CollectionSourceIsRefType == other.CollectionSourceIsRefType;
+            && CollectionSourceIsRefType == other.CollectionSourceIsRefType
+            && NestedForgeNullFallback == other.NestedForgeNullFallback;
     }
 
     public override bool Equals(object obj) => Equals(obj as MemberAssignmentModel);
@@ -120,6 +128,7 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
             hash = hash * 31 + (CollectionSourceAccessor?.GetHashCode() ?? 0);
             hash = hash * 31 + (CollectionMaterializer?.GetHashCode() ?? 0);
             hash = hash * 31 + CollectionSourceIsRefType.GetHashCode();
+            hash = hash * 31 + NestedForgeNullFallback.GetHashCode();
             return hash;
         }
     }

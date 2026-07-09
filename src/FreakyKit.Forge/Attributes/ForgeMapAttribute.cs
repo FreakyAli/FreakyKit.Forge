@@ -44,6 +44,22 @@ public sealed class ForgeMapAttribute : Attribute
     /// </summary>
     public bool ShareReference { get; set; }
 
+    /// <summary>
+    /// Controls what happens when a source member is null during nested forging with <see cref="ForgeMethodAttribute.AllowNestedForging"/>.
+    ///
+    /// PRECONDITIONS (all must be true, or this property is silently ignored):
+    /// - Source member must be a reference type (class, interface, nullable struct)
+    /// - Destination member must map to a nested-forged type (there must be a forge method for the type)
+    /// - The parent forge method must have <see cref="ForgeMethodAttribute.AllowNestedForging"/> = true
+    ///
+    /// When conditions are met:
+    /// - <see cref="NullFallback.Null"/> (default): generate <c>source.Member != null ? ToDto(...) : null</c>
+    /// - <see cref="NullFallback.DefaultConstruct"/>: generate <c>source.Member != null ? ToDto(...) : new DestType()</c>
+    ///
+    /// When conditions are NOT met, this property has no effect (no diagnostic is emitted unless combined with <see cref="IgnoreIfNull"/>, which is always an error).
+    /// </summary>
+    public NullFallback NullFallback { get; set; }
+
     public ForgeMapAttribute(string name)
     {
         Name = name;

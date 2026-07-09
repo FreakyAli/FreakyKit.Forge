@@ -317,6 +317,64 @@ The nested forge method must:
 - Take the source member's type as its parameter
 - Return the destination member's type
 
+### Null Fallback Behavior
+
+By default, when a source member is null, the nested forge returns null for the destination member. You can customize this with `[ForgeMap(NullFallback = ...)]` on the destination member:
+
+```csharp
+public class Dest
+{
+    // Default behavior: source.Home null → result.Home = null
+    public AddressDto Home { get; set; }
+
+    // Custom behavior: source.Home null → result.Home = new AddressDto()
+    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
+    public AddressDto OtherHome { get; set; }
+}
+
+// Generates:
+// __result.Home = source.Home != null ? ToAddressDto(source.Home) : null;
+// __result.OtherHome = source.Home != null ? ToAddressDto(source.Home) : new AddressDto();
+```
+
+`NullFallback` also works with collections, generating typed empty collections matching the destination type:
+
+```csharp
+[ForgeMap("Addresses", NullFallback = NullFallback.DefaultConstruct)]
+public List<AddressDto> Addresses { get; set; }
+
+// Generates: __result.Addresses = source.Addresses != null ? ... : new List<AddressDto>();
+// For arrays: Array.Empty<AddressDto>()
+// For HashSet: new HashSet<AddressDto>()
+// For ImmutableList: ImmutableList<AddressDto>.Empty
+```
+
+For more details, see [`[ForgeMap]` NullFallback](attributes.md#nullfallback) in the attributes reference.
+
+### Circular Forge Detection
+
+The generator detects circular dependencies in nested forging—situations where a forge method with `AllowNestedForging = true` calls another forge method that (directly or indirectly) calls back to the first method. Circles cannot be resolved at compile time and block generation entirely with error **FKF301**.
+
+Example:
+
+```csharp
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToPersonDto(Person source);  // calls ToAddressDto
+
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial AddressDto ToAddressDto(Address source);  // calls ToPersonDto → FKF301 cycle
+}
+
+// Generated code is blocked: "Circular nested forge detected: ToPersonDto → ToAddressDto → ToPersonDto"
+```
+
+To break the cycle, set `AllowNestedForging = false` on one of the involved methods. (Note: `IgnoreIfNull` does not break the static dependency and won't prevent FKF301.)
+
+See [FKF301 — Circular nested forge detected](diagnostics.md#fkf301--circular-nested-forge-detected) for details and examples.
+
 ## Before/After Hooks
 
 The generator scans the forge class for convention-based partial methods:

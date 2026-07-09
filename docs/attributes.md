@@ -387,6 +387,45 @@ public class Person
 //   __result.History = source.History != null ? new List<string>(source.History) : null; // copied
 ```
 
+#### `NullFallback` (`NullFallback`, default: `NullFallback.Null`)
+
+Controls what happens when a source member is null during nested forging.
+
+**PRECONDITIONS** (all must be true, or this property is silently ignored):
+- Source member must be a reference type (class, interface, nullable struct)
+- Destination member must map to a nested-forged type (a forge method must exist for that type)
+- The parent forge method must have `[ForgeMethod(AllowNestedForging = true)]`
+
+When conditions are met:
+- **`NullFallback.Null`** (default) — generate `source.Member != null ? ToDto(...) : null`
+- **`NullFallback.DefaultConstruct`** — generate `source.Member != null ? ToDto(...) : new DestType()`
+
+When conditions are NOT met, this property has no effect and is silently ignored.
+
+Can only be placed on the destination member. Cannot be combined with `IgnoreIfNull` on the same member (emits `FKF315` error).
+
+```csharp
+public class Address { public string City { get; set; } = ""; }
+public class AddressDto { public string City { get; set; } = ""; }
+public class Source { public Address? Home { get; set; } }
+public class Dest
+{
+    // When source.Home is null, creates a new AddressDto() instead of null
+    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
+    public AddressDto Home { get; set; } = new();
+}
+
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial Dest ToDest(Source source);
+    public static partial AddressDto ToAddressDto(Address source);
+}
+
+// Generates: __result.Home = source.Home != null ? ToAddressDto(source.Home) : new AddressDto();
+```
+
 ### Usage Patterns
 
 **Source-side mapping:** The attribute value names the destination member.
