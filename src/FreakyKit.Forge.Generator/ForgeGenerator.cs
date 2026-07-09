@@ -96,6 +96,40 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return $"{sourceAccessor} != null ? {selectPart}{materializer} : {fallback}";
     }
 
+    /// <summary>
+    /// Validate NullFallback preconditions and emit diagnostics for conflicts.
+    /// Returns true if a fatal error (FKF315) was found and assignment should be skipped.
+    /// </summary>
+    private static bool ValidateNullFallbackConflicts(
+        bool memberIgnoreIfNull,
+        int nullFallbackInt,
+        string destMemberName,
+        ITypeSymbol srcType,
+        IMethodSymbol method,
+        List<Diagnostic> diagnostics)
+    {
+        // FKF315: Error if both IgnoreIfNull and NullFallback are set
+        if (memberIgnoreIfNull && nullFallbackInt != 0)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
+                GetSafeLocation(method),
+                destMemberName));
+            return true;
+        }
+
+        // FKF314: Warning if NullFallback on value type
+        if (nullFallbackInt != 0 && !srcType.IsReferenceType)
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.NullFallbackOnValueType,
+                GetSafeLocation(method),
+                destMemberName));
+        }
+
+        return false;
+    }
+
     // ─── Extraction ───────────────────────────────────────────────────────────
 
     private static ForgeClassResult ExtractForgeClass(
@@ -744,24 +778,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
 
-                // FKF315: Error if both IgnoreIfNull and NullFallback are set
-                if (memberIgnoreIfNull && nullFallbackInt != 0)
+                if (ValidateNullFallbackConflicts(memberIgnoreIfNull, nullFallbackInt, destMember.Name, srcMember.Type, method, diagnostics))
                 {
-                    diagnostics.Add(Diagnostic.Create(
-                        ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
-                        GetSafeLocation(method),
-                        destMember.Name));
                     hasTypeMismatch = true;
                     continue;
-                }
-
-                // FKF314: Warning if NullFallback on value type
-                if (nullFallbackInt != 0 && !srcMember.Type.IsReferenceType)
-                {
-                    diagnostics.Add(Diagnostic.Create(
-                        ForgeDiagnostics.NullFallbackOnValueType,
-                        GetSafeLocation(method),
-                        destMember.Name));
                 }
 
                 // Apply NullFallback to collection if source is reference type
@@ -880,24 +900,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     var srcAccess = $"{srcParamName}.{srcMember.Name}";
                     var nullFallbackInt = GetForgeMapNullFallback(destSymbolForNull);
 
-                    // FKF315: Error if both IgnoreIfNull and NullFallback are set
-                    if (memberIgnoreIfNull && nullFallbackInt != 0)
+                    if (ValidateNullFallbackConflicts(memberIgnoreIfNull, nullFallbackInt, destMember.Name, srcMember.Type, method, diagnostics))
                     {
-                        diagnostics.Add(Diagnostic.Create(
-                            ForgeDiagnostics.IgnoreIfNullAndNullFallbackConflict,
-                            GetSafeLocation(method),
-                            destMember.Name));
                         hasTypeMismatch = true;
                         continue;
-                    }
-
-                    // FKF314: Warning if NullFallback on value type
-                    if (nullFallbackInt != 0 && !srcMember.Type.IsReferenceType)
-                    {
-                        diagnostics.Add(Diagnostic.Create(
-                            ForgeDiagnostics.NullFallbackOnValueType,
-                            GetSafeLocation(method),
-                            destMember.Name));
                     }
 
                     string nestedExpr;
@@ -1298,7 +1304,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.CircularNestedForge,
-                    methodSym?.Locations.FirstOrDefault(),
+                    GetSafeLocation(methodSym),
                     cycleStr));
 
                 // Mark all methods in the cycle as found to avoid duplicate reports
@@ -1590,7 +1596,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.NoViableConstructor,
-                forgeMethod.Locations.FirstOrDefault(),
+                GetSafeLocation(forgeMethod),
                 destType.Name,
                 sourceName));
             return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
@@ -1668,7 +1674,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.ConstructorAmbiguity,
-                forgeMethod.Locations.FirstOrDefault(),
+                GetSafeLocation(forgeMethod),
                 destType.Name));
             return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
         }
@@ -1693,7 +1699,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.MissingConstructorParameter,
-                        forgeMethod.Locations.FirstOrDefault(),
+                        GetSafeLocation(forgeMethod),
                         param.Name,
                         destType.Name,
                         sourceName));
@@ -1704,7 +1710,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.NoViableConstructor,
-                forgeMethod.Locations.FirstOrDefault(),
+                GetSafeLocation(forgeMethod),
                 destType.Name,
                 sourceName));
         }
@@ -2083,7 +2089,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.DuplicateForgeMapTarget,
-                                forgeMethod.Locations.FirstOrDefault(),
+                                GetSafeLocation(forgeMethod),
                                 key, prop.Name, type.Name));
                         }
                     }
@@ -2101,7 +2107,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.FieldIgnored,
-                                forgeMethod.Locations.FirstOrDefault(),
+                                GetSafeLocation(forgeMethod),
                                 field.Name,
                                 type.Name));
                         }
@@ -2116,7 +2122,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.DuplicateForgeMapTarget,
-                                forgeMethod.Locations.FirstOrDefault(),
+                                GetSafeLocation(forgeMethod),
                                 key, field.Name, type.Name));
                         }
                     }
