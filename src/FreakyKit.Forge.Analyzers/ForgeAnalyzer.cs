@@ -16,6 +16,12 @@ namespace FreakyKit.Forge.Analyzers;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ForgeAnalyzer : DiagnosticAnalyzer
 {
+    /// <summary>
+    /// Declares all diagnostics that this analyzer can report. Note: Some diagnostics (e.g., FKF530, FKF532)
+    /// are declared here for completeness but are only emitted by the source generator during code generation,
+    /// not by the analyzer during static analysis. This is because they require full type resolution and
+    /// member availability that is only available during the generator's compilation pass.
+    /// </summary>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(
             ForgeDiagnostics.ExplicitModeActivated,

@@ -429,4 +429,45 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
         var fkf524Errors = result.Diagnostics.Where(d => d.Id == "FKF524").ToList();
         Assert.Equal(2, fkf524Errors.Count);
     }
+
+    [Fact]
+    public void ForgeUses_CrossClassConvertersInCollections_DiscoversAndUsesConverter()
+    {
+        // Test that converters from [ForgeUses] classes work with collection element conversions.
+        // AddressForges provides [ForgeConverter] Address→AddressDto, and PersonForges uses
+        // [ForgeUses] to discover it, then applies it to List<Address> → List<AddressDto>.
+        const string source = """
+            using System.Collections.Generic;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Address { public string City { get; set; } = ""; }
+                public class AddressDto { public string City { get; set; } = ""; }
+                public class Person { public string Name { get; set; } = ""; public List<Address> Addresses { get; set; } = new(); }
+                public class PersonDto { public string Name { get; set; } = ""; public List<AddressDto> Addresses { get; set; } = new(); }
+
+                [Forge]
+                public static partial class AddressForges
+                {
+                    [ForgeConverter]
+                    public static partial AddressDto ConvertAddress(Address source);
+                }
+
+                [Forge]
+                [ForgeUses(typeof(AddressForges))]
+                public static partial class PersonForges
+                {
+                    [ForgeMethod]
+                    public static partial PersonDto ToPersonDto(Person source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // Verify that the converter is discovered and used for collection element conversion
+        Assert.Contains("ConvertAddress", generated);
+        Assert.Contains("Select", generated);
+    }
 }

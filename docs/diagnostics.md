@@ -1045,6 +1045,8 @@ public class ConcreteDest : IDest { ... }
 public static partial ConcreteDest ToDest(Source source);
 ```
 
+> **Note on array type accessibility:** When a constructor parameter is an array type (e.g., `int[]`, `string[]`), the array's accessibility is validated by examining the element type's accessibility. Array element types in accessible constructors are validated using FKF501 if they are not publicly accessible and come from a different assembly.
+
 ### FKF504 — Expression generation incompatible with update method
 
 | | |
