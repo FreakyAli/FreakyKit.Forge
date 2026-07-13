@@ -87,12 +87,97 @@ public static partial class PersonForges
 
 ---
 
+## `[ForgeUses]`
+
+**Namespace:** `FreakyKit.Forge`  
+**Target:** Class (on `[Forge]` classes)
+
+Declares that a forge class uses (includes) methods from other forge classes during nested forge method discovery. When a nested mapping requires a method that doesn't exist in the current class, the generator searches included classes in order.
+
+### Properties
+
+#### `ForgeClasses` (`params Type[]`)
+
+The forge classes to include for method discovery. Order matters: the first class that has a matching method wins. All included classes must be decorated with `[Forge]`.
+
+```csharp
+[Forge]
+public static partial class AddressForges
+{
+    [ForgeMethod]
+    public static partial AddressDto ToAddressDto(Address source);
+}
+
+[Forge]
+public static partial class CompanyForges
+{
+    [ForgeMethod]
+    public static partial CompanyDto ToCompanyDto(Company source);
+}
+
+[Forge]
+[ForgeUses(typeof(AddressForges), typeof(CompanyForges))]
+public static partial class PersonForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToPersonDto(Person source);
+    // Discovers ToAddressDto from AddressForges
+    // Discovers ToCompanyDto from CompanyForges
+}
+```
+
+**Order matters:**
+
+The first class in the list has priority. If multiple included classes have methods for the same type pair, the first match is used and others are shadowed. A warning (FKF523) is emitted for each shadowed method so you're aware of the behavior.
+
+```csharp
+[Forge]
+[ForgeUses(typeof(AddressForges1), typeof(AddressForges2))]
+public static partial class PersonForges
+{
+    // If both classes have Address → AddressDto methods,
+    // AddressForges1's method is used
+    // FKF523 warning emitted for the shadowed method in AddressForges2
+}
+```
+
+**Validation:**
+
+- The class must be decorated with `[Forge]` — using `[ForgeUses]` without `[Forge]` emits **FKF524** (Error)
+- All included classes must be decorated with `[Forge]` (FKF521)
+- Self-includes are detected (FKF522)
+- Shadowed methods emit warnings (FKF523) to inform you of the precedence
+- Invalid includes emit error diagnostics
+
+---
+
 ## `[ForgeMethod]`
 
 **Namespace:** `FreakyKit.Forge`
 **Target:** Method (`static partial` method only)
 
 Marks a method as a forge method and configures its mapping behavior. In `ForgeMode.Explicit`, this attribute is required. In `ForgeMode.Implicit`, it is optional and provides per-method configuration.
+
+### Context Requirements
+
+`[ForgeMethod]` can only be used on methods in classes decorated with `[Forge]`. If a `[ForgeMethod]` attribute is found on a method in a class without `[Forge]`, the generator emits **FKF525** (Error) and does not process the method.
+
+```csharp
+// ✗ INVALID: No [Forge] on class
+public static class MyNonForgeClass
+{
+    [ForgeMethod]
+    public static partial PersonDto ToDto(Person source);  // FKF525 Error
+}
+
+// ✓ VALID: Class has [Forge]
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod]
+    public static partial PersonDto ToDto(Person source);
+}
+```
 
 ### Properties
 
@@ -301,6 +386,37 @@ See [projections.md](projections.md) for the full coverage matrix and translatio
 
 Excludes a property or field from forge mapping. By default, the member is skipped on **both** sides — no `FKF100`/`FKF101` warnings are emitted.
 
+### Context Requirements
+
+`[ForgeIgnore]` is primarily meaningful on **destination type members**. When placed on a destination type property or field, it prevents that member from being assigned during mapping.
+
+If `[ForgeIgnore]` is detected on a member of a type that is not being used as a destination in any forge operation, the generator emits **FKF528** (Warning) to alert you that the attribute has no effect.
+
+```csharp
+// ✓ CORRECT: [ForgeIgnore] on destination type member
+public class Source { public string Name { get; set; } }
+public class Dest
+{
+    public string Name { get; set; }
+    [ForgeIgnore]
+    public string InternalField { get; set; }  // correctly excluded from mapping
+}
+
+[Forge]
+public static partial class MyForges
+{
+    public static partial Dest ToDto(Source source);
+}
+
+// ✗ INEFFECTIVE: [ForgeIgnore] on source type (emits FKF528)
+public class Source
+{
+    public string Name { get; set; }
+    [ForgeIgnore]
+    public string InternalField { get; set; }  // FKF528 Warning — has no effect here
+}
+```
+
 ### Properties
 
 #### `Side` (`ForgeIgnoreSide`, default: `ForgeIgnoreSide.Both`)
@@ -339,6 +455,36 @@ public class Dest
 **Target:** Property, Field, or Constructor Parameter
 
 Maps a property, field, or constructor parameter to a differently-named member on the counterpart type. The constructor parameter specifies the target member name.
+
+### Context Requirements
+
+`[ForgeMap]` is primarily meaningful on **destination type members** and **constructor parameters**. When placed on a destination type property or field, it customizes how that member maps from the source type.
+
+If `[ForgeMap]` is detected on a member of a type that is not being used as a destination in any forge operation, the generator emits **FKF527** (Warning) to alert you that the attribute has no effect.
+
+```csharp
+// ✓ CORRECT: [ForgeMap] on destination type member
+public class Source { public string FullName { get; set; } }
+public class Dest
+{
+    [ForgeMap("FullName")]
+    public string CompleteName { get; set; }  // correctly maps from source.FullName
+}
+
+[Forge]
+public static partial class MyForges
+{
+    public static partial Dest ToDto(Source source);
+}
+
+// ✗ INEFFECTIVE: [ForgeMap] on source type (emits FKF527)
+public class Source
+{
+    [ForgeMap("CompleteName")]
+    public string FullName { get; set; }  // FKF527 Warning — has no effect here
+}
+public class Dest { public string CompleteName { get; set; } }
+```
 
 ### Constructor
 
@@ -625,6 +771,27 @@ See [docs/diagnostics.md](diagnostics.md) for full diagnostic reference.
 **Target:** Method (`static` method only)
 
 Marks a static method as a type converter for forge mapping. When a member type mismatch is encountered, the generator resolves it using a priority chain: nullable handling, enum mapping, collection mapping, then type converters, then nested forging. Converters are checked **after** collection mapping but **before** nested forging. If nothing resolves the mismatch, `FKF200` is emitted.
+
+### Context Requirements
+
+`[ForgeConverter]` can only be used on methods in classes decorated with `[Forge]`. If a `[ForgeConverter]` attribute is found on a method in a class without `[Forge]`, the generator emits **FKF526** (Error) and does not register the converter.
+
+```csharp
+// ✗ INVALID: No [Forge] on class
+public static class MyNonForgeClass
+{
+    [ForgeConverter]
+    public static string ConvertInt(int value) => value.ToString();  // FKF526 Error
+}
+
+// ✓ VALID: Class has [Forge]
+[Forge]
+public static partial class MyForges
+{
+    [ForgeConverter]
+    public static string ConvertInt(int value) => value.ToString();
+}
+```
 
 ### Method Requirements
 

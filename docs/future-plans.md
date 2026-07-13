@@ -16,10 +16,8 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
 | 1 | Expression assignment mutability | P2 | Medium | Low | Refactor to immutable pattern |
-| 2 | Conditional/predicate mapping | P2 | High | Medium | `IgnoreIfDefault` + custom predicates |
-| 3 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
-| 4 | Cross-class nested forge | P2 | High | Medium-High | Discover methods in other classes |
-| 5 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
+| 2 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
+| 3 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
 | 6 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
 | 7 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
 | 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
@@ -70,53 +68,7 @@ Medium. Internal-only change with no API surface change. Enables future caching 
 
 ---
 
-### 2. Conditional/Predicate Mapping — `P2`
-
-**Why**
-
-PATCH/partial-update APIs need to skip fields based on conditions: null values, default values (0, false, Guid.Empty), or custom predicates. `IgnoreIfNull` only handles nullable references; there's no way to express "skip if default" or "skip if predicate returns false" without after-hooks.
-
-**Design**
-
-Extend `[ForgeMap]` with two new optional properties:
-
-1. `IgnoreIfDefault` — Wrap assignment in `if (!EqualityComparer<T>.Default.Equals(source.X, default))`
-2. `Condition` — Reference a static method on the forge class that returns `bool`
-
-```csharp
-[ForgeMap("Name", IgnoreIfDefault = true)]
-public string? NewName { get; set; }  // Skip if null or default(string)
-
-[ForgeMap("Priority", Condition = nameof(ShouldMapPriority))]
-public int NewPriority { get; set; }  // Skip based on custom predicate
-```
-
-**Complexity**
-
-Medium. `IgnoreIfDefault` is straightforward (similar to `IgnoreIfNull`). `Condition` requires method resolution and signature validation similar to existing `[ForgeConverter]` logic.
-
-**Impact**
-
-High. Enables proper partial-update/PATCH semantics without workarounds.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeMapAttribute.cs` — Add `IgnoreIfDefault` and `Condition` properties
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Emit conditional checks in assignment generation
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics for condition method resolution
-
-**Suggested Approach**
-
-1. Add boolean `IgnoreIfDefault` property to `ForgeMapAttribute`
-2. Add string `Condition` property to `ForgeMapAttribute` (method name reference)
-3. In `GenerateAssignment`, check `IgnoreIfDefault` flag and wrap in `if` with `EqualityComparer<T>.Default.Equals` check
-4. In `GenerateAssignment`, check `Condition` flag, resolve the method, and wrap in `if` with that method call
-5. Validate condition methods: must be static, take source type param, return bool
-6. Add analyzer diagnostics for missing/invalid condition methods
-
----
-
-### 3. Multi-Level Deep Flattening — `P2`
+### 2. Multi-Level Deep Flattening — `P2`
 
 **Why**
 
@@ -154,53 +106,7 @@ Medium. Solves real-world flattening scenarios; reduces need for nested forging 
 
 ---
 
-### 4. Cross-Class Nested Forge — `P2`
-
-**Why**
-
-Nested forging currently only searches the containing forge class. If `AddressForges.ToDto(Address)` is in a separate class from `PersonForges`, nested forge lookup fails and users must either duplicate methods or consolidate everything into one large, unmaintainable class.
-
-**Design**
-
-Add optional `[ForgeUses(Type[])]` attribute to forge class. When looking up nested forge methods with `AllowNestedForging = true`, scan included classes in addition to the current class.
-
-```csharp
-[Forge]
-[ForgeUses(typeof(AddressForges), typeof(CompanyForges))]
-public static partial class PersonForges
-{
-    [ForgeMethod(AllowNestedForging = true)]
-    public static partial PersonDto ToDto(Person source);
-    // Discovers AddressForges.ToDto for source.Home and CompanyForges methods
-}
-```
-
-**Complexity**
-
-Medium-high. Requires cross-class symbol resolution during incremental generation. Existing pipeline processes each forge class independently; may need `Collect()` + `Combine()` step.
-
-**Impact**
-
-High. Enables modular, composable forge class hierarchies at scale.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeUsesAttribute.cs` — New attribute
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Cross-class method lookup in nested forge resolution
-- `src/FreakyKit.Forge.Generator/Models/ForgeClassModel.cs` — Add `IReadOnlyList<INamedTypeSymbol> IncludedForgeClasses`
-- Incremental pipeline may need restructuring if direct symbol lookup isn't sufficient
-
-**Suggested Approach**
-
-1. Define `[ForgeUses(params Type[] forgeClasses)]` attribute
-2. In `ExtractForgeClass`, parse the attribute and store included class types
-3. In nested forge lookup, after searching current class, search included classes
-4. Validate included classes are also decorated with `[Forge]`
-5. Add analyzer diagnostic: circular includes, missing/non-forge includes
-
----
-
-### 5. Tri-State ShareReference — `P2`
+### 3. Tri-State ShareReference — `P2`
 
 **Why**
 

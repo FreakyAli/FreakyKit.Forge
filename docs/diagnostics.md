@@ -1045,3 +1045,171 @@ outer one. Deep chains produce large generated source files. This diagnostic fir
 exceeds five to surface the cost. No action is required — the expression still emits and runs
 correctly. Consider flattening with `AllowFlattening = true` for shallow-but-wide member access if
 the generated source is becoming unwieldy.
+
+---
+
+## Conditional/Predicate Mapping Diagnostics (FKF510–FKF512)
+
+### FKF510 — Condition method not found
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' not found. Verify the method name and that it exists in the forge class. |
+
+The `Condition` property on `[ForgeMap]` references a static method that doesn't exist in the forge class. The method must be defined before it can be used for conditional assignment.
+
+**Fix:** Add the missing method or correct the method name reference.
+
+```csharp
+// Wrong — FKF510: method not found
+[ForgeMap("Age", Condition = nameof(ValidateAge))]
+public int Age { get; set; }
+
+// Correct
+[ForgeMap("Age", Condition = nameof(IsValidAge))]
+public int Age { get; set; }
+
+private static bool IsValidAge(Source source) => source.Age >= 0;
+```
+
+### FKF511 — Condition method has invalid signature
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' has invalid signature. Method must be static, accept exactly one parameter of the source type, and return bool. |
+
+The condition method exists but has the wrong signature. Condition methods must be:
+- Static
+- Accept exactly one parameter matching the source type
+- Return `bool`
+
+**Fix:** Update the method signature to match requirements.
+
+```csharp
+// Wrong — no parameters
+private static bool IsValid() => true;  // FKF511
+
+// Wrong — wrong parameter type
+private static bool IsValid(OtherClass source) => true;  // FKF511
+
+// Correct
+private static bool IsValid(Source source) => true;
+```
+
+### FKF512 — Condition method not accessible
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' is not accessible. Methods must be public or internal. |
+
+The condition method exists and has the correct signature, but it's not accessible (private). The generated code needs to call this method, so it must be `public` or `internal`.
+
+**Fix:** Change the access level.
+
+```csharp
+// Wrong — FKF512: private method
+[ForgeMap("Name", Condition = nameof(ShouldMap))]
+public string Name { get; set; }
+
+private static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Name);
+
+// Correct
+internal static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Name);
+```
+
+---
+
+## Cross-Class Nested Forge Diagnostics (FKF520–FKF523)
+
+### FKF520 — Included forge class not found
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Included forge class '{0}' not found. Verify the type name and assembly. |
+
+The `[ForgeUses]` attribute references a type that doesn't exist or cannot be resolved.
+
+**Fix:** Verify the type name is correct and the assembly is referenced.
+
+### FKF521 — Included class not decorated with [Forge]
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Included class '{0}' is not decorated with [Forge]. Only forge classes can be included. |
+
+All classes referenced in `[ForgeUses]` must be decorated with the `[Forge]` attribute.
+
+**Fix:** Add `[Forge]` to the included class.
+
+```csharp
+// Wrong — FKF521: not a forge class
+[ForgeUses(typeof(AddressHelpers))]
+[Forge]
+public static partial class PersonForges { ... }
+
+public static partial class AddressHelpers { ... }  // Missing [Forge]
+
+// Correct
+[Forge]
+public static partial class AddressHelpers { ... }
+```
+
+### FKF522 — Circular forge class includes
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Circular includes detected: {0}. Each forge class can only be included once in the chain. |
+
+`[ForgeUses]` creates a circular dependency (e.g., A includes B, B includes A) or self-includes (A includes A).
+
+**Fix:** Remove the circular reference or self-include.
+
+```csharp
+// Wrong — FKF522: self-include
+[ForgeUses(typeof(PersonForges))]
+[Forge]
+public static partial class PersonForges { ... }
+
+// Correct: include only other classes
+[ForgeUses(typeof(AddressForges))]
+[Forge]
+public static partial class PersonForges { ... }
+```
+
+### FKF523 — Nested forge method shadowed
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}': Method '{1}' exists in multiple included forge classes. Using '{2}' (first match); '{3}' is shadowed. |
+
+Multiple classes in `[ForgeUses]` have methods for the same type mapping. The first included class's method is used; others are shadowed.
+
+**Note:** This is a warning, not an error. It's intentional if you want a fallback, but it's worth knowing about to avoid surprises.
+
+**Fix (optional):** Reorder classes in `[ForgeUses]` if a different priority is preferred, or consolidate duplicate methods.
+
+```csharp
+// Generates FKF523 warning
+[ForgeUses(typeof(AddressForges1), typeof(AddressForges2))]
+public static partial class PersonForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToPersonDto(Person source);
+}
+// Both AddressForges1 and AddressForges2 have Address → AddressDto methods.
+// AddressForges1's method is used; AddressForges2's is shadowed.
+```

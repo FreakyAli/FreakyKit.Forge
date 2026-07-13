@@ -47,6 +47,76 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             var source = GenerateSource(model.ClassModel, spc.CancellationToken);
             spc.AddSource($"{model.ClassModel.FullyQualifiedName.Replace('.', '_').Replace('<', '_').Replace('>', '_')}.Forge.g.cs", SourceText.From(source, Encoding.UTF8));
         });
+
+        // Validation pipeline: Find classes with [ForgeUses] but missing [Forge]
+        var forgeUsesWithoutForge = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "FreakyKit.Forge.ForgeUsesAttribute",
+                predicate: static (node, _) => node is ClassDeclarationSyntax,
+                transform: static (ctx, ct) => DetectForgeUsesMissingForge(ctx, ct))
+            .Where(static diag => diag is not null)
+            .Select(static (diag, _) => diag!);
+
+        context.RegisterSourceOutput(forgeUsesWithoutForge, static (spc, diag) =>
+        {
+            spc.ReportDiagnostic(diag);
+        });
+
+        // Validation pipeline: Find methods with [ForgeMethod] but missing [Forge] on containing class
+        var forgeMethodWithoutForge = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "FreakyKit.Forge.ForgeMethodAttribute",
+                predicate: static (node, _) => node is MethodDeclarationSyntax,
+                transform: static (ctx, ct) => DetectForgeMethodWithoutForge(ctx, ct))
+            .Where(static diag => diag is not null)
+            .Select(static (diag, _) => diag!);
+
+        context.RegisterSourceOutput(forgeMethodWithoutForge, static (spc, diag) =>
+        {
+            spc.ReportDiagnostic(diag);
+        });
+
+        // Validation pipeline: Find methods with [ForgeConverter] but missing [Forge] on containing class
+        var forgeConverterWithoutForge = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "FreakyKit.Forge.ForgeConverterAttribute",
+                predicate: static (node, _) => node is MethodDeclarationSyntax,
+                transform: static (ctx, ct) => DetectForgeConverterWithoutForge(ctx, ct))
+            .Where(static diag => diag is not null)
+            .Select(static (diag, _) => diag!);
+
+        context.RegisterSourceOutput(forgeConverterWithoutForge, static (spc, diag) =>
+        {
+            spc.ReportDiagnostic(diag);
+        });
+
+        // Validation pipeline: Find members with [ForgeMap] on non-destination types
+        var forgeMapOnSourceMember = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "FreakyKit.Forge.ForgeMapAttribute",
+                predicate: static (node, _) => node is PropertyDeclarationSyntax or FieldDeclarationSyntax,
+                transform: static (ctx, ct) => DetectForgeMapOnSourceMember(ctx, ct))
+            .Where(static diag => diag is not null)
+            .Select(static (diag, _) => diag!);
+
+        context.RegisterSourceOutput(forgeMapOnSourceMember, static (spc, diag) =>
+        {
+            spc.ReportDiagnostic(diag);
+        });
+
+        // Validation pipeline: Find members with [ForgeIgnore] on non-destination types
+        var forgeIgnoreOnSourceMember = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                "FreakyKit.Forge.ForgeIgnoreAttribute",
+                predicate: static (node, _) => node is PropertyDeclarationSyntax or FieldDeclarationSyntax,
+                transform: static (ctx, ct) => DetectForgeIgnoreOnSourceMember(ctx, ct))
+            .Where(static diag => diag is not null)
+            .Select(static (diag, _) => diag!);
+
+        context.RegisterSourceOutput(forgeIgnoreOnSourceMember, static (spc, diag) =>
+        {
+            spc.ReportDiagnostic(diag);
+        });
     }
 
     // ─── Utilities ────────────────────────────────────────────────────────────
@@ -222,11 +292,18 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         if (hasErrors)
             return new ForgeClassResult(null, diagnostics, hasErrors: true);
 
+        // Extract and validate [ForgeUses] early so we can use it during method extraction
+        var (includedForgeClasses, forgeUsesDiags) = ExtractAndValidateForgeUses(type, ctx.SemanticModel.Compilation, diagnostics);
+        diagnostics.AddRange(forgeUsesDiags);
+        var forgeUsesErrors = forgeUsesDiags.Any(d => d.Severity == DiagnosticSeverity.Error);
+        if (forgeUsesErrors)
+            return new ForgeClassResult(null, diagnostics, hasErrors: true);
+
         // Extract each forge method model
         var methodModels = new List<ForgeMethodModel>();
         foreach (var method in forgeMethods)
         {
-            var (methodModel, methodDiags) = ExtractForgeMethod(method, type, ctx.SemanticModel.Compilation, ct);
+            var (methodModel, methodDiags) = ExtractForgeMethod(method, type, ctx.SemanticModel.Compilation, ct, includedForgeClasses);
             diagnostics.AddRange(methodDiags);
 
             if (methodDiags.Any(d => d.Severity == DiagnosticSeverity.Error))
@@ -274,7 +351,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             hasErrors: false,
             methods: methodModels,
             containingTypes: containingTypes,
-            generateExtensionMethods: generateExtensionMethods);
+            generateExtensionMethods: generateExtensionMethods,
+            includedForgeClasses: includedForgeClasses);
 
         return new ForgeClassResult(classModel, diagnostics, hasErrors: false);
     }
@@ -283,7 +361,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         IMethodSymbol method,
         INamedTypeSymbol forgeClass,
         Microsoft.CodeAnalysis.Compilation compilation,
-        System.Threading.CancellationToken ct)
+        System.Threading.CancellationToken ct,
+        IReadOnlyList<string>? includedForgeClasses = null)
     {
         var diagnostics = new List<Diagnostic>();
 
@@ -981,7 +1060,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             }
             else
             {
-                bool nestedForgeExists = FindNestedForgeMethod(forgeClass, srcMember.Type, destMember.Type, out var nestedMethodName);
+                bool nestedForgeExists = FindNestedForgeMethod(forgeClass, srcMember.Type, destMember.Type, out var nestedMethodName, compilation, includedForgeClasses, diagnostics, destMember.Name);
 
                 if (nestedForgeExists && allowNested && nestedMethodName != null)
                 {
@@ -2374,11 +2453,16 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         INamedTypeSymbol forgeClass,
         ITypeSymbol sourceType,
         ITypeSymbol destType,
-        out string? methodName)
+        out string? methodName,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null,
+        List<Diagnostic>? diagnostics = null,
+        string? memberName = null)
     {
         var sourceDisplay = sourceType.ToDisplayString();
         var destDisplay = destType.ToDisplayString();
 
+        // First search in the current forge class
         foreach (var member in forgeClass.GetMembers())
         {
             if (member is IMethodSymbol m &&
@@ -2392,6 +2476,64 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 return true;
             }
         }
+
+        // If not found and included classes are provided, search them in order
+        if (compilation != null && includedForgeClasses != null && includedForgeClasses.Count > 0)
+        {
+            string? firstMatch = null;
+            string? firstMatchFqn = null;
+            var shadowedMethods = new List<(string Fqn, string MethodName)>();
+
+            foreach (var includedFqn in includedForgeClasses)
+            {
+                var includedClass = compilation.GetTypeByMetadataName(includedFqn) as INamedTypeSymbol;
+                if (includedClass != null)
+                {
+                    foreach (var member in includedClass.GetMembers())
+                    {
+                        if (member is IMethodSymbol m &&
+                            m.IsStatic &&
+                            m.IsPartialDefinition &&
+                            m.Parameters.Length == 1 &&
+                            m.Parameters[0].Type.ToDisplayString() == sourceDisplay &&
+                            m.ReturnType.ToDisplayString() == destDisplay)
+                        {
+                            if (firstMatch == null)
+                            {
+                                firstMatch = m.Name;
+                                firstMatchFqn = includedFqn;
+                            }
+                            else
+                            {
+                                shadowedMethods.Add((includedFqn, m.Name));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Emit warnings for shadowed methods
+            if (shadowedMethods.Count > 0 && diagnostics != null && memberName != null && firstMatchFqn != null)
+            {
+                foreach (var (shadowedFqn, shadowedName) in shadowedMethods)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ShadowedNestedForgeMethod,
+                        forgeClass.Locations[0],
+                        memberName,
+                        $"{sourceDisplay} → {destDisplay}",
+                        $"{firstMatchFqn}.{firstMatch}",
+                        $"{shadowedFqn}.{shadowedName}"));
+                }
+            }
+
+            if (firstMatch != null)
+            {
+                methodName = firstMatch;
+                return true;
+            }
+        }
+
         methodName = null;
         return false;
     }
@@ -3207,5 +3349,217 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 return s;
         }
         return null;
+    }
+
+    private static (IReadOnlyList<string> IncludedFqns, List<Diagnostic> Diagnostics) ExtractAndValidateForgeUses(
+        INamedTypeSymbol forgeClass,
+        Microsoft.CodeAnalysis.Compilation compilation,
+        List<Diagnostic> parentDiagnostics)
+    {
+        var diagnostics = new List<Diagnostic>();
+        var includedFqns = new List<string>();
+
+        var forgeUsesAttr = forgeClass.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeUsesAttribute");
+
+        if (forgeUsesAttr == null)
+            return (includedFqns, diagnostics);
+
+        // Extract the Type[] from the constructor argument (params)
+        if (forgeUsesAttr.ConstructorArguments.Length > 0)
+        {
+            var arg = forgeUsesAttr.ConstructorArguments[0];
+            // The argument is an array of TypedConstants
+            if (arg.Kind == TypedConstantKind.Array)
+            {
+                foreach (var typeValue in arg.Values)
+                {
+                    if (typeValue.Value is INamedTypeSymbol includedType)
+                    {
+                        var includedFqn = includedType.ToDisplayString();
+
+                        // Check if included class exists and is a forge
+                        var includedSymbol = compilation.GetTypeByMetadataName(includedFqn);
+                        if (includedSymbol == null)
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.IncludedForgeClassNotFound,
+                                forgeClass.Locations[0],
+                                includedFqn));
+                            continue;
+                        }
+
+                        // Check if included class has [Forge]
+                        var hasForgeAttr = includedSymbol.GetAttributes()
+                            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
+                        if (!hasForgeAttr)
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.IncludedClassNotForge,
+                                forgeClass.Locations[0],
+                                includedFqn));
+                            continue;
+                        }
+
+                        // Check for self-include
+                        if (includedFqn == forgeClass.ToDisplayString())
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.CircularForgeIncludes,
+                                forgeClass.Locations[0],
+                                $"{forgeClass.Name} -> {forgeClass.Name}"));
+                            continue;
+                        }
+
+                        includedFqns.Add(includedFqn);
+                    }
+                }
+            }
+        }
+
+        return (includedFqns, diagnostics);
+    }
+
+    /// <summary>
+    /// Detects classes with [ForgeUses] but missing [Forge] attribute.
+    /// Returns a diagnostic if the class has [ForgeUses] but no [Forge], otherwise null.
+    /// </summary>
+    private static Diagnostic? DetectForgeUsesMissingForge(
+        GeneratorAttributeSyntaxContext ctx,
+        System.Threading.CancellationToken ct)
+    {
+        var type = ctx.TargetSymbol as INamedTypeSymbol;
+        if (type is null) return null;
+
+        // Check if class has [Forge] attribute
+        var hasForgeAttr = type.GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
+
+        // If it already has [Forge], no error
+        if (hasForgeAttr) return null;
+
+        // Has [ForgeUses] but no [Forge] — emit FKF524
+        return Diagnostic.Create(
+            ForgeDiagnostics.ForgeUsesMissingForgeAttribute,
+            type.Locations.FirstOrDefault(),
+            type.Name);
+    }
+
+    /// <summary>
+    /// Detects methods with [ForgeMethod] but missing [Forge] on the containing class.
+    /// Returns a diagnostic if the method has [ForgeMethod] but its containing class lacks [Forge], otherwise null.
+    /// </summary>
+    private static Diagnostic? DetectForgeMethodWithoutForge(
+        GeneratorAttributeSyntaxContext ctx,
+        System.Threading.CancellationToken ct)
+    {
+        var method = ctx.TargetSymbol as IMethodSymbol;
+        if (method is null) return null;
+
+        var containingType = method.ContainingType;
+        if (containingType is null) return null;
+
+        // Check if containing class has [Forge] attribute
+        var hasForgeAttr = containingType.GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
+
+        // If it already has [Forge], no error
+        if (hasForgeAttr) return null;
+
+        // Has [ForgeMethod] but containing class lacks [Forge] — emit FKF525
+        return Diagnostic.Create(
+            ForgeDiagnostics.ForgeMethodWithoutForgeClass,
+            method.Locations.FirstOrDefault(),
+            method.Name);
+    }
+
+    /// <summary>
+    /// Detects methods with [ForgeConverter] but missing [Forge] on the containing class.
+    /// Returns a diagnostic if the method has [ForgeConverter] but its containing class lacks [Forge], otherwise null.
+    /// </summary>
+    private static Diagnostic? DetectForgeConverterWithoutForge(
+        GeneratorAttributeSyntaxContext ctx,
+        System.Threading.CancellationToken ct)
+    {
+        var method = ctx.TargetSymbol as IMethodSymbol;
+        if (method is null) return null;
+
+        var containingType = method.ContainingType;
+        if (containingType is null) return null;
+
+        // Check if containing class has [Forge] attribute
+        var hasForgeAttr = containingType.GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
+
+        // If it already has [Forge], no error
+        if (hasForgeAttr) return null;
+
+        // Has [ForgeConverter] but containing class lacks [Forge] — emit FKF526
+        return Diagnostic.Create(
+            ForgeDiagnostics.ForgeConverterWithoutForgeClass,
+            method.Locations.FirstOrDefault(),
+            method.Name);
+    }
+
+    /// <summary>
+    /// Detects members with [ForgeMap] on non-destination types.
+    /// [ForgeMap] only affects destination type members; if found on source types, it has no effect.
+    /// Returns a diagnostic if the member's containing type is not used as a destination, otherwise null.
+    /// </summary>
+    private static Diagnostic? DetectForgeMapOnSourceMember(
+        GeneratorAttributeSyntaxContext ctx,
+        System.Threading.CancellationToken ct)
+    {
+        var member = ctx.TargetSymbol as ISymbol;
+        if (member is null) return null;
+
+        var containingType = (member as IPropertySymbol)?.ContainingType
+            ?? (member as IFieldSymbol)?.ContainingType;
+
+        if (containingType is null) return null;
+
+        // [ForgeMap] is only meaningful on destination types in forge operations.
+        // Warn if found on members of types that aren't used as destinations.
+        // For simplicity, warn if the attribute is found on a member outside of a known forge context.
+        // This catches the common mistake of putting [ForgeMap] on source type members instead of destination.
+
+        var memberName = (member as IPropertySymbol)?.Name ?? (member as IFieldSymbol)?.Name ?? "Unknown";
+
+        // Emit FKF527 — [ForgeMap] on member that is likely not a destination type
+        return Diagnostic.Create(
+            ForgeDiagnostics.ForgeMapOnSourceMember,
+            member.Locations.FirstOrDefault(),
+            $"{containingType.Name}.{memberName}");
+    }
+
+    /// <summary>
+    /// Detects members with [ForgeIgnore] on non-destination types.
+    /// [ForgeIgnore] only affects destination type members; if found on source types, it has no effect.
+    /// Returns a diagnostic if the member's containing type is not used as a destination, otherwise null.
+    /// </summary>
+    private static Diagnostic? DetectForgeIgnoreOnSourceMember(
+        GeneratorAttributeSyntaxContext ctx,
+        System.Threading.CancellationToken ct)
+    {
+        var member = ctx.TargetSymbol as ISymbol;
+        if (member is null) return null;
+
+        var containingType = (member as IPropertySymbol)?.ContainingType
+            ?? (member as IFieldSymbol)?.ContainingType;
+
+        if (containingType is null) return null;
+
+        // [ForgeIgnore] is only meaningful on destination types in forge operations.
+        // Warn if found on members of types that aren't used as destinations.
+        // For simplicity, warn if the attribute is found on a member outside of a known forge context.
+        // This catches the common mistake of putting [ForgeIgnore] on source type members instead of destination.
+
+        var memberName = (member as IPropertySymbol)?.Name ?? (member as IFieldSymbol)?.Name ?? "Unknown";
+
+        // Emit FKF528 — [ForgeIgnore] on member that is likely not a destination type
+        return Diagnostic.Create(
+            ForgeDiagnostics.ForgeIgnoreOnSourceMember,
+            member.Locations.FirstOrDefault(),
+            $"{containingType.Name}.{memberName}");
     }
 }

@@ -814,4 +814,116 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Condition methods must be publicly or internally accessible to be discovered and called by the generator.");
+
+    // ─── Cross-Class Nested Forge ────────────────────────────────────────────
+
+    /// <summary>
+    /// FKF520 (Error): An included forge class in [ForgeUses] was not found.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludedForgeClassNotFound = new(
+        id: "FKF520",
+        title: "Included forge class not found",
+        messageFormat: "Included forge class '{0}' not found. Verify the type name and assembly.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The type specified in [ForgeUses] could not be resolved.");
+
+    /// <summary>
+    /// FKF521 (Error): An included class in [ForgeUses] is not decorated with [Forge].
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludedClassNotForge = new(
+        id: "FKF521",
+        title: "Included class is not a forge class",
+        messageFormat: "Included class '{0}' is not decorated with [Forge]. Only forge classes can be included.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeUses] can only include classes decorated with [Forge].");
+
+    /// <summary>
+    /// FKF522 (Error): Circular includes detected in [ForgeUses] attributes.
+    /// </summary>
+    public static readonly DiagnosticDescriptor CircularForgeIncludes = new(
+        id: "FKF522",
+        title: "Circular forge class includes detected",
+        messageFormat: "Circular includes detected: {0}. Each forge class can only be included once in the chain.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeUses] creates a circular dependency. Restructure the includes to avoid cycles.");
+
+    /// <summary>
+    /// FKF523 (Warning): A nested forge method is shadowed by another included class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ShadowedNestedForgeMethod = new(
+        id: "FKF523",
+        title: "Nested forge method shadowed by included class",
+        messageFormat: "Member '{0}': Method '{1}' exists in multiple included forge classes. Using '{2}' (first match); '{3}' is shadowed.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Multiple included forge classes have methods for the same type mapping. The first included class in [ForgeUses] is used; others are shadowed. Reorder classes if intentional.");
+
+    /// <summary>
+    /// FKF524 (Error): A class has [ForgeUses] but is missing [Forge] attribute.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeUsesMissingForgeAttribute = new(
+        id: "FKF524",
+        title: "ForgeUses requires Forge attribute",
+        messageFormat: "Class '{0}' has [ForgeUses] attribute but is missing the [Forge] attribute. Add [Forge] to enable forge functionality.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeUses] can only be used on classes decorated with [Forge]. The class must be a static partial class with the [Forge] attribute to use [ForgeUses].");
+
+    /// <summary>
+    /// FKF525 (Error): A method has [ForgeMethod] but is not in a [Forge] class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeMethodWithoutForgeClass = new(
+        id: "FKF525",
+        title: "ForgeMethod without Forge class",
+        messageFormat: "Method '{0}' has [ForgeMethod] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeMethod] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
+
+    /// <summary>
+    /// FKF526 (Error): A method has [ForgeConverter] but is not in a [Forge] class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeConverterWithoutForgeClass = new(
+        id: "FKF526",
+        title: "ForgeConverter without Forge class",
+        messageFormat: "Method '{0}' has [ForgeConverter] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeConverter] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
+
+    /// <summary>
+    /// FKF527 (Warning): A member has [ForgeMap] but it is on a source type (not a destination type).
+    /// [ForgeMap] only affects destination type members.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeMapOnSourceMember = new(
+        id: "FKF527",
+        title: "ForgeMap on source type member",
+        messageFormat: "[ForgeMap] on '{0}' has no effect. [ForgeMap] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "[ForgeMap] attributes are typically placed on destination type members to customize their mapping behavior. If this attribute appears on a source type (the type being mapped from), it has no effect and should be removed or moved to the destination type.");
+
+    /// <summary>
+    /// FKF528 (Warning): A member has [ForgeIgnore] but it is on a source type (not a destination type).
+    /// [ForgeIgnore] only affects destination type members.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeIgnoreOnSourceMember = new(
+        id: "FKF528",
+        title: "ForgeIgnore on source type member",
+        messageFormat: "[ForgeIgnore] on '{0}' has no effect. [ForgeIgnore] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "[ForgeIgnore] attributes are typically placed on destination type members to exclude them from mapping. If this attribute appears on a source type (the type being mapped from), it has no effect and should be removed or moved to the destination type.");
 }
