@@ -1158,7 +1158,7 @@ public int Age { get; set; }
 [ForgeMap("Age", Condition = nameof(IsValidAge))]
 public int Age { get; set; }
 
-private static bool IsValidAge(Source source) => source.Age >= 0;
+internal static bool IsValidAge(Source source) => source.Age >= 0;
 ```
 
 ### FKF511 — Condition method has invalid signature
@@ -1299,4 +1299,153 @@ public static partial class PersonForges
 }
 // Both AddressForges1 and AddressForges2 have Address → AddressDto methods.
 // AddressForges1's method is used; AddressForges2's is shadowed.
+```
+
+---
+
+## Orphaned Attribute Validation Diagnostics (FKF524–FKF528)
+
+### FKF524 — [ForgeUses] without [Forge] attribute
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Class '{0}' has [ForgeUses] attribute but is missing the [Forge] attribute. Add [Forge] to enable forge functionality. |
+
+The `[ForgeUses]` attribute requires the containing class to also be decorated with `[Forge]`. `[ForgeUses]` by itself has no effect.
+
+**Fix:** Add the `[Forge]` attribute to the class.
+
+```csharp
+// Wrong — FKF524: [ForgeUses] without [Forge]
+[ForgeUses(typeof(AddressForges))]
+public static partial class PersonForges { }
+
+// Correct
+[Forge]
+[ForgeUses(typeof(AddressForges))]
+public static partial class PersonForges { }
+```
+
+### FKF525 — [ForgeMethod] without [Forge] class
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Method '{0}' has [ForgeMethod] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality. |
+
+The `[ForgeMethod]` attribute only works inside a class decorated with `[Forge]`. If you place it on a method in a non-forge class, the method is ignored.
+
+**Fix:** Add the `[Forge]` attribute to the containing class.
+
+```csharp
+// Wrong — FKF525: [ForgeMethod] without [Forge] class
+public static partial class PersonForges
+{
+    [ForgeMethod]
+    public static partial PersonDto ToPersonDto(Person source);
+}
+
+// Correct
+[Forge]
+public static partial class PersonForges
+{
+    [ForgeMethod]
+    public static partial PersonDto ToPersonDto(Person source);
+}
+```
+
+### FKF526 — [ForgeConverter] without [Forge] class
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Method '{0}' has [ForgeConverter] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality. |
+
+The `[ForgeConverter]` attribute only works inside a class decorated with `[Forge]`. If you place it on a method in a non-forge class, the method is not registered as a converter.
+
+**Fix:** Add the `[Forge]` attribute to the containing class, or move the method to a forge class.
+
+```csharp
+// Wrong — FKF526: [ForgeConverter] without [Forge] class
+public static class Converters
+{
+    [ForgeConverter]
+    public static string ConvertAge(int age) => age.ToString();
+}
+
+// Correct
+[Forge]
+public static partial class MyForges
+{
+    [ForgeConverter]
+    public static string ConvertAge(int age) => age.ToString();
+}
+```
+
+### FKF527 — [ForgeMap] on source type member
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | [ForgeMap] on '{0}' has no effect. [ForgeMap] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to. |
+
+`[ForgeMap]` only affects properties and fields on the **destination type**, not the source type. If you put it on a source type member, it is silently ignored.
+
+**Fix:** Move the `[ForgeMap]` attribute from the source type to the destination type property.
+
+```csharp
+// Wrong — FKF527: [ForgeMap] on source type member
+public class Person
+{
+    [ForgeMap("FullName")]
+    public string Name { get; set; }
+}
+
+public class PersonDto { public string FullName { get; set; } }
+
+// Correct
+public class Person { public string Name { get; set; } }
+
+public class PersonDto
+{
+    [ForgeMap("Name")]
+    public string FullName { get; set; }
+}
+```
+
+### FKF528 — [ForgeIgnore] on source type member
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | [ForgeIgnore] on '{0}' has no effect. [ForgeIgnore] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to. |
+
+`[ForgeIgnore]` only affects properties and fields on the **destination type**. If you put it on a source type member, it has no effect.
+
+**Fix:** Move the `[ForgeIgnore]` attribute from the source type to the destination type property.
+
+```csharp
+// Wrong — FKF528: [ForgeIgnore] on source type member
+public class Person
+{
+    [ForgeIgnore]
+    public string InternalId { get; set; }
+}
+
+public class PersonDto { public string InternalId { get; set; } }
+
+// Correct
+public class Person { public string InternalId { get; set; } }
+
+public class PersonDto
+{
+    [ForgeIgnore]
+    public string InternalId { get; set; }
+}
 ```

@@ -1,5 +1,35 @@
 # Attributes Reference
 
+## Quick Start
+
+Forge uses 6 attributes across 3 layers:
+
+| Layer | Attribute | Purpose |
+|-------|-----------|---------|
+| **Class** | `[Forge]` | "This class contains mapping methods" |
+| **Method** | `[ForgeMethod]` | "Generate code for this mapping" |
+| **Method** | `[ForgeUses]` | "Borrow methods from other forge classes" |
+| **Property** | `[ForgeMap]` | "Customize how this property maps" |
+| **Property** | `[ForgeIgnore]` | "Skip this property" |
+| **Method** | `[ForgeConverter]` | "Use this to convert custom types" |
+
+**Minimal example:**
+```csharp
+[Forge]
+public static partial class PersonForges
+{
+    [ForgeMethod]
+    public static partial PersonDto ToDto(Person source);
+}
+```
+
+**Common gotchas:**
+- `[ForgeMethod]` must be in a `[Forge]` class (emits FKF525 error if not)
+- `[ForgeMap]` / `[ForgeIgnore]` go on destination properties, not source
+- `[ForgeUses]` also requires `[Forge]` on the class (emits FKF524 error if not)
+
+---
+
 ## `[Forge]`
 
 **Namespace:** `FreakyKit.Forge`
@@ -669,7 +699,7 @@ public static partial class PersonForges
     [ForgeMap("Salary", Condition = nameof(CanUpdateSalary))]
     public decimal? Salary { get; set; }
 
-    private static bool CanUpdateSalary(Person source) => source.IsManager;
+    internal static bool CanUpdateSalary(Person source) => source.IsManager;
 }
 // Generates: if (CanUpdateSalary(source)) __result.Salary = source.Salary;
 ```
@@ -976,7 +1006,7 @@ A method is a valid forge method candidate if it is:
 
 When mapping hierarchical source models to flat DTOs, you have two main options: **flattening** and **nested forging**. Choosing the right approach depends on your use case.
 
-### Flattening (`AllowFlattening = true` on `[ForgeMap]`)
+### Flattening (`AllowFlattening = true` on `[ForgeMethod]`)
 
 **When to use:**
 - Combining multiple source levels into single destination properties (e.g., `Customer.Address.City` → `CustomerAddressCity`)

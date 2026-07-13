@@ -180,13 +180,15 @@ public sealed class OrphanedAttributesValidationTests : GeneratorTestBase
                 [Forge]
                 public static partial class MyForges
                 {
+                    [ForgeMethod]
                     public static partial Dest ToDto(Source source);
                 }
             }
             """;
         var result = RunGenerator(source);
-        // The warning might still appear since we can't reliably determine if it's a destination type.
-        // That's OK for the first pass of this validation.
+        // Note: FKF527 may still be emitted in the current implementation because
+        // the diagnostic can't reliably determine if a type is a destination type during attribute analysis.
+        // This is a known limitation that would require a two-pass analysis to fix properly.
     }
 
     [Fact]

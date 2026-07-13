@@ -239,7 +239,7 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
                 [ForgeUses(typeof(AddressForges))]
                 public static partial class PersonForges
                 {
-                    [ForgeMethod(AllowNestedForging = true)]
+                    [ForgeMethod]
                     public static partial PersonDto ToPersonDto(Person source);
                 }
             }

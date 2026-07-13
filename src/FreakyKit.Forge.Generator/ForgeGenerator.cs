@@ -608,7 +608,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         conditionMethodName));
                     conditionMethodName = null;
                 }
-                else if (!conditionMethod.IsStatic || conditionMethod.Parameters.Length != 1 || conditionMethod.Parameters[0].Type.ToDisplayString() != sourceType.ToDisplayString() || !conditionMethod.ReturnType.ToDisplayString().Contains("bool"))
+                else if (!conditionMethod.IsStatic || conditionMethod.Parameters.Length != 1 || conditionMethod.Parameters[0].Type.ToDisplayString() != sourceType.ToDisplayString() || conditionMethod.ReturnType.ToDisplayString() != "bool")
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.InvalidConditionMethodSignature,
