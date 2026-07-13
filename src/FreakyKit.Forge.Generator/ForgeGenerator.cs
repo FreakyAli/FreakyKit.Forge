@@ -497,6 +497,47 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 || methodIgnoreIfNull;
             string? nullCheckExpr = memberIgnoreIfNull ? $"{srcParamName}.{srcMember.Name}" : null;
 
+            // Determine IgnoreIfDefault and Condition
+            bool memberIgnoreIfDefault = (srcSymbolForNull != null && GetForgeIgnoreIfDefault(srcSymbolForNull))
+                || (destSymbolForNull != null && GetForgeIgnoreIfDefault(destSymbolForNull));
+            string? conditionMethodName = GetForgeConditionMethod(srcSymbolForNull) ?? GetForgeConditionMethod(destSymbolForNull);
+
+            // Validate condition method if specified
+            if (conditionMethodName != null)
+            {
+                var conditionMethod = forgeClass.GetMembers()
+                    .OfType<IMethodSymbol>()
+                    .FirstOrDefault(m => m.Name == conditionMethodName);
+
+                if (conditionMethod == null)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ConditionMethodNotFound,
+                        GetSafeLocation(method),
+                        destMember.Name,
+                        conditionMethodName));
+                    conditionMethodName = null;
+                }
+                else if (!conditionMethod.IsStatic || conditionMethod.Parameters.Length != 1 || conditionMethod.Parameters[0].Type.ToDisplayString() != sourceType.ToDisplayString() || !conditionMethod.ReturnType.ToDisplayString().Contains("bool"))
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.InvalidConditionMethodSignature,
+                        GetSafeLocation(method),
+                        destMember.Name,
+                        conditionMethodName));
+                    conditionMethodName = null;
+                }
+                else if (conditionMethod.DeclaredAccessibility != Accessibility.Public && conditionMethod.DeclaredAccessibility != Accessibility.Internal)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ConditionMethodNotAccessible,
+                        GetSafeLocation(method),
+                        destMember.Name,
+                        conditionMethodName));
+                    conditionMethodName = null;
+                }
+            }
+
             if (srcMember.Type.ToDisplayString() == destMember.Type.ToDisplayString())
             {
                 // Exact type match. By default same-type members are direct reference assignments,
@@ -595,7 +636,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly,
-                    expressionAssignment: exprAssign));
+                    expressionAssignment: exprAssign,
+                    ignoreIfDefault: memberIgnoreIfDefault,
+                    conditionMethodName: conditionMethodName,
+                    sourceMemberName: srcMember.Name,
+                    sourceMemberType: srcMember.Type.ToDisplayString()));
             }
             else if (TryResolveNullableMapping(srcMember.Type, destMember.Type, out var nullableKind))
             {
@@ -641,7 +686,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly,
-                    expressionAssignment: memberIgnoreIfNull ? null : expressionExpr));
+                    expressionAssignment: memberIgnoreIfNull ? null : expressionExpr,
+                    ignoreIfDefault: memberIgnoreIfDefault,
+                    conditionMethodName: conditionMethodName,
+                    sourceMemberName: srcMember.Name,
+                    sourceMemberType: srcMember.Type.ToDisplayString()));
             }
             else if (srcMember.Type.TypeKind == TypeKind.Enum && destMember.Type.TypeKind == TypeKind.Enum)
             {
@@ -718,7 +767,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         ignoreIfNull: memberIgnoreIfNull,
                         nullCheckExpression: nullCheckExpr,
                         isInitOnly: initOnly,
-                        expressionAssignment: memberIgnoreIfNull ? null : ternaryExpr));
+                        expressionAssignment: memberIgnoreIfNull ? null : ternaryExpr,
+                        ignoreIfDefault: memberIgnoreIfDefault,
+                        conditionMethodName: conditionMethodName,
+                        sourceMemberName: srcMember.Name,
+                        sourceMemberType: srcMember.Type.ToDisplayString()));
                 }
                 else // Cast (default)
                 {
@@ -738,7 +791,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         ignoreIfNull: memberIgnoreIfNull,
                         nullCheckExpression: nullCheckExpr,
                         isInitOnly: initOnly,
-                        expressionAssignment: memberIgnoreIfNull ? null : castExpr));
+                        expressionAssignment: memberIgnoreIfNull ? null : castExpr,
+                        ignoreIfDefault: memberIgnoreIfDefault,
+                        conditionMethodName: conditionMethodName,
+                        sourceMemberName: srcMember.Name,
+                        sourceMemberType: srcMember.Type.ToDisplayString()));
                 }
             }
             else if (TryResolveEnumStringMapping(srcMember.Type, destMember.Type, srcParamName, srcMember.Name, srcSymbolForNull, destSymbolForNull, out var enumStringExpr))
@@ -756,7 +813,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly,
-                    expressionAssignment: memberIgnoreIfNull ? null : enumStringExpr));
+                    expressionAssignment: memberIgnoreIfNull ? null : enumStringExpr,
+                    ignoreIfDefault: memberIgnoreIfDefault,
+                    conditionMethodName: conditionMethodName,
+                    sourceMemberName: srcMember.Name,
+                    sourceMemberType: srcMember.Type.ToDisplayString()));
             }
             else if (TryResolveDictionaryMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var dictExpr))
             {
@@ -765,7 +826,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     sourceExpression: dictExpr,
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
-                    isInitOnly: initOnly));
+                    isInitOnly: initOnly,
+                    ignoreIfDefault: memberIgnoreIfDefault,
+                    conditionMethodName: conditionMethodName,
+                    sourceMemberName: srcMember.Name,
+                    sourceMemberType: srcMember.Type.ToDisplayString()));
             }
             else if (TryResolveCollectionMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var collectionExpr, out var collectionInfo))
             {
@@ -849,7 +914,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     collectionSourceAccessor: needsInlining ? collectionInfo?.SourceAccessor : null,
                     collectionMaterializer: needsInlining ? collectionInfo?.ExpressionMaterializer : null,
                     collectionSourceIsRefType: needsInlining && collectionInfo != null && collectionInfo.SourceIsRefType,
-                    nestedForgeNullFallback: nullFallbackInt));
+                    nestedForgeNullFallback: nullFallbackInt,
+                    ignoreIfDefault: memberIgnoreIfDefault,
+                    conditionMethodName: conditionMethodName,
+                    sourceMemberName: srcMember.Name,
+                    sourceMemberType: srcMember.Type.ToDisplayString()));
             }
             else if (FindConverterMethod(forgeClass, srcMember.Type, destMember.Type, out var converterName))
             {
@@ -877,7 +946,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     sourceExpression: $"{converterName}({srcParamName}.{srcMember.Name})",
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
-                    isInitOnly: initOnly));
+                    isInitOnly: initOnly,
+                    ignoreIfDefault: memberIgnoreIfDefault,
+                    conditionMethodName: conditionMethodName,
+                    sourceMemberName: srcMember.Name,
+                    sourceMemberType: srcMember.Type.ToDisplayString()));
             }
             else if (TryImplicitConversion(compilation, srcMember.Type, destMember.Type, out var isLossy))
             {
@@ -900,7 +973,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly,
-                    expressionAssignment: memberIgnoreIfNull ? null : srcAccessor));
+                    expressionAssignment: memberIgnoreIfNull ? null : srcAccessor,
+                    ignoreIfDefault: memberIgnoreIfDefault,
+                    conditionMethodName: conditionMethodName,
+                    sourceMemberName: srcMember.Name,
+                    sourceMemberType: srcMember.Type.ToDisplayString()));
             }
             else
             {
@@ -949,7 +1026,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         nestedForgeMethodName: nestedMethodName,
                         nestedForgeSourceAccessor: srcAccess,
                         nestedForgeSourceIsRefType: srcMember.Type.IsReferenceType,
-                        nestedForgeNullFallback: nullFallbackInt));
+                        nestedForgeNullFallback: nullFallbackInt,
+                        ignoreIfDefault: memberIgnoreIfDefault,
+                        conditionMethodName: conditionMethodName,
+                        sourceMemberName: srcMember.Name,
+                        sourceMemberType: srcMember.Type.ToDisplayString()));
                 }
                 else if (!nestedForgeExists)
                 {
@@ -1454,7 +1535,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 }
             }
 
-            if (maxDepth > 5)
+            if (maxDepth >= 10)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ExpressionNestingDepthLimitExceeded,
+                    location: null,
+                    method.MethodName,
+                    maxDepth));
+            }
+            else if (maxDepth > 5)
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ExpressionDeepNesting,
@@ -1629,6 +1718,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             foreach (var param in ctor.Parameters)
             {
+                // Verify parameter type is accessible from public generated code
+                if (param.Type.DeclaredAccessibility != Accessibility.Public && param.Type.DeclaredAccessibility != Accessibility.Internal)
+                {
+                    allSatisfied = false;
+                    break;
+                }
+
                 // Check [ForgeMap] on the constructor parameter first, then fall back to param name
                 var forgeMapName = GetForgeMapName(param);
                 var key = (forgeMapName ?? param.Name).ToLowerInvariant();
@@ -1952,9 +2048,29 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Regular property assignments (non-init-only)
             foreach (var assignment in regularAssignments)
             {
+                string condition = "";
+
                 if (assignment.IgnoreIfNull && assignment.NullCheckExpression != null)
                 {
-                    sb.AppendLine($"{indent}    if ({assignment.NullCheckExpression} != null) __result.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                    condition = $"{assignment.NullCheckExpression} != null";
+                }
+
+                if (assignment.IgnoreIfDefault && assignment.SourceMemberType != null)
+                {
+                    var srcAccessor = $"{method.SourceParameterName}.{assignment.SourceMemberName}";
+                    var defaultCheck = $"!EqualityComparer<{assignment.SourceMemberType}>.Default.Equals({srcAccessor}, default)";
+                    condition = condition != "" ? $"{condition} && {defaultCheck}" : defaultCheck;
+                }
+
+                if (assignment.ConditionMethodName != null)
+                {
+                    var methodCall = $"{assignment.ConditionMethodName}({method.SourceParameterName})";
+                    condition = condition != "" ? $"{condition} && {methodCall}" : methodCall;
+                }
+
+                if (condition != "")
+                {
+                    sb.AppendLine($"{indent}    if ({condition}) __result.{assignment.DestMemberName} = {assignment.SourceExpression};");
                 }
                 else
                 {
@@ -3063,5 +3179,33 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             Diagnostics = diagnostics;
             HasErrors = hasErrors;
         }
+    }
+
+    private static bool GetForgeIgnoreIfDefault(ISymbol? member)
+    {
+        if (member == null) return false;
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
+        if (attr == null) return false;
+        foreach (var namedArg in attr.NamedArguments)
+        {
+            if (namedArg.Key == "IgnoreIfDefault" && namedArg.Value.Value is bool b)
+                return b;
+        }
+        return false;
+    }
+
+    private static string? GetForgeConditionMethod(ISymbol? member)
+    {
+        if (member == null) return null;
+        var attr = member.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
+        if (attr == null) return null;
+        foreach (var namedArg in attr.NamedArguments)
+        {
+            if (namedArg.Key == "Condition" && namedArg.Value.Value is string s)
+                return s;
+        }
+        return null;
     }
 }

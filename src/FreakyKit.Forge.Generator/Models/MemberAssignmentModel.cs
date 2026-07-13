@@ -12,6 +12,10 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
     public bool IgnoreIfNull { get; }
     public string? NullCheckExpression { get; }
     public bool IsInitOnly { get; }
+    public bool IgnoreIfDefault { get; }
+    public string? ConditionMethodName { get; }
+    public string? SourceMemberName { get; }
+    public string? SourceMemberType { get; }
 
     /// <summary>
     /// Expression-tree-compatible right-hand-side for this assignment. Null when the imperative
@@ -71,7 +75,7 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
     /// </summary>
     public int NestedForgeNullFallback { get; }
 
-    public MemberAssignmentModel(string destMemberName, string sourceExpression, bool ignoreIfNull = false, string? nullCheckExpression = null, bool isInitOnly = false, string? expressionAssignment = null, string? nestedForgeMethodName = null, string? nestedForgeSourceAccessor = null, bool nestedForgeSourceIsRefType = false, string? collectionElementForgeMethod = null, string? collectionSourceAccessor = null, string? collectionMaterializer = null, bool collectionSourceIsRefType = false, int nestedForgeNullFallback = 0)
+    public MemberAssignmentModel(string destMemberName, string sourceExpression, bool ignoreIfNull = false, string? nullCheckExpression = null, bool isInitOnly = false, string? expressionAssignment = null, string? nestedForgeMethodName = null, string? nestedForgeSourceAccessor = null, bool nestedForgeSourceIsRefType = false, string? collectionElementForgeMethod = null, string? collectionSourceAccessor = null, string? collectionMaterializer = null, bool collectionSourceIsRefType = false, int nestedForgeNullFallback = 0, bool ignoreIfDefault = false, string? conditionMethodName = null, string? sourceMemberName = null, string? sourceMemberType = null)
     {
         DestMemberName = destMemberName;
         SourceExpression = sourceExpression;
@@ -87,6 +91,10 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
         CollectionMaterializer = collectionMaterializer;
         CollectionSourceIsRefType = collectionSourceIsRefType;
         NestedForgeNullFallback = nestedForgeNullFallback;
+        IgnoreIfDefault = ignoreIfDefault;
+        ConditionMethodName = conditionMethodName;
+        SourceMemberName = sourceMemberName;
+        SourceMemberType = sourceMemberType;
     }
 
     public bool Equals(MemberAssignmentModel other)
@@ -105,7 +113,11 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
             && CollectionSourceAccessor == other.CollectionSourceAccessor
             && CollectionMaterializer == other.CollectionMaterializer
             && CollectionSourceIsRefType == other.CollectionSourceIsRefType
-            && NestedForgeNullFallback == other.NestedForgeNullFallback;
+            && NestedForgeNullFallback == other.NestedForgeNullFallback
+            && IgnoreIfDefault == other.IgnoreIfDefault
+            && ConditionMethodName == other.ConditionMethodName
+            && SourceMemberName == other.SourceMemberName
+            && SourceMemberType == other.SourceMemberType;
     }
 
     public override bool Equals(object obj) => Equals(obj as MemberAssignmentModel);
@@ -129,6 +141,10 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
             hash = hash * 31 + (CollectionMaterializer?.GetHashCode() ?? 0);
             hash = hash * 31 + CollectionSourceIsRefType.GetHashCode();
             hash = hash * 31 + NestedForgeNullFallback.GetHashCode();
+            hash = hash * 31 + IgnoreIfDefault.GetHashCode();
+            hash = hash * 31 + (ConditionMethodName?.GetHashCode() ?? 0);
+            hash = hash * 31 + (SourceMemberName?.GetHashCode() ?? 0);
+            hash = hash * 31 + (SourceMemberType?.GetHashCode() ?? 0);
             return hash;
         }
     }

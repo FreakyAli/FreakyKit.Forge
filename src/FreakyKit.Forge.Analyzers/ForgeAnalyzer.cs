@@ -217,6 +217,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 reason = "must not be generic";
             else if (member.Parameters.Length != 1)
                 reason = $"must have exactly one parameter (found {member.Parameters.Length})";
+            else if (member.DeclaredAccessibility != Accessibility.Public && member.DeclaredAccessibility != Accessibility.Internal)
+                reason = $"must be public or internal (is {member.DeclaredAccessibility.ToString().ToLower()})";
 
             if (reason != null)
             {

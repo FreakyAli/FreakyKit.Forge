@@ -7,6 +7,24 @@ namespace FreakyKit.Forge.Diagnostics;
 /// All diagnostic IDs, titles, messages, severities, and categories are defined here.
 /// No diagnostics may be defined anywhere else.
 /// </summary>
+/// <remarks>
+/// DIAGNOSTIC ID ALLOCATION SCHEME
+/// ===============================
+/// Diagnostic IDs are allocated by range to prevent collisions and enable reserved space for future features.
+///
+/// Current allocation:
+///   FKF001–099: Mode & class-level validation (Explicit mode, static class, access level, etc.)
+///   FKF100–199: Member discovery & matching (constructor selection, member mapping, name resolution)
+///   FKF200–299: Type safety & conversion (nullable/value type mismatches, incompatible types, converters)
+///   FKF300–399: Nested forging & circularity (circular reference detection, nested method discovery)
+///   FKF400–499: Construction & initialization (null fallback, init-only properties, etc.)
+///   FKF500–599: RESERVED for P2/P3 feature diagnostics (Computed Properties, Conditional Mapping, Cross-Class Forge, etc.)
+///   FKF600–699: RESERVED for performance warnings (deep nesting, expression complexity, etc.)
+///
+/// When adding new features (P2/P3), allocate diagnostic IDs from the FKF500–599 range.
+/// When adding performance diagnostics, allocate from FKF600–699.
+/// This prevents ID collisions across versions and enables predictable diagnostic management.
+/// </remarks>
 public static class ForgeDiagnostics
 {
     private const string Category_Mode = "FreakyKit.Forge.Mode";
@@ -417,11 +435,11 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor NullableValueTypeMapping = new(
         id: "FKF201",
         title: "Nullable value type to non-nullable mapping",
-        messageFormat: "Member '{0}': mapping nullable value type '{1}' to non-nullable '{2}' will use .Value which may throw at runtime",
+        messageFormat: "Member '{0}': mapping nullable value type '{1}' to non-nullable '{2}' will use .Value which may throw at runtime. Set DefaultValue on [ForgeMap] to provide a fallback value instead.",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "A Nullable<T> value type is being mapped to its non-nullable counterpart T using .Value, which throws if the source is null.");
+        description: "A Nullable<T> value type is being mapped to its non-nullable counterpart T using .Value, which throws if the source is null. Set DefaultValue on [ForgeMap] to provide a fallback value that will be used instead of calling .Value.");
 
     /// <summary>
     /// FKF202 (Info): A nullable mapping was applied automatically.
@@ -748,4 +766,52 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         description: "Each level of nested-forge inlining substitutes the full body of the nested expression into the outer one. Deep chains can produce large generated source files. This diagnostic fires when depth exceeds 5 to surface the cost; no action is required.");
+
+    /// <summary>
+    /// FKF509 (Error): Expression nesting depth limit exceeded.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionNestingDepthLimitExceeded = new(
+        id: "FKF509",
+        title: "Expression nesting depth limit exceeded",
+        messageFormat: "Expression property for '{0}' exceeds the maximum nesting depth of 10 levels. This generates excessive source code and may cause compiler errors. Consider using flattening or a converter instead of nested-forge inlining.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Expression property nesting is limited to 10 levels to prevent unbounded source code growth and compiler errors. Restructure the mapping to use flattening or converters instead.");
+
+    /// <summary>
+    /// FKF510 (Error): A condition method referenced in [ForgeMap] was not found.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConditionMethodNotFound = new(
+        id: "FKF510",
+        title: "Condition method not found",
+        messageFormat: "Member '{0}': condition method '{1}' not found on forge class or included classes. Ensure the method exists and is static.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The [ForgeMap] Condition property references a method that does not exist on the forge class or its included classes.");
+
+    /// <summary>
+    /// FKF511 (Error): A condition method has an invalid signature.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InvalidConditionMethodSignature = new(
+        id: "FKF511",
+        title: "Condition method has invalid signature",
+        messageFormat: "Member '{0}': condition method '{1}' has invalid signature. Must be: static bool MethodName(SourceType source)",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Condition methods must be static, accept exactly one parameter of the source type, and return bool.");
+
+    /// <summary>
+    /// FKF512 (Error): A condition method is not accessible from the forge class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConditionMethodNotAccessible = new(
+        id: "FKF512",
+        title: "Condition method not accessible",
+        messageFormat: "Member '{0}': condition method '{1}' is not accessible. Methods must be public or internal.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Condition methods must be publicly or internally accessible to be discovered and called by the generator.");
 }

@@ -16,16 +16,15 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
 | 1 | Expression assignment mutability | P2 | Medium | Low | Refactor to immutable pattern |
-| 2 | Computed properties | P2 | High | Medium | `[ForgeComputed]` for derived members |
-| 3 | Conditional/predicate mapping | P2 | High | Medium | `IgnoreIfDefault` + custom predicates |
-| 4 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
-| 5 | Cross-class nested forge | P2 | High | Medium-High | Discover methods in other classes |
-| 6 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
-| 7 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
-| 8 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
-| 9 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
-| 10 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
-| 11 | Generic forge methods | P3 | High | High | Type parameter support |
+| 2 | Conditional/predicate mapping | P2 | High | Medium | `IgnoreIfDefault` + custom predicates |
+| 3 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
+| 4 | Cross-class nested forge | P2 | High | Medium-High | Discover methods in other classes |
+| 5 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
+| 6 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
+| 7 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
+| 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
+| 9 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
+| 10 | Generic forge methods | P3 | High | High | Type parameter support |
 
 ---
 
@@ -71,56 +70,7 @@ Medium. Internal-only change with no API surface change. Enables future caching 
 
 ---
 
-### 2. Computed Properties — `P2`
-
-**Why**
-
-Some destination properties don't map 1:1 from source — they're derived from multiple source members (e.g., `FullName = FirstName + " " + LastName`). Currently users must use after-hooks or manually compute these, losing the compile-time safety and performance benefits of Forge.
-
-**Design**
-
-Add `[ForgeComputed]` attribute on static methods in the forge class. The generator discovers these methods via Roslyn symbol analysis and emits direct method calls in the generated code.
-
-```csharp
-[Forge]
-public static partial class PersonForges
-{
-    public static partial PersonDto ToDto(Person source);
-
-    [ForgeComputed(nameof(PersonDto.FullName))]
-    private static string ComputeFullName(Person source)
-        => source.FirstName + " " + source.LastName;
-}
-// Generates: __result.FullName = ComputeFullName(source);
-```
-
-**Complexity**
-
-Medium. Need to discover `[ForgeComputed]` methods, validate signatures match destination property types, and emit calls in the right sequence (after construction, before return).
-
-**Impact**
-
-High. Solves real-world mapping scenarios with no reflection overhead.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeComputedAttribute.cs` — New attribute
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Discover computed methods, emit calls
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `IReadOnlyList<ComputedPropertyMapping> ComputedProperties`
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics for validation errors
-
-**Suggested Approach**
-
-1. Define `[ForgeComputed(string destinationMemberName)]` attribute with `AllowMultiple = false`
-2. In `ExtractMethod`, scan the forge class for methods decorated with `[ForgeComputed]`
-3. Validate: return type matches destination property type, parameter is source type
-4. Store computed methods in `ForgeMethodModel`
-5. In `GenerateMethodBody`, emit calls after all regular assignments but before return
-6. Add analyzer diagnostics: destination member doesn't exist, type mismatch, invalid signature
-
----
-
-### 3. Conditional/Predicate Mapping — `P2`
+### 2. Conditional/Predicate Mapping — `P2`
 
 **Why**
 
@@ -166,7 +116,7 @@ High. Enables proper partial-update/PATCH semantics without workarounds.
 
 ---
 
-### 4. Multi-Level Deep Flattening — `P2`
+### 3. Multi-Level Deep Flattening — `P2`
 
 **Why**
 
@@ -204,7 +154,7 @@ Medium. Solves real-world flattening scenarios; reduces need for nested forging 
 
 ---
 
-### 5. Cross-Class Nested Forge — `P2`
+### 4. Cross-Class Nested Forge — `P2`
 
 **Why**
 
@@ -250,7 +200,7 @@ High. Enables modular, composable forge class hierarchies at scale.
 
 ---
 
-### 6. Tri-State ShareReference — `P2`
+### 5. Tri-State ShareReference — `P2`
 
 **Why**
 
@@ -304,7 +254,7 @@ Low practical impact (few users need per-member override), but **breaking change
 
 ## P3 Features — Backlog
 
-### 7. Polymorphic Mapping / Derived Type Support — `P3`
+### 6. Polymorphic Mapping / Derived Type Support — `P3`
 
 **Why**
 
@@ -423,7 +373,7 @@ Medium. Solves EF Core TPH scenarios; eliminates hand-written dispatch logic.
 
 ---
 
-### 8. Dictionary Mapping — `P3`
+### 7. Dictionary Mapping — `P3`
 
 **Why**
 
@@ -560,7 +510,7 @@ Medium. Solves dynamic-to-static mapping scenarios; commonly needed for JSON des
 
 ---
 
-### 9. Mapping Profiles / Inheritance — `P3`
+### 8. Mapping Profiles / Inheritance — `P3`
 
 **Why**
 
@@ -617,7 +567,7 @@ Medium. Enables DRY principle for multi-class forge hierarchies.
 
 ---
 
-### 10. Reverse Mapping — `P3`
+### 9. Reverse Mapping — `P3`
 
 **Why**
 
@@ -701,7 +651,7 @@ Medium-high. Common pattern in real-world applications; eliminates significant b
 
 ---
 
-### 11. Generic Forge Methods — `P3`
+### 10. Generic Forge Methods — `P3`
 
 **Why**
 

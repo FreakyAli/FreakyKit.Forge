@@ -205,11 +205,24 @@ Controls how Forge handles same-type **mutable collection** members (e.g. `List<
 - **`false` (default)** — the generated code uses a copy constructor (`new List<T>(source.X)`) so the destination owns an independent collection. Mutations to the destination's collection do not affect the source.
 - **`true`** — the generated code uses direct reference assignment (`dto.Tags = source.Tags`). Faster and allocation-free, but the source and destination share the same collection instance, so mutations leak across.
 
-Applies to: `List<T>`, `Dictionary<K,V>`, `HashSet<T>`, `T[]`, and their interface forms (`IList`, `ICollection`, `IDictionary`, `IEnumerable`, `IReadOnlyList`, `IReadOnlyCollection`, `IReadOnlyDictionary`, `ISet`), plus `Collection<T>` and `ReadOnlyCollection<T>`.
+**Affected collection types** (ShareReference=true uses reference-sharing; ShareReference=false uses copy constructor):
 
-Does **not** apply to:
-- Immutable types (`string`, primitives, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`) — these are always direct assignment; sharing a reference is safe because they can't be mutated anyway.
-- Same-type custom classes (e.g. `Address Home` on both sides) — Forge always reference-shares these and emits **FKF312** (Info). To deep-copy a custom class, use a distinct DTO type combined with `AllowNestedForging` and an explicit forge method.
+| Type | Behavior | Notes |
+|------|----------|-------|
+| `List<T>` | Copy when false, Share when true | Most common mutable collection |
+| `HashSet<T>` | Copy when false, Share when true | Unordered unique items |
+| `LinkedList<T>` | Copy when false, Share when true | Linked-list structure |
+| `Stack<T>` | Copy when false, Share when true | LIFO structure |
+| `Queue<T>` | Copy when false, Share when true | FIFO structure |
+| `Dictionary<K,V>` | Copy when false, Share when true | Key-value pairs |
+| `T[]` | Copy when false, Share when true | Fixed-size arrays |
+| `Collection<T>` | Copy when false, Share when true | Observable collection wrapper |
+| Interface types (`IList`, `ICollection`, `IDictionary`, `IEnumerable`, `IReadOnlyList`, `IReadOnlyCollection`, `IReadOnlyDictionary`, `ISet`) | Copy when false, Share when true | Interface forms of mutable collections |
+
+**Types that are ALWAYS direct-assigned (no ShareReference effect)**:
+- **Immutable types** (`ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ImmutableDictionary<K,V>`) — safe to share because mutations are impossible
+- **Primitives & strings** (`int`, `string`, `bool`, etc.) — immutable and copied by value
+- **Same-type custom classes** (e.g. `Address Home` on both sides) — Forge always reference-shares these and emits **FKF312** (Info). To deep-copy a custom class, use a distinct DTO type combined with `AllowNestedForging` and an explicit forge method.
 
 When this flag is `true` and applies to a member, **FKF311** (Info) is emitted per member as an audit trail.
 
@@ -357,6 +370,60 @@ Can be placed on either the source or destination member. Overrides the method-l
 public class Source { [ForgeMap("Name", IgnoreIfNull = true)] public string? Name { get; set; } }
 public class Dest   { public string Name { get; set; } = ""; }
 // Generates: if (source.Name != null) __result.Name = source.Name;
+```
+
+#### `IgnoreIfDefault` (`bool`, default: `false`)
+
+When true, the assignment for this member is wrapped in a default-value check: the destination member is only assigned when the source value is not equal to its type's default (null for references, 0 for numeric types, false for bool, Guid.Empty for Guid, etc.). Useful for PATCH/partial-update APIs where you want to preserve existing values when the client didn't provide a value.
+
+Can be placed on either the source or destination member.
+
+```csharp
+[ForgeMap("Age", IgnoreIfDefault = true)]
+public int Age { get; set; }
+// Generates: if (!EqualityComparer<int>.Default.Equals(source.Age, default)) __result.Age = source.Age;
+```
+
+Combining with `IgnoreIfNull`:
+
+```csharp
+[ForgeMap("Name", IgnoreIfNull = true, IgnoreIfDefault = true)]
+public string? Name { get; set; }
+// Generates: if (source.Name != null && !EqualityComparer<string>.Default.Equals(source.Name, default)) __result.Name = source.Name;
+```
+
+#### `Condition` (`string?`, default: `null`)
+
+When set, specifies the name of a static method on the forge class that determines whether this member should be assigned. The method must accept the source type as a parameter and return `bool`. When the method returns `false`, the assignment is skipped.
+
+Useful for conditional PATCH updates or complex validation logic. The method must be:
+- Static
+- Accessible (public or internal)
+- Accept exactly one parameter of the source type
+- Return `bool`
+
+```csharp
+[Forge]
+public static partial class PersonForges
+{
+    [ForgeMethod]
+    public static partial PersonDto ToDto(Person source);
+
+    [ForgeMap("Salary", Condition = nameof(CanUpdateSalary))]
+    public decimal? Salary { get; set; }
+
+    private static bool CanUpdateSalary(Person source) => source.IsManager;
+}
+// Generates: if (CanUpdateSalary(source)) __result.Salary = source.Salary;
+```
+
+Combining with other conditions:
+
+```csharp
+[ForgeMap("Email", IgnoreIfDefault = true, Condition = nameof(CanUpdateEmail))]
+public string Email { get; set; }
+// Generates: if (!EqualityComparer<string>.Default.Equals(source.Email, default) && CanUpdateEmail(source))
+//     __result.Email = source.Email;
 ```
 
 #### `ShareReference` (`bool`, default unset)
@@ -624,6 +691,90 @@ A method is a valid forge method candidate if it is:
 3. Returns a non-void type (the destination), OR is void with 2 parameters (update mode)
 4. Has exactly one parameter (create mode) or exactly two parameters (update mode)
 5. Has no type parameters (not generic)
+
+---
+
+## Design Decision: Flattening vs Nested Forging
+
+When mapping hierarchical source models to flat DTOs, you have two main options: **flattening** and **nested forging**. Choosing the right approach depends on your use case.
+
+### Flattening (`AllowFlattening = true` on `[ForgeMap]`)
+
+**When to use:**
+- Combining multiple source levels into single destination properties (e.g., `Customer.Address.City` → `CustomerAddressCity`)
+- Single level of nesting (one intermediate type)
+- Implicit, automatic discovery — no intermediate forge method needed
+- DTOs with denormalized, prefixed fields
+
+**Pros:**
+- No separate forge method required
+- Automatic member discovery by name pattern
+- Simpler for one-off flattening scenarios
+- Clean, denormalized DTO design
+
+**Cons:**
+- Limited to configurable depth (currently one level, max 2–3 with upcoming multi-level feature)
+- Only works with value-type members or reference-type members where the entire chain is nullable
+- Names must follow prefix pattern (e.g., `Customer.Address.City` → `CustomerAddressCity`)
+
+**Example:**
+```csharp
+[Forge]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+    // source.Company.Address.City → auto-mapped to dest.CompanyAddressCity
+}
+```
+
+### Nested Forging (`AllowNestedForging = true` on `[ForgeMethod]`)
+
+**When to use:**
+- Type mismatches between source and destination (e.g., `Address` entity → `AddressDto`)
+- Multi-level hierarchies (3+ levels of nesting)
+- Explicit control over sub-mappings
+- Reusing forge methods across multiple parent types
+- Building modular forge class hierarchies
+
+**Pros:**
+- Explicit control — you decide which forge method handles each sub-type
+- Handles type mismatches automatically
+- Reusable across multiple parent mappings
+- Scales to arbitrary nesting depth
+- Type-safe and testable in isolation
+
+**Cons:**
+- Requires separate forge method for each nested type
+- More setup code (additional `[Forge]` classes or methods)
+- Automatic discovery limited to current class (use `[ForgeUses]` for cross-class discovery)
+
+**Example:**
+```csharp
+[Forge]
+public static partial class AddressForges
+{
+    public static partial AddressDto ToDto(Address source);
+}
+
+[Forge]
+public static partial class PersonForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToDto(Person source);
+    // source.Company (Company entity) → auto-discovered as CompanyForges.ToDto(...)
+}
+```
+
+### Decision Table
+
+| Scenario | Use Flattening | Use Nested Forging |
+|----------|----------------|--------------------|
+| Single-level denormalization (`Address.City` → `AddressCity`) | ✅ | ✔ (overcomplicated) |
+| Multi-level flattening (3+ levels) | ❌ | ✅ |
+| Type mismatch (Entity → DTO) | ❌ | ✅ |
+| Reuse across multiple parents | ❌ | ✅ |
+| Simple attribute copy (same types) | ✅ | ✔ (works but unnecessary) |
+| Custom transformation needed | ❌ | ✅ (with [ForgeConverter]) |
 
 ---
 
