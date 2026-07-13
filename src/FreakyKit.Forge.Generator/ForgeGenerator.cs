@@ -528,7 +528,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (!sourceMembers.TryGetValue(key, out var srcMember))
             {
                 // Try flattening: dest "AddressCity" → source "Address.City"
-                if (allowFlattening && TryResolveFlattenedMapping(sourceType, key, destMember.Type, srcParamName, out var flattenExpr))
+                if (allowFlattening && TryResolveFlattenedMapping(sourceType, key, destMember.Type, srcParamName, out var flattenExpr, out var flatteningDepth, out var flatteningPath))
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.FlattenedMapping,
@@ -536,6 +536,17 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         destMember.Name,
                         sourceType.Name,
                         flattenExpr.Replace($"{srcParamName}.", "")));
+
+                    // FKF531: Emit info diagnostic if flattening depth >= 3 levels
+                    if (flatteningDepth >= 3)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.DeepFlatteningDetected,
+                            GetSafeLocation(method),
+                            destMember.Name,
+                            flatteningDepth + 1,
+                            flatteningPath ?? flattenExpr.Replace($"{srcParamName}.", "")));
+                    }
 
                     // Expression-tree form: convert null-conditional (`source.Address?.City`) to a
                     // ternary (`source.Address == null ? null : source.Address.City`) because `?.`
@@ -2343,65 +2354,147 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Tries to resolve a flattened mapping. For a dest key like "addresscity", checks
-    /// if source has a member "address" whose type has a member "city" with a compatible type.
+    /// Result of a flattening resolution attempt.
     /// </summary>
+    private sealed class FlatteningResult
+    {
+        public string? Expression { get; set; }
+        public int Depth { get; set; }
+        public string? ResolvedPath { get; set; }  // e.g. "Address.Coords.Latitude" for diagnostics
+    }
+
     private static bool TryResolveFlattenedMapping(
         INamedTypeSymbol sourceType,
         string destKeyLower,
         ITypeSymbol destMemberType,
         string sourceParamName,
-        out string flattenExpression)
+        out string flattenExpression,
+        out int flatteningDepth,
+        out string? flatteningPath)
     {
         flattenExpression = "";
-        var paramName = sourceParamName;
+        flatteningDepth = 0;
+        flatteningPath = null;
 
-        // Try each source member as a prefix
-        foreach (var member in sourceType.GetMembers())
+        // Recursively search all nested levels
+        var result = TryResolveFlattenedMappingRecursive(
+            sourceType,
+            destKeyLower,
+            destMemberType,
+            sourceParamName,
+            currentAccess: "",
+            intermediateChain: new List<ITypeSymbol>(),
+            depth: 0,
+            pathParts: new List<string>());
+
+        if (result?.Expression != null)
         {
-            if (member.IsStatic || member.DeclaredAccessibility == Accessibility.Private) continue;
+            flattenExpression = result.Expression;
+            flatteningDepth = result.Depth;
+            flatteningPath = result.ResolvedPath;
+            return true;
+        }
 
-            string memberName;
-            ITypeSymbol memberType;
+        return false;
+    }
 
-            if (member is IPropertySymbol prop)
-            {
-                if (prop.IsIndexer) continue;
-                memberName = prop.Name;
-                memberType = prop.Type;
-            }
-            else continue; // Only support properties for flattening
+    /// <summary>
+    /// Recursively searches for a flattened mapping at any depth.
+    /// Returns a FlatteningResult with the full access expression (e.g., "source.Address?.Coords?.Latitude") if found, null otherwise.
+    /// Tracks depth to detect deep nesting and avoid unbounded recursion.
+    /// </summary>
+    private static FlatteningResult? TryResolveFlattenedMappingRecursive(
+        INamedTypeSymbol currentType,
+        string remainingKeyLower,
+        ITypeSymbol destMemberType,
+        string sourceParamName,
+        string currentAccess,
+        List<ITypeSymbol> intermediateChain,
+        int depth,
+        List<string> pathParts)
+    {
+        const int MaxFlatteningDepth = 10;
 
-            var prefixLower = memberName.ToLowerInvariant();
-            if (!destKeyLower.StartsWith(prefixLower) || destKeyLower.Length <= prefixLower.Length)
+        // Safety: prevent infinite recursion on circular types
+        if (intermediateChain.Contains(currentType, SymbolEqualityComparer.Default))
+            return null;
+
+        // Check depth limit
+        if (depth > MaxFlatteningDepth)
+            return null;
+
+        // Try each member as a prefix of the remaining key
+        foreach (var member in currentType.GetMembers())
+        {
+            if (member.IsStatic || member.DeclaredAccessibility == Accessibility.Private)
                 continue;
 
-            // Remainder after prefix
-            var remainder = destKeyLower.Substring(prefixLower.Length);
+            if (member is not IPropertySymbol prop)
+                continue; // Only support properties for flattening
 
-            // Check if the member's type has a property matching the remainder
-            if (memberType is INamedTypeSymbol nestedType)
+            if (prop.IsIndexer)
+                continue;
+
+            var memberNameLower = prop.Name.ToLowerInvariant();
+
+            // Check if this member's name matches the start of the remaining key
+            if (!remainingKeyLower.StartsWith(memberNameLower))
+                continue;
+
+            // If the member name exactly matches the entire remaining key
+            if (memberNameLower == remainingKeyLower)
             {
-                foreach (var nestedMember in nestedType.GetMembers())
+                // Check type compatibility
+                if (prop.Type.ToDisplayString() == destMemberType.ToDisplayString())
                 {
-                    if (nestedMember.IsStatic || nestedMember.DeclaredAccessibility == Accessibility.Private) continue;
-                    if (nestedMember is IPropertySymbol nestedProp)
+                    // Build the access expression with proper null-safety.
+                    // Use ?. if we're accessing a property on a reference type (which can be null),
+                    // otherwise use . for value types.
+                    var access = string.IsNullOrEmpty(currentAccess)
+                        ? $"{sourceParamName}.{prop.Name}"
+                        : currentAccess + (currentType.IsReferenceType ? $"?.{prop.Name}" : $".{prop.Name}");
+
+                    var newPathParts = new List<string>(pathParts) { prop.Name };
+                    var path = string.Join(".", newPathParts);
+
+                    return new FlatteningResult
                     {
-                        if (nestedProp.Name.ToLowerInvariant() == remainder &&
-                            nestedProp.Type.ToDisplayString() == destMemberType.ToDisplayString())
-                        {
-                            // Null-safe flattened access: use ?. if the intermediate member is a reference type
-                            if (memberType.IsReferenceType)
-                                flattenExpression = $"{paramName}.{memberName}?.{nestedProp.Name}";
-                            else
-                                flattenExpression = $"{paramName}.{memberName}.{nestedProp.Name}";
-                            return true;
-                        }
-                    }
+                        Expression = access,
+                        Depth = depth,
+                        ResolvedPath = path
+                    };
                 }
+                continue;
+            }
+
+            // Partial match: the member's name is a prefix of the remaining key
+            // Recursively search the nested type for the remainder
+            if (prop.Type is INamedTypeSymbol nestedType)
+            {
+                var remainder = remainingKeyLower.Substring(memberNameLower.Length);
+                var nextAccess = string.IsNullOrEmpty(currentAccess)
+                    ? $"{sourceParamName}.{prop.Name}"
+                    : currentAccess + (prop.Type.IsReferenceType ? $"?.{prop.Name}" : $".{prop.Name}");
+
+                var nextChain = new List<ITypeSymbol>(intermediateChain) { currentType };
+                var nextPathParts = new List<string>(pathParts) { prop.Name };
+
+                var result = TryResolveFlattenedMappingRecursive(
+                    nestedType,
+                    remainder,
+                    destMemberType,
+                    sourceParamName,
+                    nextAccess,
+                    nextChain,
+                    depth + 1,
+                    nextPathParts);
+
+                if (result?.Expression != null)
+                    return result;
             }
         }
-        return false;
+
+        return null;
     }
 
     private static bool IsReadOnlyMember(INamedTypeSymbol type, string keyLower)

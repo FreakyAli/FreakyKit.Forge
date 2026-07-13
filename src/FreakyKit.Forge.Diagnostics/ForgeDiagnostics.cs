@@ -926,4 +926,45 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "[ForgeIgnore] attributes are typically placed on destination type members to exclude them from mapping. If this attribute appears on a source type (the type being mapped from), it has no effect and should be removed or moved to the destination type.");
+
+    /// <summary>
+    /// FKF530 (Error): Ambiguous flattening was auto-resolved by preferring the longest prefix match.
+    /// When multiple source property paths could match a destination member name, the generator
+    /// uses the longest-matching prefix to disambiguate, then continues recursively.
+    /// This is an error to force explicit resolution and prevent silent bugs from unclear mappings.
+    /// </summary>
+    public static readonly DiagnosticDescriptor AmbiguousFlatteningAutoResolved = new(
+        id: "FKF530",
+        title: "Ambiguous flattening auto-resolved",
+        messageFormat: "Destination member '{0}' matched via ambiguous flattening: multiple prefixes could match '{1}'. The longest prefix '{2}' was selected. Ambiguous flattening is not allowed — explicitly resolve this by renaming the destination member or excluding one of the source properties with [ForgeIgnore].",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Ambiguous flattening occurs when multiple source property paths could match a destination member name's prefix. The generator uses a greedy longest-prefix strategy to disambiguate, but this can hide bugs and lead to unexpected mappings. This is now an error to force explicit, intentional naming. Resolve it by renaming the destination member to be unambiguous, excluding one of the ambiguous source properties with [ForgeIgnore], or adjusting your type structure to eliminate the ambiguity.");
+
+    /// <summary>
+    /// FKF531 (Info): Deep flattening (3+ levels) was detected on a destination member.
+    /// This informs users that the generated code contains deep property access chains,
+    /// which may indicate complex data structure mapping that could be simplified.
+    /// </summary>
+    public static readonly DiagnosticDescriptor DeepFlatteningDetected = new(
+        id: "FKF531",
+        title: "Deep flattening detected",
+        messageFormat: "Destination member '{0}' uses deep flattening with {1} levels: {2}. Consider whether a simpler structure or nested forging would improve code clarity.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "A destination member was matched via flattening that traverses 3 or more levels of nested properties. While supported, this may indicate overly-deep nesting that could be simplified via a different design. No action required—this is informational only.");
+
+    /// <summary>
+    /// FKF532 (Error): Flattening nesting depth exceeded the limit of 10 levels.
+    /// </summary>
+    public static readonly DiagnosticDescriptor FlatteningDepthLimitExceeded = new(
+        id: "FKF532",
+        title: "Flattening nesting depth limit exceeded",
+        messageFormat: "Destination member '{0}' exceeds the maximum flattening depth of 10 levels. Flattening stopped. Consider restructuring the source type hierarchy or using nested forging instead.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Flattening is limited to 10 levels of nesting to prevent unbounded recursive traversal. Restructure the source type hierarchy to be less deeply nested, or use nested forging instead of flattening for this member.");
 }

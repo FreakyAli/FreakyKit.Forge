@@ -70,7 +70,10 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.ExpressionDeepNesting,
             ForgeDiagnostics.SameTypeCollectionShared,
             ForgeDiagnostics.SameTypeReferenceShared,
-            ForgeDiagnostics.ShareReferenceConflict
+            ForgeDiagnostics.ShareReferenceConflict,
+            ForgeDiagnostics.AmbiguousFlatteningAutoResolved,
+            ForgeDiagnostics.DeepFlatteningDetected,
+            ForgeDiagnostics.FlatteningDepthLimitExceeded
         );
 
     public override void Initialize(AnalysisContext context)

@@ -72,4 +72,5 @@ public sealed class FlatteningTests : AnalyzerTestBase
         // "AddressZipCode" can't be flattened because Address has no "ZipCode" property
         AssertContainsDiagnostic(source, "FKF100");
     }
+
 }

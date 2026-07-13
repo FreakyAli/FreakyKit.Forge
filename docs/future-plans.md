@@ -16,7 +16,6 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
 | 1 | Expression assignment mutability | P2 | Medium | Low | Refactor to immutable pattern |
-| 2 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
 | 3 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
 | 6 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
 | 7 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
@@ -68,45 +67,7 @@ Medium. Internal-only change with no API surface change. Enables future caching 
 
 ---
 
-### 2. Multi-Level Deep Flattening — `P2`
-
-**Why**
-
-Current flattening is limited to one level of nesting. Real-world domain models in ERP, CRM, and e-commerce have 3-4 levels of hierarchy that users need to flatten into a single DTO property (e.g., `source.Customer.BillingAddress.PostalCode` → `dest.CustomerBillingAddressPostalCode`). Users currently hand-write these or use nested forging.
-
-**Design**
-
-Extend `TryResolveFlattenedMapping` to recursively walk prefix matches at configurable depth. For destination member `CustomerBillingAddressPostalCode`:
-1. Match prefix `Customer` from source (type A)
-2. Type A has member `BillingAddress` (type B)
-3. Type B has member `PostalCode` → match
-
-Each intermediate step adds null-safety chaining: `source.Customer?.BillingAddress?.PostalCode`. For expression trees, convert to nested ternaries.
-
-**Complexity**
-
-Medium. Prefix-matching algorithm must handle ambiguity (what if `CustomerBilling` is also a member?) and performance (avoid exponential splits). Use greedy longest-prefix matching with configurable depth limit (default 2-3 levels).
-
-**Impact**
-
-Medium. Solves real-world flattening scenarios; reduces need for nested forging in some cases.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Extend `TryResolveFlattenedMapping` to handle multi-level recursion
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostic for ambiguous flattening (multiple valid prefixes)
-
-**Suggested Approach**
-
-1. Rename `TryResolveFlattenedMapping` to `TryResolveFlattenedMappingRecursive` with depth parameter
-2. For each destination member name, try greedy longest-prefix matches against source members
-3. If match found, recursively search that matched type's members for remaining suffix
-4. Emit null-coalescing chains or nested ternaries as needed
-5. Limit depth to prevent exponential behavior (suggest max 4 levels)
-
----
-
-### 3. Tri-State ShareReference — `P2`
+### 2. Tri-State ShareReference — `P2`
 
 **Why**
 

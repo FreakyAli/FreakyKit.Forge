@@ -238,15 +238,126 @@ public static partial PersonDto ToDto(Person source);
 
 #### `AllowFlattening` (`bool`, default: `false`)
 
-When true, the generator attempts to flatten nested source properties into flat destination members. When a destination member has no direct match, the generator tries prefix matching: `AddressCity` → `source.Address.City`.
+When true, the generator attempts to flatten nested source properties into flat destination members at arbitrary depth. When a destination member has no direct match, the generator tries prefix matching: `AddressCity` → `source.Address?.City`, `AddressCoordsLatitude` → `source.Address?.Coords?.Latitude`, and deeper nesting of any depth up to 10 levels.
 
-Only one level of nesting is supported. Flattening only traverses **properties** on intermediate types — fields are not considered for traversal, even when `ShouldIncludeFields = true`.
+Flattening supports **arbitrary nesting depth** (limited to 10 levels for performance): traverse as many nested levels as needed. The generator uses **properties only** on intermediate types — fields are not considered for traversal, even when `ShouldIncludeFields = true`.
 
+Null-safety is automatic: the generator inserts `?.` null-conditional operators after each reference-type intermediate, and uses `.` after value-type intermediates (e.g., structs). Value types do not use null-conditional chaining because they cannot be null.
+
+**Examples of flattening at various depths:**
+
+Single-level flattening:
 ```csharp
+public class Address { public string City { get; set; } = ""; }
+public class Source  { public Address Address { get; set; } = new(); }
+public class Dest    { public string AddressCity { get; set; } = ""; }
+
 [ForgeMethod(AllowFlattening = true)]
-public static partial PersonDto ToDto(Person source);
-// dest.AddressCity = source.Address.City
+public static partial Dest ToDto(Source source);
+// Generates: dest.AddressCity = source.Address?.City
 ```
+
+Two-level flattening:
+```csharp
+public class Coordinates { public double Latitude { get; set; } }
+public class Address     { public Coordinates Coords { get; set; } = new(); }
+public class Source      { public Address Address { get; set; } = new(); }
+public class Dest        { public double AddressCoordsLatitude { get; set; } }
+
+[ForgeMethod(AllowFlattening = true)]
+public static partial Dest ToDto(Source source);
+// Generates: dest.AddressCoordsLatitude = source.Address?.Coords?.Latitude
+```
+
+Three-level flattening and beyond:
+```csharp
+public class GeoPoint   { public string Code { get; set; } = ""; }
+public class Coordinates { public GeoPoint Point { get; set; } = new(); }
+public class Address     { public Coordinates Coords { get; set; } = new(); }
+public class Source      { public Address Address { get; set; } = new(); }
+public class Dest        { public string AddressCoordsPointCode { get; set; } = ""; }
+
+[ForgeMethod(AllowFlattening = true)]
+public static partial Dest ToDto(Source source);
+// Generates: dest.AddressCoordsPointCode = source.Address?.Coords?.Point?.Code
+// FKF531 (Info) diagnostic emitted: "Deep flattening detected (3+ levels)"
+```
+
+**Diagnostic Messages:**
+
+- **FKF531 (Info)** — Deep flattening detected on a destination member (3+ levels of nesting). This is informational only — no action required, but you may want to consider if a simpler structure would be clearer.
+- **FKF532 (Error)** — Flattening nesting depth limit exceeded (>10 levels). Flattening is limited to 10 levels. Restructure the source type hierarchy or use nested forging instead.
+- **FKF530 (Error)** — Ambiguous flattening detected. When multiple source property paths could match a destination member name prefix, the generator requires explicit resolution. See below for three fix strategies.
+
+**Handling Ambiguous Flattening (FKF530):**
+
+Ambiguous flattening occurs when a destination member name matches multiple source paths. For example:
+
+**BEFORE (generates FKF530 Error):**
+```csharp
+public class Address { public string City { get; set; } = ""; }
+public class Source
+{
+    public Address Address { get; set; } = new();
+    public Address AddressCity { get; set; } = new();  // Conflict: AddressCity matches both
+}
+
+public class Dest
+{
+    public string AddressCity { get; set; } = "";  // Ambiguous: could be Address.City OR AddressCity (direct)
+}
+
+[Forge]
+public static partial class MyForges
+{
+    [ForgeMethod(AllowFlattening = true)]
+    public static partial Dest ToDest(Source source);  // FKF530 Error — ambiguous
+}
+```
+
+**Solution 1: Rename the destination member to be unambiguous**
+```csharp
+public class Dest
+{
+    [ForgeMap("Address.City")]
+    public string NestedAddressCity { get; set; } = "";  // Now unambiguous
+}
+```
+
+**Solution 2: Use [ForgeIgnore] to exclude one of the ambiguous sources**
+```csharp
+public class Source
+{
+    public Address Address { get; set; } = new();
+    [ForgeIgnore] public Address AddressCity { get; set; } = new();  // Excluded, removes ambiguity
+}
+```
+
+**Solution 3: Restructure the source types to avoid overlapping names**
+```csharp
+public class Source
+{
+    public Address MainAddress { get; set; } = new();  // Renamed: no longer "Address"
+    public Address OptionalAddress { get; set; } = new();
+}
+
+public class Dest
+{
+    public string AddressCity { get; set; } = "";  // Now unambiguous: matches MainAddress.City
+}
+```
+
+**Design Decision: Flattening vs Nested Forging**
+
+Use **AllowFlattening = true** when:
+- You want to flatten a deeply nested source structure into a single DTO property
+- The source has read-only reference types at intermediate levels (no constructor parameters needed)
+- You want automatic null-safety chaining with minimal code
+
+Use **AllowNestedForging = true** when:
+- The source and destination types differ at intermediate levels (type mismatch)
+- You need custom logic for nested conversions
+- You want to preserve strongly-typed structure
 
 #### `IgnoreIfNull` (`bool`, default: `false`)
 
@@ -869,7 +980,7 @@ When mapping hierarchical source models to flat DTOs, you have two main options:
 
 **When to use:**
 - Combining multiple source levels into single destination properties (e.g., `Customer.Address.City` → `CustomerAddressCity`)
-- Single level of nesting (one intermediate type)
+- Arbitrary-depth nesting (one level, two levels, three levels, and beyond)
 - Implicit, automatic discovery — no intermediate forge method needed
 - DTOs with denormalized, prefixed fields
 
@@ -878,11 +989,12 @@ When mapping hierarchical source models to flat DTOs, you have two main options:
 - Automatic member discovery by name pattern
 - Simpler for one-off flattening scenarios
 - Clean, denormalized DTO design
+- Supports arbitrary nesting depth — traverse as many levels as needed
+- Automatic null-safety with `?.` for reference types and `.` for value types
 
 **Cons:**
-- Limited to configurable depth (currently one level, max 2–3 with upcoming multi-level feature)
-- Only works with value-type members or reference-type members where the entire chain is nullable
 - Names must follow prefix pattern (e.g., `Customer.Address.City` → `CustomerAddressCity`)
+- Only property traversal — fields are not considered even when `ShouldIncludeFields = true`
 
 **Example:**
 ```csharp
@@ -937,7 +1049,8 @@ public static partial class PersonForges
 | Scenario | Use Flattening | Use Nested Forging |
 |----------|----------------|--------------------|
 | Single-level denormalization (`Address.City` → `AddressCity`) | ✅ | ✔ (overcomplicated) |
-| Multi-level flattening (3+ levels) | ❌ | ✅ |
+| Two-level flattening (`Address.Coords.Lat` → `AddressCoordsLat`) | ✅ | ✔ (works but unnecessary) |
+| Multi-level flattening (3+ levels) | ✅ | ✔ (works but unnecessary) |
 | Type mismatch (Entity → DTO) | ❌ | ✅ |
 | Reuse across multiple parents | ❌ | ✅ |
 | Simple attribute copy (same types) | ✅ | ✔ (works but unnecessary) |

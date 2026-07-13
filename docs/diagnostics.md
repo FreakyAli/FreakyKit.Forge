@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 58 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 61 diagnostics across 8 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -504,6 +504,93 @@ public string Name { get; set; }
 [ForgeMap("FullName")]
 public string Name { get; set; }
 ```
+
+### FKF530 — Ambiguous flattening auto-resolved
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}' matched via ambiguous flattening: multiple prefixes could match '{1}'. The longest prefix '{2}' was selected. Ambiguous flattening is not allowed — explicitly resolve this by renaming the destination member or excluding one of the source properties with [ForgeIgnore]. |
+
+**Error — blocks source generation.** Emitted when a destination member name could be decomposed in multiple ways. Ambiguous flattening is a strict validation error designed to prevent silent bugs from unclear mappings. The generator detects this and requires explicit resolution.
+
+To fix, choose one of the following:
+1. **Rename the destination member** to be unambiguous — make it clear which path should be used
+2. **Exclude the ambiguous source property** using `[ForgeIgnore]` on the source type to eliminate the ambiguity
+3. **Restructure your types** to avoid overlapping property names that create ambiguity
+
+Example: if a destination has `AddressCityName` and the source has both `AddressCity` (with property `Name`) and `Address.CityName`, the ambiguity must be resolved explicitly. The generator will not silently pick the longest prefix.
+
+```csharp
+public class Source
+{
+    public Address Address { get; set; }      // has City.Name
+    public string AddressCity { get; set; }   // also has CityName property
+}
+
+public class Dest { public string AddressCityName { get; set; } }
+
+[ForgeMethod(AllowFlattening = true)]
+public static partial Dest ToDto(Source source);
+// FKF530 Error: Could be Address.City.Name or AddressCity.Name — ambiguous!
+
+// Fix 1: Rename destination member to be specific
+public class Dest { public string AddressCityPropertyName { get; set; } }
+
+// Fix 2: Exclude the ambiguous source property
+public class Source
+{
+    public Address Address { get; set; }      // has City.Name
+    [ForgeIgnore] public string AddressCity { get; set; }   // excluded
+}
+
+// Fix 3: Rename the source property to avoid overlap
+public class Source
+{
+    public Address Address { get; set; }      // has City.Name
+    public string CityFullName { get; set; }  // different name
+}
+```
+
+### FKF531 — Deep flattening detected
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}' uses deep flattening with {1} levels: {2}. Consider whether a simpler structure or nested forging would improve code clarity. |
+
+Emitted when a destination member is matched via flattening that traverses 3 or more levels of nested properties. This is supported and works correctly, but may indicate overly-deep nesting that could be simplified.
+
+```csharp
+public class GeoPoint { public string Code { get; set; } }
+public class Coordinates { public GeoPoint Point { get; set; } }
+public class Address { public Coordinates Coords { get; set; } }
+public class Source { public Address Address { get; set; } }
+public class Dest { public string AddressCoordsPointCode { get; set; } }
+
+[ForgeMethod(AllowFlattening = true)]
+public static partial Dest ToDto(Source source);
+// FKF531: 3 levels of flattening (Address.Coords.Point.Code)
+```
+
+No action required — this is informational only.
+
+### FKF532 — Flattening nesting depth limit exceeded
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}' exceeds the maximum flattening depth of 10 levels. Flattening stopped. |
+
+Emitted when a destination member's flattened path would require traversing more than 10 levels of nested properties. Flattening is limited to 10 levels to prevent unbounded recursive traversal and excessive generated code.
+
+To fix:
+- Restructure the source type hierarchy to be less deeply nested
+- Use nested forging instead of flattening for this member (set `AllowNestedForging = true` and provide forge methods)
+- Split the mapping into multiple steps with intermediate types
 
 ---
 
