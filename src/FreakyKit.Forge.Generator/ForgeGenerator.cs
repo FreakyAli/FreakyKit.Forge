@@ -21,6 +21,11 @@ namespace FreakyKit.Forge.Generator;
 [Generator(LanguageNames.CSharp)]
 public sealed class ForgeGenerator : IIncrementalGenerator
 {
+    // Depth limits for flattening and expression nesting
+    private const int FlatteningDiagnosticThreshold = 3;
+    private const int ExpressionNestingWarningThreshold = 5;
+    private const int ExpressionNestingErrorThreshold = 10;
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Pipeline: find static partial classes decorated with [Forge]
@@ -357,6 +362,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return new ForgeClassResult(classModel, diagnostics, hasErrors: false);
     }
 
+    /// <summary>
+    /// Extracts and validates a single forge method, building its model for code generation.
+    /// Pipeline: shape detection → member discovery → constructor selection → assignment extraction
+    /// → expression property generation → validation. Emits diagnostics for shape violations, member
+    /// conflicts, and type mismatches. Returns null model on critical errors; diagnostics are always populated.
+    /// </summary>
     private static (ForgeMethodModel? Model, List<Diagnostic> Diagnostics) ExtractForgeMethod(
         IMethodSymbol method,
         INamedTypeSymbol forgeClass,
@@ -537,8 +548,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         sourceType.Name,
                         flattenExpr.Replace($"{srcParamName}.", "")));
 
-                    // FKF531: Emit info diagnostic if flattening depth >= 3 levels
-                    if (flatteningDepth >= 3)
+                    // FKF531: Emit info diagnostic if flattening depth >= threshold
+                    if (flatteningDepth >= FlatteningDiagnosticThreshold)
                     {
                         diagnostics.Add(Diagnostic.Create(
                             ForgeDiagnostics.DeepFlatteningDetected,
@@ -579,7 +590,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             matchedSourceKeys.Add(key);
 
-            // Determine IgnoreIfNull: per-member overrides method-level
+            // Determine IgnoreIfNull: per-member overrides method-level.
+            // srcSymbolForNull and destSymbolForNull may be null (unmatched members), but are explicitly null-checked below.
             var srcSymbolForNull = sourceType.GetMembers().FirstOrDefault(m => m.Name == srcMember.Name);
             var destSymbolForNull = destType.GetMembers().FirstOrDefault(m => m.Name == destMember.Name);
             bool memberIgnoreIfNull = (srcSymbolForNull != null && GetForgeIgnoreIfNull(srcSymbolForNull))
@@ -1625,7 +1637,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 }
             }
 
-            if (maxDepth >= 10)
+            if (maxDepth >= ExpressionNestingErrorThreshold)
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ExpressionNestingDepthLimitExceeded,
@@ -1633,7 +1645,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     method.MethodName,
                     maxDepth));
             }
-            else if (maxDepth > 5)
+            else if (maxDepth > ExpressionNestingWarningThreshold)
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ExpressionDeepNesting,
@@ -1767,6 +1779,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return BuildShortTypeName(dictType);
     }
 
+    /// <summary>
+    /// Determines the best constructor for the destination type and resolves parameter mappings.
+    /// Selection priority: parameterless → single viable parameterized → error.
+    /// Parameters are matched against source members using [ForgeMap] overrides where provided,
+    /// with automatic nullable T → Nullable&lt;T&gt; handling. Emits diagnostics for constructor
+    /// ambiguity, missing parameters, and type mismatches.
+    /// </summary>
     private static (ConstructionModel Construction, List<Diagnostic> Diagnostics) DetermineConstruction(
         INamedTypeSymbol destType,
         Dictionary<string, (ITypeSymbol Type, string Name, bool IsField)> sourceMembers,
@@ -1995,6 +2014,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Generates the partial method implementation body. Handles three method kinds:
+    /// CollectionProject (single LINQ expression), DictionaryProject (foreach-based transformation),
+    /// and Create/Update (member assignments with constructor initialization). Includes XML doc,
+    /// [GeneratedCode], [DebuggerStepThrough] attributes, and #line directives for debugging.
+    /// </summary>
     private static void GenerateMethodBody(StringBuilder sb, ForgeMethodModel method, string indent)
     {
         if (method.MethodKind == ForgeMethodKind.CollectionProject)
@@ -2631,6 +2656,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>
+    /// Checks if a method has the required shape for a forge mapping method.
+    /// Valid shapes: (1) create: static partial method with non-void return and one parameter,
+    /// (2) update: static partial method with void return and two parameters. Generic methods are excluded.
+    /// </summary>
     private static bool IsForgeMethodShape(IMethodSymbol method)
     {
         if (!method.IsStatic || !method.IsPartialDefinition || method.TypeParameters.Length != 0)
@@ -2647,6 +2677,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>
+    /// Checks if a method is an update (in-place modification) method.
+    /// Update methods must be static partial, return void, accept two parameters (source and destination),
+    /// and not be generic.
+    /// </summary>
     private static bool IsUpdateMethodShape(IMethodSymbol method)
     {
         return method.IsStatic &&
@@ -2685,6 +2720,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>
+    /// Determines if an implicit conversion exists from sourceType to destType.
+    /// Sets isLossy to true if the conversion may lose precision (e.g., float→double).
+    /// Returns false if no implicit conversion is available or if the conversion is explicit-only.
+    /// </summary>
     private static bool TryImplicitConversion(
         Microsoft.CodeAnalysis.Compilation compilation,
         ITypeSymbol sourceType,
@@ -2708,6 +2748,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return true;
     }
 
+    /// <summary>
+    /// Determines if a conversion may lose precision or data (e.g., float→double).
+    /// Must stay in sync with ForgeAnalyzer.IsLossyConversion to ensure consistent FKF203 diagnostics.
+    /// </summary>
     private static bool IsLossyConversion(ITypeSymbol sourceType, ITypeSymbol destType)
     {
         var srcName = sourceType.ToDisplayString();

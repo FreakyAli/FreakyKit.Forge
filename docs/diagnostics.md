@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 61 diagnostics across 8 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 74 diagnostics across 8 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 

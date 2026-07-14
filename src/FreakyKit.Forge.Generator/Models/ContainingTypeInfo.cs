@@ -2,10 +2,19 @@ using System;
 
 namespace FreakyKit.Forge.Generator.Models;
 
+/// <summary>
+/// Metadata about the containing type (class) that holds a forge method.
+/// Used to reconstruct the original class declaration in generated code.
+/// </summary>
 internal sealed class ContainingTypeInfo : IEquatable<ContainingTypeInfo>
 {
+    /// <summary>The accessibility modifier (public, internal, private, etc.).</summary>
     public string Accessibility { get; }
+
+    /// <summary>The type keyword (class, struct, record, etc.).</summary>
     public string Keyword { get; }
+
+    /// <summary>The type name.</summary>
     public string Name { get; }
 
     public ContainingTypeInfo(string accessibility, string keyword, string name)
