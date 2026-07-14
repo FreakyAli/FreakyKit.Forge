@@ -392,7 +392,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 GetDictionaryKeyValueTypes(rawDest, out var destDictKey, out var destDictVal))
             {
                 return ExtractDictionaryProjectMethod(method, forgeClass, rawSrc, rawDest,
-                    srcDictKey!, srcDictVal!, destDictKey!, destDictVal!, srcParamName, diagnostics);
+                    srcDictKey!, srcDictVal!, destDictKey!, destDictVal!, srcParamName, diagnostics, compilation, includedForgeClasses);
             }
         }
 
@@ -407,7 +407,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (srcElemType != null && destElemType != null)
             {
                 return ExtractCollectionProjectMethod(method, forgeClass, rawSrc, rawDest,
-                    srcElemType, destElemType, srcParamName, diagnostics);
+                    srcElemType, destElemType, srcParamName, diagnostics, compilation, includedForgeClasses);
             }
         }
 
@@ -921,7 +921,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     sourceMemberName: srcMember.Name,
                     sourceMemberType: srcMember.Type.ToDisplayString()));
             }
-            else if (TryResolveDictionaryMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var dictExpr))
+            else if (TryResolveDictionaryMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var dictExpr, compilation, includedForgeClasses, diagnostics))
             {
                 assignments.Add(new MemberAssignmentModel(
                     destMemberName: destMember.Name,
@@ -934,7 +934,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     sourceMemberName: srcMember.Name,
                     sourceMemberType: srcMember.Type.ToDisplayString()));
             }
-            else if (TryResolveCollectionMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var collectionExpr, out var collectionInfo))
+            else if (TryResolveCollectionMapping(srcMember.Type, destMember.Type, forgeClass, allowNested, srcParamName, srcMember.Name, out var collectionExpr, out var collectionInfo, compilation, includedForgeClasses, diagnostics))
             {
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.CollectionMapping,
@@ -1022,7 +1022,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     sourceMemberName: srcMember.Name,
                     sourceMemberType: srcMember.Type.ToDisplayString()));
             }
-            else if (FindConverterMethod(forgeClass, srcMember.Type, destMember.Type, out var converterName))
+            else if (FindConverterMethod(forgeClass, srcMember.Type, destMember.Type, out var converterName, compilation, includedForgeClasses))
             {
                 // Type converter found
                 diagnostics.Add(Diagnostic.Create(
@@ -1229,7 +1229,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         ITypeSymbol srcElemType,
         ITypeSymbol destElemType,
         string srcParamName,
-        List<Diagnostic> diagnostics)
+        List<Diagnostic> diagnostics,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null)
     {
         var accessibility = AccessibilityToString(method.DeclaredAccessibility);
         var srcShort = BuildShortTypeName(sourceCollType);
@@ -1247,9 +1249,14 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         else
         {
             // Try to find a forge method that converts srcElem → destElem
-            if (FindNestedForgeMethod(forgeClass, srcElemType, destElemType, out var nestedName) && nestedName != null)
+            if (FindNestedForgeMethod(forgeClass, srcElemType, destElemType, out var nestedName, compilation, includedForgeClasses, diagnostics, method.Name) && nestedName != null)
             {
                 elementTransform = $"x => {nestedName}(x)";
+            }
+            // Try to find a [ForgeConverter] method
+            else if (FindConverterMethod(forgeClass, srcElemType, destElemType, out var converterName, compilation, includedForgeClasses) && converterName != null)
+            {
+                elementTransform = $"x => {converterName}(x)";
             }
             else
             {
@@ -1333,7 +1340,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         ITypeSymbol destKeyType,
         ITypeSymbol destValType,
         string srcParamName,
-        List<Diagnostic> diagnostics)
+        List<Diagnostic> diagnostics,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null)
     {
         var accessibility = AccessibilityToString(method.DeclaredAccessibility);
         var srcShort = BuildShortTypeName(sourceDictType);
@@ -1359,9 +1368,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             valueTransform = "";
         }
-        else if (FindNestedForgeMethod(forgeClass, srcValType, destValType, out var nestedName) && nestedName != null)
+        else if (FindNestedForgeMethod(forgeClass, srcValType, destValType, out var nestedName, compilation, includedForgeClasses, diagnostics, method.Name) && nestedName != null)
         {
             valueTransform = $"{nestedName}(__kvp.Value)";
+        }
+        else if (FindConverterMethod(forgeClass, srcValType, destValType, out var converterName, compilation, includedForgeClasses) && converterName != null)
+        {
+            valueTransform = $"{converterName}(__kvp.Value)";
         }
         else
         {
@@ -2697,12 +2710,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         INamedTypeSymbol forgeClass,
         ITypeSymbol sourceType,
         ITypeSymbol destType,
-        out string? converterName)
+        out string? converterName,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null)
     {
         converterName = null;
         var srcDisplay = sourceType.ToDisplayString();
         var destDisplay = destType.ToDisplayString();
 
+        // First search in the current forge class
         foreach (var member in forgeClass.GetMembers())
         {
             if (member is IMethodSymbol m &&
@@ -2717,6 +2733,33 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 return true;
             }
         }
+
+        // If not found and included classes are provided, search them in order
+        if (compilation != null && includedForgeClasses != null && includedForgeClasses.Count > 0)
+        {
+            foreach (var includedFqn in includedForgeClasses)
+            {
+                var includedClass = compilation.GetTypeByMetadataName(includedFqn) as INamedTypeSymbol;
+                if (includedClass != null)
+                {
+                    foreach (var member in includedClass.GetMembers())
+                    {
+                        if (member is IMethodSymbol m &&
+                            m.IsStatic &&
+                            !m.ReturnsVoid &&
+                            m.Parameters.Length == 1 &&
+                            m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeConverterAttribute") &&
+                            m.Parameters[0].Type.ToDisplayString() == srcDisplay &&
+                            m.ReturnType.ToDisplayString() == destDisplay)
+                        {
+                            converterName = m.Name;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
         return false;
     }
 
@@ -2808,7 +2851,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         INamedTypeSymbol forgeClass, bool allowNested,
         string sourceParamName, string srcMemberName,
         out string expression,
-        out CollectionMappingInfo? info)
+        out CollectionMappingInfo? info,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null,
+        List<Diagnostic>? diagnostics = null)
     {
         expression = "";
         info = null;
@@ -2865,7 +2911,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         // Different element types: check for nested forge
-        if (allowNested && FindNestedForgeMethod(forgeClass, srcElem, destElem, out var nestedName) && nestedName != null)
+        if (allowNested && FindNestedForgeMethod(forgeClass, srcElem, destElem, out var nestedName, compilation, includedForgeClasses, diagnostics, srcMemberName) && nestedName != null)
         {
             if (srcIsRefType)
                 expression = $"{srcAccessor} != null ? {srcAccessor}.Select(x => {nestedName}(x)){suffix} : {nullFallback}";
@@ -2874,6 +2920,24 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             info = new CollectionMappingInfo(
                 elementForgeMethod: nestedName,
+                sourceAccessor: srcAccessor,
+                expressionMaterializer: expressionMaterializer,
+                destinationSuffix: suffix,
+                sourceIsRefType: srcIsRefType,
+                sameElementType: false);
+            return true;
+        }
+
+        // Check for [ForgeConverter] method as fallback
+        if (FindConverterMethod(forgeClass, srcElem, destElem, out var converterName, compilation, includedForgeClasses) && converterName != null)
+        {
+            if (srcIsRefType)
+                expression = $"{srcAccessor} != null ? {srcAccessor}.Select(x => {converterName}(x)){suffix} : {nullFallback}";
+            else
+                expression = $"{srcAccessor}.Select(x => {converterName}(x)){suffix}";
+
+            info = new CollectionMappingInfo(
+                elementForgeMethod: converterName,
                 sourceAccessor: srcAccessor,
                 expressionMaterializer: expressionMaterializer,
                 destinationSuffix: suffix,
@@ -2931,7 +2995,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         ITypeSymbol srcType, ITypeSymbol destType,
         INamedTypeSymbol forgeClass, bool allowNested,
         string sourceParamName, string srcMemberName,
-        out string expression)
+        out string expression,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null,
+        List<Diagnostic>? diagnostics = null)
     {
         expression = "";
         if (!GetDictionaryKeyValueTypes(srcType, out var srcKey, out var srcVal)) return false;
@@ -2948,9 +3015,17 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             return true;
         }
 
-        if (allowNested && FindNestedForgeMethod(forgeClass, srcVal, destVal!, out var nestedName) && nestedName != null)
+        if (allowNested && FindNestedForgeMethod(forgeClass, srcVal, destVal!, out var nestedName, compilation, includedForgeClasses, diagnostics, srcMemberName) && nestedName != null)
         {
             var expr = $"{srcAccessor}.ToDictionary(__kvp => __kvp.Key, __kvp => {nestedName}(__kvp.Value))";
+            expression = srcIsRefType ? $"{srcAccessor} != null ? {expr} : null" : expr;
+            return true;
+        }
+
+        // Check for [ForgeConverter] method as fallback
+        if (FindConverterMethod(forgeClass, srcVal, destVal!, out var converterName, compilation, includedForgeClasses) && converterName != null)
+        {
+            var expr = $"{srcAccessor}.ToDictionary(__kvp => __kvp.Key, __kvp => {converterName}(__kvp.Value))";
             expression = srcIsRefType ? $"{srcAccessor} != null ? {expr} : null" : expr;
             return true;
         }

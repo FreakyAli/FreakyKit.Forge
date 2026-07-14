@@ -465,7 +465,7 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
-        var generated = AssertSingleGeneratedFile(result);
+        var generated = AssertGeneratedFiles(result, 2); // AddressForges and PersonForges
         // Verify that the converter is discovered and used for collection element conversion
         Assert.Contains("ConvertAddress", generated);
         Assert.Contains("Select", generated);
