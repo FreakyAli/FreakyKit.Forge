@@ -797,7 +797,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor InvalidConditionMethodSignature = new(
         id: "FKF511",
         title: "Condition method has invalid signature",
-        messageFormat: "Member '{0}': condition method '{1}' has invalid signature. Must be: static bool MethodName(SourceType source)",
+        messageFormat: "Member '{0}': condition method '{1}' has invalid signature. Must be: static bool MethodName(SourceType source).",
         category: Category_MemberMatching,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,

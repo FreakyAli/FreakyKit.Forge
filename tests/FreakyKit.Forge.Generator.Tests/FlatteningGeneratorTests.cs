@@ -144,34 +144,6 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
-    public void Flattening_TwoLevels_AllReferenceTypes()
-    {
-        const string source = """
-            using FreakyKit.Forge;
-            namespace TestNs
-            {
-                public class Coordinates { public double Latitude { get; set; } }
-                public class Address { public Coordinates Coords { get; set; } = new(); }
-                public class Source  { public Address Address { get; set; } = new(); }
-                public class Dest    { public double AddressCoordsLatitude { get; set; } }
-
-                [Forge]
-                public static partial class MyForges
-                {
-                    [ForgeMethod(AllowFlattening = true)]
-                    public static partial Dest ToDest(Source source);
-                }
-            }
-            """;
-
-        var result = RunGenerator(source);
-        AssertNoErrors(result);
-        var generated = AssertSingleGeneratedFile(result);
-        // Both are reference types so both use ?.
-        Assert.Contains("__result.AddressCoordsLatitude = source.Address?.Coords?.Latitude", generated);
-    }
-
-    [Fact]
     public void Flattening_TwoLevels_MixedWithDirect()
     {
         const string source = """

@@ -3,8 +3,8 @@ using System;
 namespace FreakyKit.Forge.Generator.Models;
 
 /// <summary>
-/// Metadata about the containing type (class) that holds a forge method.
-/// Used to reconstruct the original class declaration in generated code.
+/// Metadata about the containing type that holds a forge method.
+/// Used to reconstruct the original type declaration in generated code.
 /// </summary>
 internal sealed class ContainingTypeInfo : IEquatable<ContainingTypeInfo>
 {

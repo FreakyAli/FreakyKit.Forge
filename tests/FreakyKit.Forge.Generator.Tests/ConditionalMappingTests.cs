@@ -44,7 +44,7 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest
                 {
-                    [ForgeMap("Name", Condition = nameof(Missing))]
+                    [ForgeMap("Name", Condition = "Missing")]
                     public string Name { get; set; } = "";
                 }
 

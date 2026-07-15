@@ -67,7 +67,7 @@ Medium. Internal-only change with no API surface change. Enables future caching 
 
 ---
 
-### 2. Tri-State ShareReference — `P2`
+### 3. Tri-State ShareReference — `P2`
 
 **Why**
 
@@ -811,6 +811,76 @@ Low. Users add a `[ForgeConverter]` expecting it to work, but if it's private, i
 
 1. In FKF221 validation, add checks: method must be `public` or `internal`; parameter/return types must be accessible
 2. Emit FKF221 with additional detail if visibility is wrong
+
+---
+
+#### Correctness: Qualified Method Names for Cross-Class Converters
+
+**Why**
+
+When `FindNestedForgeMethod` or `FindConverterMethod` discovers a method in an `[ForgeUses]` included class, it returns a bare method name (e.g., `ConvertAddress`). However, `GenerateSource` does not emit `using static` imports for included classes, so the generated code compiles only if the method is in the same namespace. In different-namespace scenarios, generated code references an unqualified method that doesn't exist in scope, causing runtime compilation failures.
+
+**Design**
+
+Modify `FindNestedForgeMethod` and `FindConverterMethod` to return class-qualified method names for methods found in included classes (e.g., `AddressForges.ConvertAddress`). Keep bare names for methods found in the current forge class (which is always in scope).
+
+**Complexity**
+
+Medium. Requires:
+1. Tracking which class each discovered method came from
+2. Returning qualified names for included-class methods
+3. Updating all ~10 call sites to handle qualified names in expression generation
+
+**Impact**
+
+Medium. Fixes a correctness bug that causes generated code to fail in cross-namespace cross-class converter scenarios.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — FindNestedForgeMethod (lines 2583-2665), FindConverterMethod (lines 2709-2760), and all call sites using the returned method names
+
+**Suggested Approach**
+
+1. Return a tuple `(methodName: string, includeClassName: string?)` from both lookup methods
+2. When method is from included class, set `includeClassName` to the simple class name (e.g., `AddressForges`)
+3. At call sites, use `$"{includeClassName}.{methodName}"` when `includeClassName` is not null
+4. Add test: verify generated code uses `AddressForges.ConvertAddress(...)` when converter is in included class
+
+---
+
+#### Algorithm Enhancement: Exhaustive Flattening Candidate Collection
+
+**Why**
+
+`TryResolveFlattenedMappingRecursive` uses a greedy algorithm: it returns the first flattened path found, even if multiple equally-valid paths exist at the same depth. This means `Customer.Address.City` matching both `AddressCity` (direct property) and `ContactAddress.City` (flattened) returns whichever is discovered first in the member iteration order, with no ambiguity detection or longest-prefix selection. FKF530 (ambiguous flattening) never triggers because the code returns before evaluating all candidates.
+
+**Design**
+
+Refactor to collect ALL valid flattened candidates up to `MaxFlatteningDepth`, then apply a selection strategy:
+1. Filter to longest-prefix matches
+2. If multiple candidates remain at the same depth, emit FKF530 (ambiguous flattening) per the existing handler
+3. If `depth > MaxFlatteningDepth`, propagate an explicit depth-overflow result so the caller can emit FKF532 instead of falling through to FKF100
+
+**Complexity**
+
+High. Requires restructuring the recursion to accumulate rather than return-early, then post-processing the results.
+
+**Impact**
+
+Low-Medium. Closes a gap where ambiguities go undetected and depth limits are silently ignored. Mostly affects edge cases in deeply-nested or ambiguous source structures.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (lines 2444-2537) and TryResolveFlattenedMapping (lines 2404-2437)
+
+**Suggested Approach**
+
+1. Change `TryResolveFlattenedMappingRecursive` to return a list of `FlatteningResult` candidates instead of the first match
+2. Accumulate all matches at all depths up to `MaxFlatteningDepth`
+3. In `TryResolveFlattenedMapping`, post-process the list to select longest matches
+4. If `depth == MaxFlatteningDepth + 1`, include a sentinel `result.IsDepthOverflow = true`
+5. Invoke existing FKF530 logic when multiple candidates remain; invoke FKF532 logic when depth overflow is detected
+6. Add tests covering ambiguous flattening and depth-limit scenarios
 
 ---
 

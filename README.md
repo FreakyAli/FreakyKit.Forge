@@ -869,16 +869,6 @@ Want to contribute to FreakyKit.Forge? We'd love your help! Whether it's bug rep
 - Submitting pull requests
 - Documentation standards
 
-Want to contribute to FreakyKit.Forge? We'd love your help! Whether it's bug reports, feature requests, documentation improvements, or code contributions, every contribution helps make Forge better.
-
-**Start here:** [CONTRIBUTING.md](CONTRIBUTING.md) — comprehensive guide covering:
-- Getting started with local development
-- Project structure and architecture
-- Development workflow and testing
-- Code style and key patterns
-- Submitting pull requests
-- Documentation standards
-
 ## Support the Project
 
 If you find Forge useful, consider supporting its development:
