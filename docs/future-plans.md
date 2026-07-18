@@ -2,6 +2,23 @@
 
 Features and fixes under consideration for future versions of FreakyKit.Forge. Each section includes enough detail to serve as a starting point for implementation.
 
+## Type Classification
+
+Every item in this document is classified by **Type** to help new contributors understand the nature and priority of each item:
+
+| Type | Meaning | Impact | Examples |
+|------|---------|--------|----------|
+| **Feature** | New capability or attribute enhancement that extends Forge's functionality beyond current scope | Additive — users gain new mapping options or workflow capabilities | Polymorphic Mapping, Reverse Mapping, Tri-State ShareReference, Generic Methods |
+| **Fix** | Correctness issue, missing validation, behavior bug, or limit enforcement affecting existing features | Blocking/Correctness — existing code may behave incorrectly; users may hit unvalidated edge cases | Circular ForgeUses Detection, Expression Nesting Depth Enforcement, Per-Member Accessibility Validation |
+| **Documentation** | Gaps in docs, inaccurate examples, or unclear explanations that confuse users or new contributors | Clarity — improves developer experience and onboarding | Flattening Ambiguity Examples, Attribute Feature Interaction Matrix, Diagnostic Code Reference |
+| **Test** | Test coverage gaps, missing edge-case validation, or test infrastructure improvements | Regression Prevention — ensures features stay correct as codebase evolves | ConditionalMappingTests Coverage, Null Handling Edge Cases, Compilation Error Checking |
+
+**How to use this guide:**
+- **Fixes** should be prioritized over Features if they block users or cause incorrect behavior
+- **Documentation** updates should accompany Features (you document what the feature does)
+- **Test** additions should follow any Feature or Fix (validate that it works and stays working)
+- New contributors reading this table can quickly understand: "This item is a Feature (additive, nice-to-have)" vs "This is a Fix (we should do this soon)"
+
 **Pending Removal (marked for deprecation):**
 - FKF507 diagnostic descriptor — kept for backward compatibility in v1.x, scheduled for removal in v2.0
 
@@ -16,22 +33,20 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
 | 1 | Expression assignment mutability | P2 | Medium | Low | Refactor to immutable pattern |
-| 2 | Computed properties | P2 | High | Medium | `[ForgeComputed]` for derived members |
-| 3 | Conditional/predicate mapping | P2 | High | Medium | `IgnoreIfDefault` + custom predicates |
-| 4 | Multi-level deep flattening | P2 | Medium | Medium | Support 2+ levels of nesting |
-| 5 | Cross-class nested forge | P2 | High | Medium-High | Discover methods in other classes |
-| 6 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
-| 7 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
-| 8 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
-| 9 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
-| 10 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
-| 11 | Generic forge methods | P3 | High | High | Type parameter support |
+| 3 | Tri-state ShareReference | P2 | Low | Low | Better per-member overrides |
+| 6 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
+| 7 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
+| 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
+| 9 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
+| 10 | Generic forge methods | P3 | High | High | Type parameter support |
 
 ---
 
 ## P2 Features
 
 ### 1. Expression Assignment Mutability — `P2`
+
+**Type:** Fix — Code Quality
 
 **Why**
 
@@ -71,186 +86,9 @@ Medium. Internal-only change with no API surface change. Enables future caching 
 
 ---
 
-### 2. Computed Properties — `P2`
+### 3. Tri-State ShareReference — `P2`
 
-**Why**
-
-Some destination properties don't map 1:1 from source — they're derived from multiple source members (e.g., `FullName = FirstName + " " + LastName`). Currently users must use after-hooks or manually compute these, losing the compile-time safety and performance benefits of Forge.
-
-**Design**
-
-Add `[ForgeComputed]` attribute on static methods in the forge class. The generator discovers these methods via Roslyn symbol analysis and emits direct method calls in the generated code.
-
-```csharp
-[Forge]
-public static partial class PersonForges
-{
-    public static partial PersonDto ToDto(Person source);
-
-    [ForgeComputed(nameof(PersonDto.FullName))]
-    private static string ComputeFullName(Person source)
-        => source.FirstName + " " + source.LastName;
-}
-// Generates: __result.FullName = ComputeFullName(source);
-```
-
-**Complexity**
-
-Medium. Need to discover `[ForgeComputed]` methods, validate signatures match destination property types, and emit calls in the right sequence (after construction, before return).
-
-**Impact**
-
-High. Solves real-world mapping scenarios with no reflection overhead.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeComputedAttribute.cs` — New attribute
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Discover computed methods, emit calls
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `IReadOnlyList<ComputedPropertyMapping> ComputedProperties`
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics for validation errors
-
-**Suggested Approach**
-
-1. Define `[ForgeComputed(string destinationMemberName)]` attribute with `AllowMultiple = false`
-2. In `ExtractMethod`, scan the forge class for methods decorated with `[ForgeComputed]`
-3. Validate: return type matches destination property type, parameter is source type
-4. Store computed methods in `ForgeMethodModel`
-5. In `GenerateMethodBody`, emit calls after all regular assignments but before return
-6. Add analyzer diagnostics: destination member doesn't exist, type mismatch, invalid signature
-
----
-
-### 3. Conditional/Predicate Mapping — `P2`
-
-**Why**
-
-PATCH/partial-update APIs need to skip fields based on conditions: null values, default values (0, false, Guid.Empty), or custom predicates. `IgnoreIfNull` only handles nullable references; there's no way to express "skip if default" or "skip if predicate returns false" without after-hooks.
-
-**Design**
-
-Extend `[ForgeMap]` with two new optional properties:
-
-1. `IgnoreIfDefault` — Wrap assignment in `if (!EqualityComparer<T>.Default.Equals(source.X, default))`
-2. `Condition` — Reference a static method on the forge class that returns `bool`
-
-```csharp
-[ForgeMap("Name", IgnoreIfDefault = true)]
-public string? NewName { get; set; }  // Skip if null or default(string)
-
-[ForgeMap("Priority", Condition = nameof(ShouldMapPriority))]
-public int NewPriority { get; set; }  // Skip based on custom predicate
-```
-
-**Complexity**
-
-Medium. `IgnoreIfDefault` is straightforward (similar to `IgnoreIfNull`). `Condition` requires method resolution and signature validation similar to existing `[ForgeConverter]` logic.
-
-**Impact**
-
-High. Enables proper partial-update/PATCH semantics without workarounds.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeMapAttribute.cs` — Add `IgnoreIfDefault` and `Condition` properties
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Emit conditional checks in assignment generation
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics for condition method resolution
-
-**Suggested Approach**
-
-1. Add boolean `IgnoreIfDefault` property to `ForgeMapAttribute`
-2. Add string `Condition` property to `ForgeMapAttribute` (method name reference)
-3. In `GenerateAssignment`, check `IgnoreIfDefault` flag and wrap in `if` with `EqualityComparer<T>.Default.Equals` check
-4. In `GenerateAssignment`, check `Condition` flag, resolve the method, and wrap in `if` with that method call
-5. Validate condition methods: must be static, take source type param, return bool
-6. Add analyzer diagnostics for missing/invalid condition methods
-
----
-
-### 4. Multi-Level Deep Flattening — `P2`
-
-**Why**
-
-Current flattening is limited to one level of nesting. Real-world domain models in ERP, CRM, and e-commerce have 3-4 levels of hierarchy that users need to flatten into a single DTO property (e.g., `source.Customer.BillingAddress.PostalCode` → `dest.CustomerBillingAddressPostalCode`). Users currently hand-write these or use nested forging.
-
-**Design**
-
-Extend `TryResolveFlattenedMapping` to recursively walk prefix matches at configurable depth. For destination member `CustomerBillingAddressPostalCode`:
-1. Match prefix `Customer` from source (type A)
-2. Type A has member `BillingAddress` (type B)
-3. Type B has member `PostalCode` → match
-
-Each intermediate step adds null-safety chaining: `source.Customer?.BillingAddress?.PostalCode`. For expression trees, convert to nested ternaries.
-
-**Complexity**
-
-Medium. Prefix-matching algorithm must handle ambiguity (what if `CustomerBilling` is also a member?) and performance (avoid exponential splits). Use greedy longest-prefix matching with configurable depth limit (default 2-3 levels).
-
-**Impact**
-
-Medium. Solves real-world flattening scenarios; reduces need for nested forging in some cases.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Extend `TryResolveFlattenedMapping` to handle multi-level recursion
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostic for ambiguous flattening (multiple valid prefixes)
-
-**Suggested Approach**
-
-1. Rename `TryResolveFlattenedMapping` to `TryResolveFlattenedMappingRecursive` with depth parameter
-2. For each destination member name, try greedy longest-prefix matches against source members
-3. If match found, recursively search that matched type's members for remaining suffix
-4. Emit null-coalescing chains or nested ternaries as needed
-5. Limit depth to prevent exponential behavior (suggest max 4 levels)
-
----
-
-### 5. Cross-Class Nested Forge — `P2`
-
-**Why**
-
-Nested forging currently only searches the containing forge class. If `AddressForges.ToDto(Address)` is in a separate class from `PersonForges`, nested forge lookup fails and users must either duplicate methods or consolidate everything into one large, unmaintainable class.
-
-**Design**
-
-Add optional `[ForgeUses(Type[])]` attribute to forge class. When looking up nested forge methods with `AllowNestedForging = true`, scan included classes in addition to the current class.
-
-```csharp
-[Forge]
-[ForgeUses(typeof(AddressForges), typeof(CompanyForges))]
-public static partial class PersonForges
-{
-    [ForgeMethod(AllowNestedForging = true)]
-    public static partial PersonDto ToDto(Person source);
-    // Discovers AddressForges.ToDto for source.Home and CompanyForges methods
-}
-```
-
-**Complexity**
-
-Medium-high. Requires cross-class symbol resolution during incremental generation. Existing pipeline processes each forge class independently; may need `Collect()` + `Combine()` step.
-
-**Impact**
-
-High. Enables modular, composable forge class hierarchies at scale.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeUsesAttribute.cs` — New attribute
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Cross-class method lookup in nested forge resolution
-- `src/FreakyKit.Forge.Generator/Models/ForgeClassModel.cs` — Add `IReadOnlyList<INamedTypeSymbol> IncludedForgeClasses`
-- Incremental pipeline may need restructuring if direct symbol lookup isn't sufficient
-
-**Suggested Approach**
-
-1. Define `[ForgeUses(params Type[] forgeClasses)]` attribute
-2. In `ExtractForgeClass`, parse the attribute and store included class types
-3. In nested forge lookup, after searching current class, search included classes
-4. Validate included classes are also decorated with `[Forge]`
-5. Add analyzer diagnostic: circular includes, missing/non-forge includes
-
----
-
-### 6. Tri-State ShareReference — `P2`
+**Type:** Feature — Attribute Enhancement
 
 **Why**
 
@@ -304,7 +142,9 @@ Low practical impact (few users need per-member override), but **breaking change
 
 ## P3 Features — Backlog
 
-### 7. Polymorphic Mapping / Derived Type Support — `P3`
+### 6. Polymorphic Mapping / Derived Type Support — `P3`
+
+**Type:** Feature — EF Core Integration
 
 **Why**
 
@@ -423,7 +263,9 @@ Medium. Solves EF Core TPH scenarios; eliminates hand-written dispatch logic.
 
 ---
 
-### 8. Dictionary Mapping — `P3`
+### 7. Dictionary Mapping — `P3`
+
+**Type:** Feature — Mapping Type Support
 
 **Why**
 
@@ -560,7 +402,9 @@ Medium. Solves dynamic-to-static mapping scenarios; commonly needed for JSON des
 
 ---
 
-### 9. Mapping Profiles / Inheritance — `P3`
+### 8. Mapping Profiles / Inheritance — `P3`
+
+**Type:** Feature — Code Reuse
 
 **Why**
 
@@ -617,7 +461,9 @@ Medium. Enables DRY principle for multi-class forge hierarchies.
 
 ---
 
-### 10. Reverse Mapping — `P3`
+### 9. Reverse Mapping — `P3`
+
+**Type:** Feature — Mapping Automation
 
 **Why**
 
@@ -701,7 +547,9 @@ Medium-high. Common pattern in real-world applications; eliminates significant b
 
 ---
 
-### 11. Generic Forge Methods — `P3`
+### 10. Generic Forge Methods — `P3`
+
+**Type:** Feature — Type Parameterization
 
 **Why**
 
@@ -781,6 +629,8 @@ Critical correctness bugs and usability improvements identified through code aud
 
 #### Flattening Members Silently Excluded From Expression Properties
 
+**Type:** Fix — Correctness
+
 **Why**
 
 When flattening is applied and the destination member uses an expression property (`GenerateExpression = true`), the code converts null-conditional chaining (`?.`) to nested ternaries for imperative code (required for expression-tree compatibility). However, the expression path sets `exprAssign = null`, silently excluding the flattened member from the expression property with no diagnostic warning.
@@ -811,6 +661,8 @@ Medium. Silent exclusion causes users to assume flattened members work in LINQ q
 ---
 
 #### Diagnostic ID Allocation Scheme Missing
+
+**Type:** Fix — Documentation
 
 **Why**
 
@@ -851,6 +703,8 @@ Medium. Enables safe diagnostic ID allocation in future versions.
 
 #### Expression Nesting Depth Limit Not Enforced
 
+**Type:** Fix — Limit Enforcement
+
 **Why**
 
 FKF508 (ExpressionDeepNesting) is emitted as Info when nesting depth exceeds 5. However, there's no hard limit—arbitrarily deep nesting is allowed, just warned about. Very deep nesting can generate megabytes of source code, causing compiler errors with unclear root causes.
@@ -882,6 +736,8 @@ Low. Prevents surprise compiler errors on deeply nested mappings.
 
 #### Missing Validation: Constructor Parameter Accessibility
 
+**Type:** Fix — Correctness
+
 **Why**
 
 When resolving parameterized constructors, the code verifies that constructor parameters can be satisfied from source members, but does NOT verify that parameters themselves are accessible (e.g., `internal` parameters in types from other assemblies). Generated code compiles but fails at runtime with "inaccessible due to protection level."
@@ -911,6 +767,8 @@ Low. Edge case affecting cross-assembly scenarios.
 ---
 
 #### Diagnostic Aggregation Masks Primary Errors
+
+**Type:** Fix — Error Reporting
 
 **Why**
 
@@ -942,6 +800,8 @@ Low. Improves usability by reducing noise.
 
 #### Message Clarity: NullableValueType Fallback Not Mentioned
 
+**Type:** Fix — Diagnostic Messaging
+
 **Why**
 
 When a nullable value type (e.g., `int?`) maps to non-nullable (e.g., `int`) without `DefaultValue`, FKF201 warns that `.Value` may throw. However, the diagnostic message doesn't mention that setting `DefaultValue` on `[ForgeMap]` prevents the warning entirely.
@@ -970,6 +830,8 @@ Low. Users may miss that `DefaultValue` solves the problem.
 
 #### Missing Validator: [ForgeConverter] Discoverability
 
+**Type:** Fix — Validation
+
 **Why**
 
 FKF221 validates that a `[ForgeConverter]` method has correct signature (static, non-void, non-generic, 1 param). However, it doesn't validate that the method is discoverable (public/internal visibility). If a converter is private or has inaccessible parameter types, the generator silently skips it and later emits FKF200 (incompatible types) instead.
@@ -997,7 +859,79 @@ Low. Users add a `[ForgeConverter]` expecting it to work, but if it's private, i
 
 ---
 
+#### Correctness: Qualified Method Names for Cross-Class Converters
+
+**Why**
+
+When `FindNestedForgeMethod` or `FindConverterMethod` discovers a method in an `[ForgeUses]` included class, it returns a bare method name (e.g., `ConvertAddress`). However, `GenerateSource` does not emit `using static` imports for included classes, so the generated code compiles only if the method is in the same namespace. In different-namespace scenarios, generated code references an unqualified method that doesn't exist in scope, causing runtime compilation failures.
+
+**Design**
+
+Modify `FindNestedForgeMethod` and `FindConverterMethod` to return class-qualified method names for methods found in included classes (e.g., `AddressForges.ConvertAddress`). Keep bare names for methods found in the current forge class (which is always in scope).
+
+**Complexity**
+
+Medium. Requires:
+1. Tracking which class each discovered method came from
+2. Returning qualified names for included-class methods
+3. Updating all ~10 call sites to handle qualified names in expression generation
+
+**Impact**
+
+Medium. Fixes a correctness bug that causes generated code to fail in cross-namespace cross-class converter scenarios.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — FindNestedForgeMethod (lines 2583-2665), FindConverterMethod (lines 2709-2760), and all call sites using the returned method names
+
+**Suggested Approach**
+
+1. Return a tuple `(methodName: string, includeClassName: string?)` from both lookup methods
+2. When method is from included class, set `includeClassName` to the simple class name (e.g., `AddressForges`)
+3. At call sites, use `$"{includeClassName}.{methodName}"` when `includeClassName` is not null
+4. Add test: verify generated code uses `AddressForges.ConvertAddress(...)` when converter is in included class
+
+---
+
+#### Algorithm Enhancement: Exhaustive Flattening Candidate Collection
+
+**Why**
+
+`TryResolveFlattenedMappingRecursive` uses a greedy algorithm: it returns the first flattened path found, even if multiple equally-valid paths exist at the same depth. This means `Customer.Address.City` matching both `AddressCity` (direct property) and `ContactAddress.City` (flattened) returns whichever is discovered first in the member iteration order, with no ambiguity detection or longest-prefix selection. FKF530 (ambiguous flattening) never triggers because the code returns before evaluating all candidates.
+
+**Design**
+
+Refactor to collect ALL valid flattened candidates up to `MaxFlatteningDepth`, then apply a selection strategy:
+1. Filter to longest-prefix matches
+2. If multiple candidates remain at the same depth, emit FKF530 (ambiguous flattening) per the existing handler
+3. If `depth > MaxFlatteningDepth`, propagate an explicit depth-overflow result so the caller can emit FKF532 instead of falling through to FKF100
+
+**Complexity**
+
+High. Requires restructuring the recursion to accumulate rather than return-early, then post-processing the results.
+
+**Impact**
+
+Low-Medium. Closes a gap where ambiguities go undetected and depth limits are silently ignored. Mostly affects edge cases in deeply-nested or ambiguous source structures.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (lines 2444-2537) and TryResolveFlattenedMapping (lines 2404-2437)
+
+**Suggested Approach**
+
+1. Change `TryResolveFlattenedMappingRecursive` to return a list of `FlatteningResult` candidates instead of the first match
+2. Accumulate all matches at all depths up to `MaxFlatteningDepth`
+3. In `TryResolveFlattenedMapping`, post-process the list to select longest matches
+4. If `depth == MaxFlatteningDepth + 1`, include a sentinel `result.IsDepthOverflow = true`
+5. Invoke existing FKF530 logic when multiple candidates remain; invoke FKF532 logic when depth overflow is detected
+6. Add tests covering ambiguous flattening and depth-limit scenarios
+
+---
+
 #### Documentation Gap: Attribute Feature Interaction Matrix
+
+**Type:** Documentation — Guidance
 
 **Why**
 
@@ -1051,6 +985,399 @@ Low. Users can predict behavior without reading source code.
 
 **Suggested Approach**
 
-1. List all collection types checked by `IsMutableSameTypeCollection()`: List<T>, HashSet<T>, LinkedList<T>, Stack<T>, Queue<T>, etc.
+1. List all collection types checked by `IsMutableSameTypeCollection()`: List<T>, HashSet<T>, Dictionary<K,V>, etc.
 2. Document which types trigger `ShareReference` behavior
 3. Clarify which types are always copied (IEnumerable, IList, etc.)
+
+---
+
+## Implementation Issues & Code Quality Refinements
+
+Fine-grained fixes, algorithmic improvements, test coverage gaps, and consistency issues identified during code audit. Organized by subsystem.
+
+### Generator Correctness & Behavior
+
+#### Qualified Method Names for Cross-Class Converters
+
+**Type:** Fix — Correctness
+
+**Why**
+
+When `FindNestedForgeMethod` or `FindConverterMethod` discovers a method in an `[ForgeUses]` included class, it returns a bare method name. However, `GenerateSource` does not emit `using static` imports for included classes, so generated code in different-namespace scenarios fails at compile time.
+
+**Complexity**
+
+Medium. Update both lookup methods to return class-qualified names for included-class methods; update all call sites.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — FindNestedForgeMethod, FindConverterMethod, and ~10 call sites
+
+---
+
+#### Exhaustive Flattening Candidate Collection
+
+**Type:** Fix — Algorithm Enhancement
+
+**Why**
+
+`TryResolveFlattenedMappingRecursive` uses greedy-first-match and returns before evaluating all valid paths. FKF530 (ambiguous flattening) never triggers; depth overflow silently returns "not found" instead of emitting FKF532.
+
+**Complexity**
+
+High. Restructure recursion to accumulate all candidates, post-process for longest-match selection.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive, TryResolveFlattenedMapping
+
+---
+
+#### Expression Nesting Depth Enforcement
+
+**Type:** Fix — Limit Enforcement
+
+**Why**
+
+FKF508 (deep nesting) warns at depth 5+ but allows arbitrary nesting. No hard limit; very deep expressions generate megabytes of code causing unclear compiler errors.
+
+**Complexity**
+
+Medium. Add depth check before inlining; emit FKF509 error when exceeded.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Expression inlining loops
+
+---
+
+#### Circular ForgeUses Detection with Cycle Reporting
+
+**Type:** Fix — Validation
+
+**Why**
+
+Current self-include check doesn't detect transitive cycles (A → B → A). Cycles cause infinite recursion in lookup logic.
+
+**Complexity**
+
+Medium. Track recursion stack during validation; report full cycle chain in diagnostic.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — ExtractAndValidateForgeUses
+
+---
+
+#### Conditional Metadata Refactoring
+
+**Type:** Fix — Code Organization
+
+**Why**
+
+Conditional handling (IgnoreIfNull, IgnoreIfDefault, ConditionMethodName) is built inline in regular assignments only. Update, init-only, and expression assignments lack this logic, causing inconsistent code generation.
+
+**Complexity**
+
+High. Extract conditional wrapping into shared method; apply to all assignment types.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Member assignment generation
+
+---
+
+#### Per-Member Accessibility Validation
+
+**Type:** Fix — Correctness
+
+**Why**
+
+Constructor parameters are validated for type-compatibility but not for accessibility. Private/internal parameters in external types cause runtime compilation failures.
+
+**Complexity**
+
+Low. Check `DeclaredAccessibility` before using constructor parameter.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — DetermineConstruction
+
+---
+
+#### Analyzer-Generator Accessibility Consistency
+
+**Type:** Fix — Consistency
+
+**Why**
+
+ForgeAnalyzer validates converter accessibility (public/internal only) but ForgeGenerator.FindConverterMethod doesn't apply the same filter, causing analyzer and generator to disagree.
+
+**Complexity**
+
+Low. Apply same accessibility predicate to both analyzer validation and generator lookup.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Analyzers/ForgeAnalyzer.cs` — validation logic
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — FindConverterMethod
+
+---
+
+#### Condition Resolution from Included Classes
+
+**Type:** Fix — Feature Completeness
+
+**Why**
+
+Condition method lookup only searches the current forge class. Methods in `[ForgeUses]` included classes are not discoverable, even though nested forge methods from included classes are supported.
+
+**Complexity**
+
+Medium. Extend condition lookup to search included classes; apply accessibility filter.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Condition resolution logic
+
+---
+
+#### Per-Member IgnoreIfNull Precedence
+
+**Type:** Fix — Correctness
+
+**Why**
+
+When a `[ForgeMap]` attribute explicitly specifies IgnoreIfNull, the code OR-combines it with method-level setting instead of respecting explicit configuration. Explicit member values should take precedence.
+
+**Complexity**
+
+Low. Track whether each member's IgnoreIfNull was explicitly set; prefer explicit over inherited.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Member IgnoreIfNull calculation
+
+---
+
+#### Orphaned Attributes Validation Redesign
+
+**Type:** Fix — Diagnostic Accuracy
+
+**Why**
+
+FKF527 (ForgeMap on source) and FKF528 (ForgeIgnore on source) fire based on member type alone, not actual role. They should only emit when the attribute is truly ineffective for that context.
+
+**Complexity**
+
+High. Inspect forge method signatures to determine actual source/destination roles; emit diagnostics only when ineffective.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — DetectForgeMapOnSourceMember, DetectForgeIgnoreOnSourceMember
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — FKF527/FKF528 descriptors
+- `docs/attributes.md` — Update validation documentation
+
+---
+
+### Generator Expression Trees & Flattening
+
+#### Null-Conditional Operator Lowering in Flattening
+
+**Type:** Fix — Expression Trees
+
+**Why**
+
+When flattening paths use expression properties, only the outermost null-conditional is lowered to ternaries. Intermediate `?.` operators remain, causing expression-tree compilation failures.
+
+**Complexity**
+
+Medium. Lower all `?.` in flattening paths to nested ternaries before expression compilation.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Flattening expression lowering
+
+---
+
+#### Flattening Depth Check Accounting
+
+**Type:** Fix — Correctness
+
+**Why**
+
+Depth checks compare absolute depth to thresholds without accounting for zero-based indexing. Paths at threshold level silently fail instead of emitting FKF531 diagnostic.
+
+**Complexity**
+
+Low. Compare effective component count (depth + 1) against thresholds.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Depth threshold checks
+
+---
+
+#### Receiver Type for Null-Propagating Access
+
+**Type:** Fix — Correctness
+
+**Why**
+
+`nextAccess` construction uses `prop.Type` to determine null-propagation, but should use the receiver type `currentType`. Incorrect operator selection for intermediate properties in chains.
+
+**Complexity**
+
+Low. Check `currentType.IsReferenceType` instead of `prop.Type.IsReferenceType`.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — nextAccess construction
+
+---
+
+### Test Coverage Gaps
+
+#### ConditionalMappingTests Coverage Expansion
+
+**Type:** Test — Coverage
+
+**Why**
+
+ConditionalMappingTests only asserts "no errors". Should assert that generated conditions are correct and guard assignments as expected, including update methods and expression output.
+
+**Complexity**
+
+Low. Add assertions verifying conditional guard structure and combined conditions.
+
+**Files to Modify**
+
+- `tests/FreakyKit.Forge.Generator.Tests/ConditionalMappingTests.cs`
+
+---
+
+#### CrossClassNestedForgeTests Qualified Names Verification
+
+**Type:** Test — Coverage
+
+**Why**
+
+Test asserts "ConvertAddress" appears in generated code but doesn't verify it's qualified (AddressForges.ConvertAddress). Doesn't detect the correctness issue when namespace differs.
+
+**Complexity**
+
+Low. Assert qualified method name appears in generated output.
+
+**Files to Modify**
+
+- `tests/FreakyKit.Forge.Generator.Tests/CrossClassNestedForgeTests.cs`
+
+---
+
+#### Compilation Error Checking in Test Base
+
+**Type:** Test — Infrastructure
+
+**Why**
+
+`AssertNoErrors` only checks diagnostics, not compilation errors. Generated code could have syntax errors that tests don't catch.
+
+**Complexity**
+
+Low. Assert `result.CompilationDiagnostics` contains no Error-severity entries.
+
+**Files to Modify**
+
+- `tests/FreakyKit.Forge.Generator.Tests/GeneratorTestBase.cs`
+
+---
+
+#### FlatteningGeneratorTests Coordinate Mapping Assertion
+
+**Type:** Test — Coverage
+
+**Why**
+
+Test asserts flattened City but not the proper null-propagation for intermediate properties (Address?.Coords should use ?., Latitude should use .).
+
+**Complexity**
+
+Low. Add assertion verifying correct operator usage in generated path.
+
+**Files to Modify**
+
+- `tests/FreakyKit.Forge.Generator.Tests/FlatteningGeneratorTests.cs`
+
+---
+
+#### NullFallbackAdvancedTests Nullable Value Type Fix
+
+**Type:** Test — Coverage
+
+**Why**
+
+Test uses non-nullable Source.Home but intends to verify nullable-to-non-nullable mapping behavior. Should use nullable value type.
+
+**Complexity**
+
+Low. Change Source.Home to nullable (Address?); assert FKF314 diagnostic.
+
+**Files to Modify**
+
+- `tests/FreakyKit.Forge.Generator.Tests/NullFallbackAdvancedTests.cs`
+
+---
+
+#### CollectionMismatchEdgeCasesTests Assertion Unconditional
+
+**Type:** Test — Coverage
+
+**Why**
+
+Test has conditional assertion based on hasErrors flag. Should unconditionally assert FKF200 diagnostic, ensuring generator properly detects incompatibilities.
+
+**Complexity**
+
+Low. Remove conditional; assert FKF200 always.
+
+**Files to Modify**
+
+- `tests/FreakyKit.Forge.Generator.Tests/CollectionMismatchEdgeCasesTests.cs`
+
+---
+
+### Documentation Accuracy
+
+#### Flattening Ambiguity Examples Correction
+
+**Type:** Documentation — Accuracy
+
+**Why**
+
+Current examples present direct matches as flattening conflicts. Real FKF530 scenarios require multiple valid prefixes at same depth that both map valid nested paths.
+
+**Complexity**
+
+Low. Replace examples with genuine ambiguity cases.
+
+**Files to Modify**
+
+- `docs/attributes.md` — Flattening examples section
+
+---
+
+#### Flattening Example Attributes Completion
+
+**Type:** Documentation — Accuracy
+
+**Why**
+
+Example shows flattening but lacks AllowFlattening = true on [ForgeMethod]; cross-class example lacks [ForgeUses] required for cross-class discovery.
+
+**Complexity**
+
+Low. Add missing attributes to examples.
+
+**Files to Modify**
+
+- `docs/attributes.md` — Flattening examples

@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 58 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 74 diagnostics across 8 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -505,6 +505,93 @@ public string Name { get; set; }
 public string Name { get; set; }
 ```
 
+### FKF530 — Ambiguous flattening auto-resolved
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}' matched via ambiguous flattening: multiple prefixes could match '{1}'. The longest prefix '{2}' was selected. Ambiguous flattening is not allowed — explicitly resolve this by renaming the destination member or excluding one of the source properties with [ForgeIgnore]. |
+
+**Error — blocks source generation.** Emitted when a destination member name could be decomposed in multiple ways. Ambiguous flattening is a strict validation error designed to prevent silent bugs from unclear mappings. The generator detects this and requires explicit resolution.
+
+To fix, choose one of the following:
+1. **Rename the destination member** to be unambiguous — make it clear which path should be used
+2. **Exclude the ambiguous source property** using `[ForgeIgnore]` on the source type to eliminate the ambiguity
+3. **Restructure your types** to avoid overlapping property names that create ambiguity
+
+Example: if a destination has `AddressCityName` and the source has both `AddressCity` (with property `Name`) and `Address.CityName`, the ambiguity must be resolved explicitly. The generator will not silently pick the longest prefix.
+
+```csharp
+public class Source
+{
+    public Address Address { get; set; }      // has City.Name
+    public string AddressCity { get; set; }   // also has CityName property
+}
+
+public class Dest { public string AddressCityName { get; set; } }
+
+[ForgeMethod(AllowFlattening = true)]
+public static partial Dest ToDto(Source source);
+// FKF530 Error: Could be Address.City.Name or AddressCity.Name — ambiguous!
+
+// Fix 1: Rename destination member to be specific
+public class Dest { public string AddressCityPropertyName { get; set; } }
+
+// Fix 2: Exclude the ambiguous source property
+public class Source
+{
+    public Address Address { get; set; }      // has City.Name
+    [ForgeIgnore] public string AddressCity { get; set; }   // excluded
+}
+
+// Fix 3: Rename the source property to avoid overlap
+public class Source
+{
+    public Address Address { get; set; }      // has City.Name
+    public string CityFullName { get; set; }  // different name
+}
+```
+
+### FKF531 — Deep flattening detected
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}' uses deep flattening with {1} levels: {2}. Consider whether a simpler structure or nested forging would improve code clarity. |
+
+Emitted when a destination member is matched via flattening that traverses 3 or more levels of nested properties. This is supported and works correctly, but may indicate overly-deep nesting that could be simplified.
+
+```csharp
+public class GeoPoint { public string Code { get; set; } }
+public class Coordinates { public GeoPoint Point { get; set; } }
+public class Address { public Coordinates Coords { get; set; } }
+public class Source { public Address Address { get; set; } }
+public class Dest { public string AddressCoordsPointCode { get; set; } }
+
+[ForgeMethod(AllowFlattening = true)]
+public static partial Dest ToDto(Source source);
+// FKF531: 3 levels of flattening (Address.Coords.Point.Code)
+```
+
+No action required — this is informational only.
+
+### FKF532 — Flattening nesting depth limit exceeded
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}' exceeds the maximum flattening depth of 10 levels. Flattening stopped. |
+
+Emitted when a destination member's flattened path would require traversing more than 10 levels of nested properties. Flattening is limited to 10 levels to prevent unbounded recursive traversal and excessive generated code.
+
+To fix:
+- Restructure the source type hierarchy to be less deeply nested
+- Use nested forging instead of flattening for this member (set `AllowNestedForging = true` and provide forge methods)
+- Split the mapping into multiple steps with intermediate types
+
 ---
 
 ## Type Safety
@@ -958,6 +1045,8 @@ public class ConcreteDest : IDest { ... }
 public static partial ConcreteDest ToDest(Source source);
 ```
 
+> **Note on array type accessibility:** When a constructor parameter is an array type (e.g., `int[]`, `string[]`), the array's accessibility is validated by examining the element type's accessibility. Array element types in accessible constructors are validated using FKF501 if they are not publicly accessible and come from a different assembly.
+
 ### FKF504 — Expression generation incompatible with update method
 
 | | |
@@ -1045,3 +1134,320 @@ outer one. Deep chains produce large generated source files. This diagnostic fir
 exceeds five to surface the cost. No action is required — the expression still emits and runs
 correctly. Consider flattening with `AllowFlattening = true` for shallow-but-wide member access if
 the generated source is becoming unwieldy.
+
+---
+
+## Conditional/Predicate Mapping Diagnostics (FKF510–FKF512)
+
+### FKF510 — Condition method not found
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' not found. Verify the method name and that it exists in the forge class. |
+
+The `Condition` property on `[ForgeMap]` references a static method that doesn't exist in the forge class. The method must be defined before it can be used for conditional assignment.
+
+**Fix:** Add the missing method or correct the method name reference.
+
+```csharp
+// Wrong — FKF510: method not found
+[ForgeMap("Age", Condition = nameof(ValidateAge))]
+public int Age { get; set; }
+
+// Correct
+[ForgeMap("Age", Condition = nameof(IsValidAge))]
+public int Age { get; set; }
+
+internal static bool IsValidAge(Source source) => source.Age >= 0;
+```
+
+### FKF511 — Condition method has invalid signature
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' has invalid signature. Method must be static, accept exactly one parameter of the source type, and return bool. |
+
+The condition method exists but has the wrong signature. Condition methods must be:
+- Static
+- Accept exactly one parameter matching the source type
+- Return `bool`
+
+**Fix:** Update the method signature to match requirements.
+
+```csharp
+// Wrong — no parameters
+private static bool IsValid() => true;  // FKF511
+
+// Wrong — wrong parameter type
+private static bool IsValid(OtherClass source) => true;  // FKF511
+
+// Correct
+private static bool IsValid(Source source) => true;
+```
+
+### FKF512 — Condition method not accessible
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' is not accessible. Methods must be public or internal. |
+
+The condition method exists and has the correct signature, but it's not accessible (private). The generated code needs to call this method, so it must be `public` or `internal`.
+
+**Fix:** Change the access level.
+
+```csharp
+// Wrong — FKF512: private method
+[ForgeMap("Name", Condition = nameof(ShouldMap))]
+public string Name { get; set; }
+
+private static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Name);
+
+// Correct
+internal static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Name);
+```
+
+---
+
+## Cross-Class Nested Forge Diagnostics (FKF520–FKF523)
+
+### FKF520 — Included forge class not found
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Included forge class '{0}' not found. Verify the type name and assembly. |
+
+The `[ForgeUses]` attribute references a type that doesn't exist or cannot be resolved.
+
+**Fix:** Verify the type name is correct and the assembly is referenced.
+
+### FKF521 — Included class not decorated with [Forge]
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Included class '{0}' is not decorated with [Forge]. Only forge classes can be included. |
+
+All classes referenced in `[ForgeUses]` must be decorated with the `[Forge]` attribute.
+
+**Fix:** Add `[Forge]` to the included class.
+
+```csharp
+// Wrong — FKF521: not a forge class
+[ForgeUses(typeof(AddressHelpers))]
+[Forge]
+public static partial class PersonForges { ... }
+
+public static partial class AddressHelpers { ... }  // Missing [Forge]
+
+// Correct
+[Forge]
+public static partial class AddressHelpers { ... }
+```
+
+### FKF522 — Circular forge class includes
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Circular includes detected: {0}. Each forge class can only be included once in the chain. |
+
+`[ForgeUses]` creates a circular dependency (e.g., A includes B, B includes A) or self-includes (A includes A).
+
+**Fix:** Remove the circular reference or self-include.
+
+```csharp
+// Wrong — FKF522: self-include
+[ForgeUses(typeof(PersonForges))]
+[Forge]
+public static partial class PersonForges { ... }
+
+// Correct: include only other classes
+[ForgeUses(typeof(AddressForges))]
+[Forge]
+public static partial class PersonForges { ... }
+```
+
+### FKF523 — Nested forge method shadowed
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Member '{0}': Method '{1}' exists in multiple included forge classes. Using '{2}' (first match); '{3}' is shadowed. |
+
+Multiple classes in `[ForgeUses]` have methods for the same type mapping. The first included class's method is used; others are shadowed.
+
+**Note:** This is a warning, not an error. It's intentional if you want a fallback, but it's worth knowing about to avoid surprises.
+
+**Fix (optional):** Reorder classes in `[ForgeUses]` if a different priority is preferred, or consolidate duplicate methods.
+
+```csharp
+// Generates FKF523 warning
+[ForgeUses(typeof(AddressForges1), typeof(AddressForges2))]
+public static partial class PersonForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToPersonDto(Person source);
+}
+// Both AddressForges1 and AddressForges2 have Address → AddressDto methods.
+// AddressForges1's method is used; AddressForges2's is shadowed.
+```
+
+---
+
+## Orphaned Attribute Validation Diagnostics (FKF524–FKF528)
+
+### FKF524 — [ForgeUses] without [Forge] attribute
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Class '{0}' has [ForgeUses] attribute but is missing the [Forge] attribute. Add [Forge] to enable forge functionality. |
+
+The `[ForgeUses]` attribute requires the containing class to also be decorated with `[Forge]`. `[ForgeUses]` by itself has no effect.
+
+**Fix:** Add the `[Forge]` attribute to the class.
+
+```csharp
+// Wrong — FKF524: [ForgeUses] without [Forge]
+[ForgeUses(typeof(AddressForges))]
+public static partial class PersonForges { }
+
+// Correct
+[Forge]
+[ForgeUses(typeof(AddressForges))]
+public static partial class PersonForges { }
+```
+
+### FKF525 — [ForgeMethod] without [Forge] class
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Method '{0}' has [ForgeMethod] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality. |
+
+The `[ForgeMethod]` attribute only works inside a class decorated with `[Forge]`. If you place it on a method in a non-forge class, the method is ignored.
+
+**Fix:** Add the `[Forge]` attribute to the containing class.
+
+```csharp
+// Wrong — FKF525: [ForgeMethod] without [Forge] class
+public static partial class PersonForges
+{
+    [ForgeMethod]
+    public static partial PersonDto ToPersonDto(Person source);
+}
+
+// Correct
+[Forge]
+public static partial class PersonForges
+{
+    [ForgeMethod]
+    public static partial PersonDto ToPersonDto(Person source);
+}
+```
+
+### FKF526 — [ForgeConverter] without [Forge] class
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Method '{0}' has [ForgeConverter] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality. |
+
+The `[ForgeConverter]` attribute only works inside a class decorated with `[Forge]`. If you place it on a method in a non-forge class, the method is not registered as a converter.
+
+**Fix:** Add the `[Forge]` attribute to the containing class, or move the method to a forge class.
+
+```csharp
+// Wrong — FKF526: [ForgeConverter] without [Forge] class
+public static class Converters
+{
+    [ForgeConverter]
+    public static string ConvertAge(int age) => age.ToString();
+}
+
+// Correct
+[Forge]
+public static partial class MyForges
+{
+    [ForgeConverter]
+    public static string ConvertAge(int age) => age.ToString();
+}
+```
+
+### FKF527 — [ForgeMap] on source type member
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | [ForgeMap] on '{0}' has no effect. [ForgeMap] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to. |
+
+`[ForgeMap]` only affects properties and fields on the **destination type**, not the source type. If you put it on a source type member, it is silently ignored.
+
+**Fix:** Move the `[ForgeMap]` attribute from the source type to the destination type property.
+
+```csharp
+// Wrong — FKF527: [ForgeMap] on source type member
+public class Person
+{
+    [ForgeMap("FullName")]
+    public string Name { get; set; }
+}
+
+public class PersonDto { public string FullName { get; set; } }
+
+// Correct
+public class Person { public string Name { get; set; } }
+
+public class PersonDto
+{
+    [ForgeMap("Name")]
+    public string FullName { get; set; }
+}
+```
+
+### FKF528 — [ForgeIgnore] on source type member
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | [ForgeIgnore] on '{0}' has no effect. [ForgeIgnore] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to. |
+
+`[ForgeIgnore]` only affects properties and fields on the **destination type**. If you put it on a source type member, it has no effect.
+
+**Fix:** Move the `[ForgeIgnore]` attribute from the source type to the destination type property.
+
+```csharp
+// Wrong — FKF528: [ForgeIgnore] on source type member
+public class Person
+{
+    [ForgeIgnore]
+    public string InternalId { get; set; }
+}
+
+public class PersonDto { public string InternalId { get; set; } }
+
+// Correct
+public class Person { public string InternalId { get; set; } }
+
+public class PersonDto
+{
+    [ForgeIgnore]
+    public string InternalId { get; set; }
+}
+```

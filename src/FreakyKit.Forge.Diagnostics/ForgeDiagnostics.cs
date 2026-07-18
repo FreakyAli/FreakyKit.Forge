@@ -7,6 +7,25 @@ namespace FreakyKit.Forge.Diagnostics;
 /// All diagnostic IDs, titles, messages, severities, and categories are defined here.
 /// No diagnostics may be defined anywhere else.
 /// </summary>
+/// <remarks>
+/// DIAGNOSTIC ID ALLOCATION SCHEME
+/// ===============================
+/// Diagnostic IDs are allocated by range to prevent collisions and enable reserved space for future features.
+///
+/// Current allocation:
+///   FKF001–099: Mode & class-level validation (Explicit mode, static class, access level, etc.)
+///   FKF100–199: Member discovery & matching (constructor selection, member mapping, name resolution)
+///   FKF200–299: Type safety & conversion (nullable/value type mismatches, incompatible types, converters)
+///   FKF300–399: Nested forging & circularity (circular reference detection, nested method discovery)
+///   FKF400–401: Member discovery (fields included/excluded, ShouldIncludeFields flag)
+///   FKF500–532: P2/P3 feature diagnostics (Flattening FKF530-532, Conditional Mapping FKF510-512, Cross-Class Forge FKF520-523, Orphaned Attributes FKF524-528)
+///   FKF533–599: RESERVED for future P2/P3 feature diagnostics
+///   FKF600–699: RESERVED for performance warnings (deep nesting, expression complexity, etc.)
+///
+/// When adding new features (P2/P3), allocate diagnostic IDs from the remaining FKF533–599 range.
+/// When adding performance diagnostics, allocate from FKF600–699.
+/// This prevents ID collisions across versions and enables predictable diagnostic management.
+/// </remarks>
 public static class ForgeDiagnostics
 {
     private const string Category_Mode = "FreakyKit.Forge.Mode";
@@ -417,11 +436,11 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor NullableValueTypeMapping = new(
         id: "FKF201",
         title: "Nullable value type to non-nullable mapping",
-        messageFormat: "Member '{0}': mapping nullable value type '{1}' to non-nullable '{2}' will use .Value which may throw at runtime",
+        messageFormat: "Member '{0}': mapping nullable value type '{1}' to non-nullable '{2}' will use .Value which may throw at runtime. Set DefaultValue on [ForgeMap] to provide a fallback value instead.",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "A Nullable<T> value type is being mapped to its non-nullable counterpart T using .Value, which throws if the source is null.");
+        description: "A Nullable<T> value type is being mapped to its non-nullable counterpart T using .Value, which throws if the source is null. Set DefaultValue on [ForgeMap] to provide a fallback value that will be used instead of calling .Value.");
 
     /// <summary>
     /// FKF202 (Info): A nullable mapping was applied automatically.
@@ -748,4 +767,205 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
         description: "Each level of nested-forge inlining substitutes the full body of the nested expression into the outer one. Deep chains can produce large generated source files. This diagnostic fires when depth exceeds 5 to surface the cost; no action is required.");
+
+    /// <summary>
+    /// FKF509 (Error): Expression nesting depth limit exceeded.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionNestingDepthLimitExceeded = new(
+        id: "FKF509",
+        title: "Expression nesting depth limit exceeded",
+        messageFormat: "Expression property for '{0}' exceeds the maximum nesting depth of 10 levels. This generates excessive source code and may cause compiler errors. Consider using flattening or a converter instead of nested-forge inlining.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Expression property nesting is limited to 10 levels to prevent unbounded source code growth and compiler errors. Restructure the mapping to use flattening or converters instead.");
+
+    /// <summary>
+    /// FKF510 (Error): A condition method referenced in [ForgeMap] was not found.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConditionMethodNotFound = new(
+        id: "FKF510",
+        title: "Condition method not found",
+        messageFormat: "Member '{0}': condition method '{1}' not found on forge class or included classes. Ensure the method exists and is static.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The [ForgeMap] Condition property references a method that does not exist on the forge class or its included classes.");
+
+    /// <summary>
+    /// FKF511 (Error): A condition method has an invalid signature.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InvalidConditionMethodSignature = new(
+        id: "FKF511",
+        title: "Condition method has invalid signature",
+        messageFormat: "Member '{0}': condition method '{1}' has invalid signature. Must be: static bool MethodName(SourceType source).",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Condition methods must be static, accept exactly one parameter of the source type, and return bool.");
+
+    /// <summary>
+    /// FKF512 (Error): A condition method is not accessible from the forge class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConditionMethodNotAccessible = new(
+        id: "FKF512",
+        title: "Condition method not accessible",
+        messageFormat: "Member '{0}': condition method '{1}' is not accessible. Methods must be public or internal.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Condition methods must be publicly or internally accessible to be discovered and called by the generator.");
+
+    // ─── Cross-Class Nested Forge ────────────────────────────────────────────
+
+    /// <summary>
+    /// FKF520 (Error): An included forge class in [ForgeUses] was not found.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludedForgeClassNotFound = new(
+        id: "FKF520",
+        title: "Included forge class not found",
+        messageFormat: "Included forge class '{0}' not found. Verify the type name and assembly.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The type specified in [ForgeUses] could not be resolved.");
+
+    /// <summary>
+    /// FKF521 (Error): An included class in [ForgeUses] is not decorated with [Forge].
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludedClassNotForge = new(
+        id: "FKF521",
+        title: "Included class is not a forge class",
+        messageFormat: "Included class '{0}' is not decorated with [Forge]. Only forge classes can be included.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeUses] can only include classes decorated with [Forge].");
+
+    /// <summary>
+    /// FKF522 (Error): Circular includes detected in [ForgeUses] attributes.
+    /// </summary>
+    public static readonly DiagnosticDescriptor CircularForgeIncludes = new(
+        id: "FKF522",
+        title: "Circular forge class includes detected",
+        messageFormat: "Circular includes detected: {0}. Each forge class can only be included once in the chain.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeUses] creates a circular dependency. Restructure the includes to avoid cycles.");
+
+    /// <summary>
+    /// FKF523 (Warning): A nested forge method is shadowed by another included class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ShadowedNestedForgeMethod = new(
+        id: "FKF523",
+        title: "Nested forge method shadowed by included class",
+        messageFormat: "Member '{0}': Method '{1}' exists in multiple included forge classes. Using '{2}' (first match); '{3}' is shadowed.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Multiple included forge classes have methods for the same type mapping. The first included class in [ForgeUses] is used; others are shadowed. Reorder classes if intentional.");
+
+    /// <summary>
+    /// FKF524 (Error): A class has [ForgeUses] but is missing [Forge] attribute.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeUsesMissingForgeAttribute = new(
+        id: "FKF524",
+        title: "ForgeUses requires Forge attribute",
+        messageFormat: "Class '{0}' has [ForgeUses] attribute but is missing the [Forge] attribute. Add [Forge] to enable forge functionality.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeUses] can only be used on classes decorated with [Forge]. The class must be a static partial class with the [Forge] attribute to use [ForgeUses].");
+
+    /// <summary>
+    /// FKF525 (Error): A method has [ForgeMethod] but is not in a [Forge] class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeMethodWithoutForgeClass = new(
+        id: "FKF525",
+        title: "ForgeMethod without Forge class",
+        messageFormat: "Method '{0}' has [ForgeMethod] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeMethod] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
+
+    /// <summary>
+    /// FKF526 (Error): A method has [ForgeConverter] but is not in a [Forge] class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeConverterWithoutForgeClass = new(
+        id: "FKF526",
+        title: "ForgeConverter without Forge class",
+        messageFormat: "Method '{0}' has [ForgeConverter] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality.",
+        category: Category_Nested,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeConverter] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
+
+    /// <summary>
+    /// FKF527 (Warning): A member has [ForgeMap] but it is on a source type (not a destination type).
+    /// [ForgeMap] only affects destination type members.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeMapOnSourceMember = new(
+        id: "FKF527",
+        title: "ForgeMap on source type member",
+        messageFormat: "[ForgeMap] on '{0}' has no effect. [ForgeMap] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "[ForgeMap] attributes are typically placed on destination type members to customize their mapping behavior. If this attribute appears on a source type (the type being mapped from), it has no effect and should be removed or moved to the destination type.");
+
+    /// <summary>
+    /// FKF528 (Warning): A member has [ForgeIgnore] but it is on a source type (not a destination type).
+    /// [ForgeIgnore] only affects destination type members.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeIgnoreOnSourceMember = new(
+        id: "FKF528",
+        title: "ForgeIgnore on source type member",
+        messageFormat: "[ForgeIgnore] on '{0}' has no effect. [ForgeIgnore] is meant for destination type members. This attribute only takes effect when applied to the actual destination type being generated to.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "[ForgeIgnore] attributes are typically placed on destination type members to exclude them from mapping. If this attribute appears on a source type (the type being mapped from), it has no effect and should be removed or moved to the destination type.");
+
+    /// <summary>
+    /// FKF530 (Error): Ambiguous flattening was auto-resolved by preferring the longest prefix match.
+    /// When multiple source property paths could match a destination member name, the generator
+    /// uses the longest-matching prefix to disambiguate, then continues recursively.
+    /// This is an error to force explicit resolution and prevent silent bugs from unclear mappings.
+    /// </summary>
+    public static readonly DiagnosticDescriptor AmbiguousFlatteningAutoResolved = new(
+        id: "FKF530",
+        title: "Ambiguous flattening auto-resolved",
+        messageFormat: "Destination member '{0}' matched via ambiguous flattening: multiple prefixes could match '{1}'. The longest prefix '{2}' was selected. Ambiguous flattening is not allowed — explicitly resolve this by renaming the destination member or excluding one of the source properties with [ForgeIgnore].",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Ambiguous flattening occurs when multiple source property paths could match a destination member name's prefix. The generator uses a greedy longest-prefix strategy to disambiguate, but this can hide bugs and lead to unexpected mappings. This is now an error to force explicit, intentional naming. Resolve it by renaming the destination member to be unambiguous, excluding one of the ambiguous source properties with [ForgeIgnore], or adjusting your type structure to eliminate the ambiguity.");
+
+    /// <summary>
+    /// FKF531 (Info): Deep flattening (3+ levels) was detected on a destination member.
+    /// This informs users that the generated code contains deep property access chains,
+    /// which may indicate complex data structure mapping that could be simplified.
+    /// </summary>
+    public static readonly DiagnosticDescriptor DeepFlatteningDetected = new(
+        id: "FKF531",
+        title: "Deep flattening detected",
+        messageFormat: "Destination member '{0}' uses deep flattening with {1} levels: {2}. Consider whether a simpler structure or nested forging would improve code clarity.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "A destination member was matched via flattening that traverses 3 or more levels of nested properties. While supported, this may indicate overly-deep nesting that could be simplified via a different design. No action required—this is informational only.");
+
+    /// <summary>
+    /// FKF532 (Error): Flattening nesting depth exceeded the limit of 10 levels.
+    /// </summary>
+    public static readonly DiagnosticDescriptor FlatteningDepthLimitExceeded = new(
+        id: "FKF532",
+        title: "Flattening nesting depth limit exceeded",
+        messageFormat: "Destination member '{0}' exceeds the maximum flattening depth of 10 levels. Flattening stopped. Consider restructuring the source type hierarchy or using nested forging instead.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Flattening is limited to 10 levels of nesting to prevent unbounded recursive traversal. Restructure the source type hierarchy to be less deeply nested, or use nested forging instead of flattening for this member.");
 }

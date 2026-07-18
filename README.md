@@ -81,12 +81,12 @@ For most projects, add two packages:
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="FreakyKit.Forge.Generator" Version="1.0.0" />
-    <PackageReference Include="FreakyKit.Forge.Analyzers" Version="1.0.0" />
+    <PackageReference Include="FreakyKit.Forge.Generator" Version="xx.xx.xx" />
+    <PackageReference Include="FreakyKit.Forge.Analyzers" Version="xx.xx.xx" />
 </ItemGroup>
 ```
 
-`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 58 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
+`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 74 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
 
 See the [full installation guide](docs/installation.md) for lightweight setups, the optional conventions package, local development without NuGet, and custom Roslyn tooling.
 
@@ -110,7 +110,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 58 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 74 diagnostics across 8 categories guide you at build time
 - **Circular forge detection** — detects and reports circular dependencies in nested forge methods at compile time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
 - **Top-level dictionary projection** — declare a `Dictionary<string, Dest> ToDict(Dictionary<string, Source> source)` method and the generator produces an efficient `foreach`-based conversion
@@ -188,7 +188,7 @@ The meaningful comparison is against reflection-based mappers — see [docs/benc
 | Package | Install? | Downloads | What it does |
 |---------|:--------:|:---------:|--------------|
 | [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Generator?style=flat-square) | Roslyn source generator — writes your mapping method bodies at compile time |
-| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers?style=flat-square) | Roslyn analyzer — 44 build-time diagnostics to catch mistakes before you run |
+| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers?style=flat-square) | Roslyn analyzer — 74 build-time diagnostics to catch mistakes before you run |
 | [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | ⛔ Never directly | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge?style=flat-square) | Core attributes and enums — pulled in automatically by Generator and Analyzers |
 | [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | 🔧 Optional | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Conventions?style=flat-square) | Naming helpers — `ForgeConventions.ForgeClassName("Person")` → `"PersonForges"` |
 | [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | 🔧 Advanced | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Diagnostics?style=flat-square) | Shared diagnostic descriptors — only if you're building custom Roslyn tooling on top of Forge |
@@ -764,6 +764,98 @@ tests/
 ## Roadmap
 
 Features planned for future versions — production-grade real-world benchmarks, polymorphic/derived type mapping, reverse mapping, computed properties, mapping profiles, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
+
+## Troubleshooting
+
+### Generator Not Running
+
+**Problem**: Partial methods declared but no code generated.
+
+**Solutions**:
+- Ensure the containing class is marked `[Forge]`
+- Verify the class is declared `static partial`
+- Check that partial methods have correct signature:
+  - **Create**: non-void return, 1 parameter → `public static partial Dest ToDto(Source source)`
+  - **Update**: void return, 2 parameters → `public static partial void Update(Source source, Dest dest)`
+- Rebuild solution (generator is incremental; clean rebuild if stuck: `dotnet clean && dotnet build`)
+- Verify both Generator and Analyzers NuGet packages are installed
+
+### Analyzer Diagnostics Not Appearing
+
+**Problem**: Expected warnings/errors not shown at compile time.
+
+**Solutions**:
+- Ensure `FreakyKit.Forge.Analyzers` NuGet package is installed
+- Rebuild solution to re-run analyzer
+- Check error list window (not just build output)
+- Verify diagnostic codes in [docs/diagnostics.md](docs/diagnostics.md)
+- Analyzer runs on source code, not generated code (generated code has different diagnostics)
+
+### Generated Code Looks Wrong
+
+**Problem**: Method body doesn't match expected mapping logic.
+
+**Solutions**:
+- Check for FKF-series diagnostic warnings (compile errors block generation)
+- Review `[ForgeMethod]` attributes for configuration issues
+- Look for `[ForgeMap]` on source/destination members
+- Verify constructor is public and matches parameter types
+- Check if `AllowNestedForging`, `AllowFlattening`, or other flags are needed
+- See [Attributes Guide](docs/attributes.md) for full configuration options
+
+### Member Not Being Mapped
+
+**Problem**: Expected property/field missing from generated assignments.
+
+**Solutions**:
+- Check for `[ForgeIgnore]` attribute (deliberately excluded)
+- Verify destination member has a match (case-insensitive) on source
+- Use `[ForgeMap("SourceName")]` if names differ
+- Check for private/inaccessible members (private ignored by default)
+- Enable `ShouldIncludeFields = true` in `[ForgeMethod]` if mapping fields
+- See FKF100/FKF101 diagnostics for specific issues
+
+### "Incompatible Member Types" Error (FKF200)
+
+**Problem**: Source and destination member types don't match.
+
+**Solutions**:
+- Add a `[ForgeConverter]` method to handle the type conversion
+- Use `[ForgeMap("Target")]` to map to a different destination member
+- Verify enum mapping strategy: `MappingStrategy = ForgeMapping.ByName` or `.Cast`
+- Allow nested forging if mapping to a different type that has a forge method: `AllowNestedForging = true`
+- Check if source type can implicitly convert to destination type
+
+### Circular Reference Error (FKF531)
+
+**Problem**: Forge methods reference each other in a cycle.
+
+**Solutions**:
+- Review forge method signatures to identify the cycle
+- Break the cycle by using a different mapping approach (converter, conditional mapping, etc.)
+- Disable nested forging if not essential
+- Mark one direction as `AllowNestedForging = false` to break the cycle
+
+### Expression Property Not Generated (FKF504/FKF505)
+
+**Problem**: `[ForgeMethod(GenerateExpression = true)]` not producing the expression property.
+
+**Solutions**:
+- Expression generation not compatible with update methods (void return) — use create methods only
+- FKF505 warns if before/after hooks are present (expression can't call them)
+- Verify method shape is create (non-void, 1 parameter)
+- Check for incompatible members that would make expression invalid
+
+### Tests Failing After Changes
+
+**Problem**: Modified generator code breaks existing tests.
+
+**Solutions**:
+- Rebuild solution before running tests: `dotnet build && dotnet test`
+- Check snapshot `.verified.cs` files — generator output changed, need approval
+- Run test in debug mode to inspect actual vs. expected
+- Verify changes don't affect member discovery logic
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for test guidelines
 
 ## Contributing
 

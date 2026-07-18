@@ -60,6 +60,34 @@ public sealed class ForgeMapAttribute : Attribute
     /// </summary>
     public NullFallback NullFallback { get; set; }
 
+    /// <summary>
+    /// When true, the assignment is wrapped in a default-value check: the destination member
+    /// is only assigned when the source value is not equal to its type's default (null, 0, false, Guid.Empty, etc.).
+    /// Useful for PATCH/partial-update APIs where null or default values mean "don't update this field".
+    /// </summary>
+    public bool IgnoreIfDefault { get; set; }
+
+    /// <summary>
+    /// The name of a static method on the forge class that returns <c>bool</c> and accepts
+    /// the source type as a parameter. The method determines whether this member should be assigned.
+    /// When the method returns false, the assignment is skipped.
+    ///
+    /// Example:
+    /// <code>
+    /// [ForgeMap("Price", Condition = nameof(IsValidPrice))]
+    /// public decimal? NewPrice { get; set; }
+    ///
+    /// private static bool IsValidPrice(UpdateDto source) => source.NewPrice > 0;
+    /// </code>
+    ///
+    /// The method must:
+    /// - Be static
+    /// - Accept exactly one parameter of the source type
+    /// - Return bool
+    /// - Be declared on the same forge class (or discovered via [ForgeUses])
+    /// </summary>
+    public string? Condition { get; set; }
+
     public ForgeMapAttribute(string name)
     {
         Name = name;

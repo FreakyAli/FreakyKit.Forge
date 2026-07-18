@@ -24,6 +24,12 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
     /// </summary>
     public IReadOnlyList<ContainingTypeInfo> ContainingTypes { get; }
 
+    /// <summary>
+    /// Fully-qualified names of forge classes included via [ForgeUses] attribute.
+    /// Empty if no [ForgeUses] is present. Order determines priority for method lookup.
+    /// </summary>
+    public IReadOnlyList<string> IncludedForgeClasses { get; }
+
     public ForgeClassModel(
         string @namespace,
         string className,
@@ -32,7 +38,8 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
         bool hasErrors,
         IReadOnlyList<ForgeMethodModel> methods,
         IReadOnlyList<ContainingTypeInfo>? containingTypes = null,
-        bool generateExtensionMethods = true)
+        bool generateExtensionMethods = true,
+        IReadOnlyList<string>? includedForgeClasses = null)
     {
         Namespace = @namespace;
         ClassName = className;
@@ -42,6 +49,7 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
         GenerateExtensionMethods = generateExtensionMethods;
         Methods = methods;
         ContainingTypes = containingTypes ?? Array.Empty<ContainingTypeInfo>();
+        IncludedForgeClasses = includedForgeClasses ?? Array.Empty<string>();
     }
 
     public bool Equals(ForgeClassModel other)
@@ -54,7 +62,8 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
             && HasErrors == other.HasErrors
             && GenerateExtensionMethods == other.GenerateExtensionMethods
             && Methods.SequenceEqual(other.Methods)
-            && ContainingTypes.SequenceEqual(other.ContainingTypes);
+            && ContainingTypes.SequenceEqual(other.ContainingTypes)
+            && IncludedForgeClasses.SequenceEqual(other.IncludedForgeClasses);
     }
 
     public override bool Equals(object obj) => Equals(obj as ForgeClassModel);
@@ -70,6 +79,8 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
             hash = hash * 31 + (FullyQualifiedName?.GetHashCode() ?? 0);
             hash = hash * 31 + HasErrors.GetHashCode();
             hash = hash * 31 + GenerateExtensionMethods.GetHashCode();
+            foreach (var included in IncludedForgeClasses)
+                hash = hash * 31 + (included?.GetHashCode() ?? 0);
             return hash;
         }
     }

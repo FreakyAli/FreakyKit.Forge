@@ -16,6 +16,12 @@ namespace FreakyKit.Forge.Analyzers;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ForgeAnalyzer : DiagnosticAnalyzer
 {
+    /// <summary>
+    /// Declares all diagnostics that this analyzer can report. Note: Some diagnostics (e.g., FKF530, FKF532)
+    /// are declared here for completeness but are only emitted by the source generator during code generation,
+    /// not by the analyzer during static analysis. This is because they require full type resolution and
+    /// member availability that is only available during the generator's compilation pass.
+    /// </summary>
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(
             ForgeDiagnostics.ExplicitModeActivated,
@@ -70,7 +76,10 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.ExpressionDeepNesting,
             ForgeDiagnostics.SameTypeCollectionShared,
             ForgeDiagnostics.SameTypeReferenceShared,
-            ForgeDiagnostics.ShareReferenceConflict
+            ForgeDiagnostics.ShareReferenceConflict,
+            ForgeDiagnostics.AmbiguousFlatteningAutoResolved,
+            ForgeDiagnostics.DeepFlatteningDetected,
+            ForgeDiagnostics.FlatteningDepthLimitExceeded
         );
 
     public override void Initialize(AnalysisContext context)
@@ -217,6 +226,8 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 reason = "must not be generic";
             else if (member.Parameters.Length != 1)
                 reason = $"must have exactly one parameter (found {member.Parameters.Length})";
+            else if (member.DeclaredAccessibility != Accessibility.Public && member.DeclaredAccessibility != Accessibility.Internal)
+                reason = $"must be public or internal (is {member.DeclaredAccessibility.ToString().ToLower()})";
 
             if (reason != null)
             {
