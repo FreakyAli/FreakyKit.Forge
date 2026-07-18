@@ -7,11 +7,11 @@ Forge uses 6 attributes across 3 layers:
 | Layer | Attribute | Purpose |
 |-------|-----------|---------|
 | **Class** | `[Forge]` | "This class contains mapping methods" |
+| **Class** | `[ForgeUses]` | "Borrow methods from other forge classes" |
 | **Method** | `[ForgeMethod]` | "Generate code for this mapping" |
-| **Method** | `[ForgeUses]` | "Borrow methods from other forge classes" |
+| **Method** | `[ForgeConverter]` | "Use this to convert custom types" |
 | **Property** | `[ForgeMap]` | "Customize how this property maps" |
 | **Property** | `[ForgeIgnore]` | "Skip this property" |
-| **Method** | `[ForgeConverter]` | "Use this to convert custom types" |
 
 **Minimal example:**
 ```csharp
@@ -437,9 +437,6 @@ Controls how Forge handles same-type **mutable collection** members (e.g. `List<
 |------|----------|-------|
 | `List<T>` | Copy when false, Share when true | Most common mutable collection |
 | `HashSet<T>` | Copy when false, Share when true | Unordered unique items |
-| `LinkedList<T>` | Copy when false, Share when true | Linked-list structure |
-| `Stack<T>` | Copy when false, Share when true | LIFO structure |
-| `Queue<T>` | Copy when false, Share when true | FIFO structure |
 | `Dictionary<K,V>` | Copy when false, Share when true | Key-value pairs |
 | `T[]` | Copy when false, Share when true | Fixed-size arrays |
 | `Collection<T>` | Copy when false, Share when true | Observable collection wrapper |

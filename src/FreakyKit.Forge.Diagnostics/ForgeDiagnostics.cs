@@ -17,11 +17,12 @@ namespace FreakyKit.Forge.Diagnostics;
 ///   FKF100–199: Member discovery & matching (constructor selection, member mapping, name resolution)
 ///   FKF200–299: Type safety & conversion (nullable/value type mismatches, incompatible types, converters)
 ///   FKF300–399: Nested forging & circularity (circular reference detection, nested method discovery)
-///   FKF400–499: Construction & initialization (null fallback, init-only properties, etc.)
-///   FKF500–599: RESERVED for P2/P3 feature diagnostics (Computed Properties, Conditional Mapping, Cross-Class Forge, etc.)
+///   FKF400–401: Member discovery (fields included/excluded, ShouldIncludeFields flag)
+///   FKF500–532: P2/P3 feature diagnostics (Flattening FKF530-532, Conditional Mapping FKF510-512, Cross-Class Forge FKF520-523, Orphaned Attributes FKF524-528)
+///   FKF533–599: RESERVED for future P2/P3 feature diagnostics
 ///   FKF600–699: RESERVED for performance warnings (deep nesting, expression complexity, etc.)
 ///
-/// When adding new features (P2/P3), allocate diagnostic IDs from the FKF500–599 range.
+/// When adding new features (P2/P3), allocate diagnostic IDs from the remaining FKF533–599 range.
 /// When adding performance diagnostics, allocate from FKF600–699.
 /// This prevents ID collisions across versions and enables predictable diagnostic management.
 /// </remarks>
