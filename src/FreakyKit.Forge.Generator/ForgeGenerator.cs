@@ -1809,17 +1809,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var diagnostics = new List<Diagnostic>();
         var sourceName = sourceType.Name;
 
-        // Verify destination type is accessible from public generated code
-        if (destType.DeclaredAccessibility != Accessibility.Public)
-        {
-            diagnostics.Add(Diagnostic.Create(
-                ForgeDiagnostics.ConstructorTypeInaccessible,
-                GetSafeLocation(forgeMethod),
-                destType.Name,
-                destType.DeclaredAccessibility.ToString().ToLower()));
-            return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
-        }
-
         var publicCtors = destType.InstanceConstructors
             .Where(c => c.DeclaredAccessibility == Accessibility.Public)
             .ToList();
@@ -1851,20 +1840,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             foreach (var param in ctor.Parameters)
             {
-                // Verify parameter type is accessible from public generated code (must be Public)
-                if (param.Type.DeclaredAccessibility != Accessibility.Public)
-                {
-                    diagnostics.Add(Diagnostic.Create(
-                        ForgeDiagnostics.ConstructorParameterTypeInaccessible,
-                        GetSafeLocation(forgeMethod),
-                        ctor.ContainingType.Name,
-                        param.Name,
-                        param.Type.ToDisplayString(),
-                        param.Type.DeclaredAccessibility.ToString().ToLower()));
-                    allSatisfied = false;
-                    break;
-                }
-
                 // Check [ForgeMap] on the constructor parameter first, then fall back to param name
                 var forgeMapName = GetForgeMapName(param);
                 var key = (forgeMapName ?? param.Name).ToLowerInvariant();

@@ -698,38 +698,6 @@ Low. Prevents surprise compiler errors on deeply nested mappings.
 
 #### Missing Validation: Constructor Parameter Accessibility
 
-**Type:** Fix — Correctness
-
-**Why**
-
-When resolving parameterized constructors, the code verifies that constructor parameters can be satisfied from source members, but does NOT fully validate type accessibility. If a parameter type is internal in another assembly, the generated constructor call fails at compile time with "inaccessible due to protection level."
-
-**Design**
-
-Before using a parameterized constructor in generated code, verify accessibility for: (1) the constructor itself, (2) its containing type, and (3) each parameter's type. All must be `Public` for use in generated code. Emit diagnostic if any fail.
-
-**Complexity**
-
-Low. Add accessibility checks in `DetermineConstruction`.
-
-**Impact**
-
-Low. Edge case affecting cross-assembly scenarios.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — DetermineConstruction method (lines 1812-1900); enhance accessibility validation
-
-**Suggested Approach**
-
-1. Verify constructor is `Public` (already done; line 1813)
-2. Verify containing type (destType) is `Public` (add check before constructor loop)
-3. For each parameter, verify parameter type `DeclaredAccessibility == Accessibility.Public` (refine line 1844)
-4. If any fail, emit diagnostic FKF5xx "Constructor or parameter type not accessible from public generated code" and skip this constructor
-5. Only use constructor if all accessibility checks pass
-
----
-
 #### Diagnostic Aggregation Masks Primary Errors
 
 **Type:** Fix — Error Reporting

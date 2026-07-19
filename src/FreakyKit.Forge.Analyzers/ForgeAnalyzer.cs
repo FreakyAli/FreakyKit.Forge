@@ -228,10 +228,6 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 reason = $"must have exactly one parameter (found {member.Parameters.Length})";
             else if (member.DeclaredAccessibility != Accessibility.Public && member.DeclaredAccessibility != Accessibility.Internal)
                 reason = $"must be public or internal (is {member.DeclaredAccessibility.ToString().ToLower()})";
-            else if (member.Parameters[0].Type.DeclaredAccessibility != Accessibility.Public)
-                reason = $"parameter type '{member.Parameters[0].Type.ToDisplayString()}' must be public (is {member.Parameters[0].Type.DeclaredAccessibility.ToString().ToLower()})";
-            else if (member.ReturnType.DeclaredAccessibility != Accessibility.Public)
-                reason = $"return type '{member.ReturnType.ToDisplayString()}' must be public (is {member.ReturnType.DeclaredAccessibility.ToString().ToLower()})";
 
             if (reason != null)
             {
