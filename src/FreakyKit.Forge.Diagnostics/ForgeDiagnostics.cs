@@ -968,4 +968,28 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Flattening is limited to 10 levels of nesting to prevent unbounded recursive traversal. Restructure the source type hierarchy to be less deeply nested, or use nested forging instead of flattening for this member.");
+
+    /// <summary>
+    /// FKF533 (Error): The destination type for construction is not accessible from public generated code.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConstructorTypeInaccessible = new(
+        id: "FKF533",
+        title: "Constructor destination type inaccessible",
+        messageFormat: "Destination type '{0}' for forge construction is {1} and not accessible from public generated code. Use a public destination type instead.",
+        category: Category_Construction,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The destination type must be public to use in a constructor from publicly-generated forge code. Provide a public concrete class as the forge destination.");
+
+    /// <summary>
+    /// FKF534 (Error): A constructor parameter type is not accessible from public generated code.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConstructorParameterTypeInaccessible = new(
+        id: "FKF534",
+        title: "Constructor parameter type inaccessible",
+        messageFormat: "Constructor parameter '{1}' of type '{2}' on '{0}' is {3} and not accessible from public generated code. Use public parameter types only.",
+        category: Category_Construction,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "All constructor parameter types must be public to use in a constructor from publicly-generated forge code. Ensure all parameter types are public.");
 }

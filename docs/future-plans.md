@@ -660,44 +660,6 @@ Medium. Silent exclusion causes users to assume flattened members work in LINQ q
 
 ---
 
-#### Diagnostic ID Allocation Scheme Missing
-
-**Type:** Fix — Documentation
-
-**Why**
-
-Diagnostic IDs are assigned sequentially (FKF001-508) without a reserved-range policy. Future features (P2, P3) will need new diagnostics, but there's no pre-allocated range. This risks ID collisions or out-of-order assignments that break backward compatibility.
-
-**Design**
-
-Define a structured diagnostic ID allocation scheme with reserved ranges for future features. Document which ranges are reserved for what purpose (e.g., FKF501-600 for new features).
-
-**Complexity**
-
-Low. Documentation only; no code changes.
-
-**Impact**
-
-Medium. Enables safe diagnostic ID allocation in future versions.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Add comments documenting reserved ID ranges
-
-**Suggested Approach**
-
-1. Document diagnostic ID ranges:
-   - FKF001-099: Mode & class-level validation (existing)
-   - FKF100-199: Member matching & discovery (existing)
-   - FKF200-299: Type conversion & compatibility (existing)
-   - FKF300-399: Nested forging & circularity (existing)
-   - FKF400-499: Deprecated/reserved
-   - FKF500-599: **RESERVED for future P2/P3 features**
-   - FKF600-699: **RESERVED for performance/optimization warnings**
-2. Add header comment explaining the scheme
-3. Mark FKF507 as permanently deprecated with note
-
----
 
 ### Low-Priority Issues
 
@@ -740,15 +702,15 @@ Low. Prevents surprise compiler errors on deeply nested mappings.
 
 **Why**
 
-When resolving parameterized constructors, the code verifies that constructor parameters can be satisfied from source members, but does NOT verify that parameters themselves are accessible (e.g., `internal` parameters in types from other assemblies). Generated code compiles but fails at runtime with "inaccessible due to protection level."
+When resolving parameterized constructors, the code verifies that constructor parameters can be satisfied from source members, but does NOT fully validate type accessibility. If a parameter type is internal in another assembly, the generated constructor call fails at compile time with "inaccessible due to protection level."
 
 **Design**
 
-Before using a constructor parameter in generated code, verify the parameter's `DeclaredAccessibility` is `Public`. Emit diagnostic if not.
+Before using a parameterized constructor in generated code, verify accessibility for: (1) the constructor itself, (2) its containing type, and (3) each parameter's type. All must be `Public` for use in generated code. Emit diagnostic if any fail.
 
 **Complexity**
 
-Low. Add accessibility check in `DetermineConstruction`.
+Low. Add accessibility checks in `DetermineConstruction`.
 
 **Impact**
 
@@ -756,13 +718,15 @@ Low. Edge case affecting cross-assembly scenarios.
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — DetermineConstruction method (lines 1606-1676); add accessibility validation
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — DetermineConstruction method (lines 1812-1900); enhance accessibility validation
 
 **Suggested Approach**
 
-1. For each constructor parameter, check `parameter.DeclaredAccessibility == Accessibility.Public`
-2. If not, emit diagnostic FKF5xx "Constructor parameter inaccessible from public generated code"
-3. Skip this constructor and try others if available
+1. Verify constructor is `Public` (already done; line 1813)
+2. Verify containing type (destType) is `Public` (add check before constructor loop)
+3. For each parameter, verify parameter type `DeclaredAccessibility == Accessibility.Public` (refine line 1844)
+4. If any fail, emit diagnostic FKF5xx "Constructor or parameter type not accessible from public generated code" and skip this constructor
+5. Only use constructor if all accessibility checks pass
 
 ---
 
@@ -795,36 +759,6 @@ Low. Improves usability by reducing noise.
 1. When FKF020 (has a body), FKF003-005 (invalid class), or other fatal diagnostics are emitted, return immediately from method processing
 2. Skip member-mapping analysis for that method
 3. Prevents secondary "missing member" diagnostics from appearing
-
----
-
-#### Message Clarity: NullableValueType Fallback Not Mentioned
-
-**Type:** Fix — Diagnostic Messaging
-
-**Why**
-
-When a nullable value type (e.g., `int?`) maps to non-nullable (e.g., `int`) without `DefaultValue`, FKF201 warns that `.Value` may throw. However, the diagnostic message doesn't mention that setting `DefaultValue` on `[ForgeMap]` prevents the warning entirely.
-
-**Design**
-
-Update FKF201 diagnostic message to mention `DefaultValue` as an escape hatch.
-
-**Complexity**
-
-Low. Update diagnostic message.
-
-**Impact**
-
-Low. Users may miss that `DefaultValue` solves the problem.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — FKF201 diagnostic descriptor
-
-**Suggested Approach**
-
-1. Update FKF201 message to include: "... or set DefaultValue on [ForgeMap] to provide a fallback value instead."
 
 ---
 

@@ -157,4 +157,60 @@ public sealed class ConstructorErrorTests : GeneratorTestBase
         AssertHasError(result, "FKF501");
         AssertNoGeneratedSource(result);
     }
+
+    [Fact]
+    public void FKF533_DestinationTypeInternalInCrossAssembly_InaccessibleDestinationType()
+    {
+        // Destination type is internal; cannot use in public generated code
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string Name { get; set; } = ""; }
+                internal class Dest
+                {
+                    public string Name { get; set; } = "";
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertHasError(result, "FKF533");
+        AssertNoGeneratedSource(result);
+    }
+
+    [Fact]
+    public void FKF534_ConstructorParameterTypeInternal_InaccessibleParameterType()
+    {
+        // Constructor parameter type is internal; cannot use in public generated code
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public InternalType Value { get; set; } = new(); }
+                internal class InternalType { }
+                public class Dest
+                {
+                    public InternalType Value { get; set; } = new();
+                    public Dest(InternalType value) { Value = value; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertHasError(result, "FKF534");
+        AssertNoGeneratedSource(result);
+    }
 }
