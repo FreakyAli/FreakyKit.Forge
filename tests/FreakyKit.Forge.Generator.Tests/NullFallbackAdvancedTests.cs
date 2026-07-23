@@ -162,7 +162,7 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
                 public struct Address { public string City { get; set; } }
                 public class AddressDto { public string City { get; set; } = ""; }
 
-                public class Source { public Address Home { get; set; } }
+                public class Source { public Address? Home { get; set; } }
                 public class Dest
                 {
                     [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
@@ -181,8 +181,9 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
             """;
 
         var result = RunGenerator(source);
-        // Note: Value types don't have NullFallback effect, but this is a valid setup
-        AssertNoErrors(result);
+        // FKF314: NullFallback has no effect on value types (nullable or not)
+        var fkf314 = Assert.Single(result.Diagnostics, d => d.Id == "FKF314");
+        Assert.Equal(DiagnosticSeverity.Warning, fkf314.Severity);
     }
 
     [Fact]

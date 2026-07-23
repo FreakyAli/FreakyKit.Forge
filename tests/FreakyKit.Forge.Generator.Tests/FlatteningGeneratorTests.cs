@@ -281,6 +281,10 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         Assert.Contains("source.Address?", generated);
         // City should flatten using ?. since Address can be null
         Assert.Contains("source.Address?.City", generated);
+        // Coords is a value type (struct), so after the null-check on Address,
+        // access Coords with . not ?.
+        Assert.Contains("source.Address?.Coords.", generated);
+        Assert.DoesNotContain("source.Address?.Coords?.", generated);
     }
 
     [Fact]

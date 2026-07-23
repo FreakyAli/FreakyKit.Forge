@@ -100,15 +100,10 @@ public sealed class CollectionMismatchEdgeCasesTests : GeneratorTestBase
             """;
 
         var result = RunGenerator(source);
-        // Actually, converters for collection element types may not be applied automatically
-        // This test documents the actual behavior
-        var hasErrors = result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
-        if (hasErrors)
-        {
-            // If FKF200 is emitted, converter doesn't apply to collection elements
-            var fkf200 = Assert.Single(result.Diagnostics, d => d.Id == "FKF200");
-            Assert.Equal(DiagnosticSeverity.Error, fkf200.Severity);
-        }
+        // Converters do not apply to collection element types automatically
+        // FKF200 is always emitted because collection element types don't match
+        var fkf200 = Assert.Single(result.Diagnostics, d => d.Id == "FKF200");
+        Assert.Equal(DiagnosticSeverity.Error, fkf200.Severity);
     }
 
     [Fact]

@@ -32,6 +32,10 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // Verify condition guards the assignment
+        Assert.Contains("if (IsPositive(source))", generated);
+        Assert.Contains("__result.Value = source.Value", generated);
     }
 
     [Fact]

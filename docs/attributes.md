@@ -1062,6 +1062,7 @@ When mapping hierarchical source models to flat DTOs, you have two main options:
 [Forge]
 public static partial class PersonForges
 {
+    [ForgeMethod(AllowFlattening = true)]
     public static partial PersonDto ToDto(Person source);
     // source.Company.Address.City → auto-mapped to dest.CompanyAddressCity
 }
@@ -1097,11 +1098,12 @@ public static partial class AddressForges
 }
 
 [Forge]
+[ForgeUses(typeof(AddressForges))]
 public static partial class PersonForges
 {
     [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonDto ToDto(Person source);
-    // source.Company (Company entity) → auto-discovered as CompanyForges.ToDto(...)
+    // source.Address (Address entity) → discovered in AddressForges as ToDto(...)
 }
 ```
 
