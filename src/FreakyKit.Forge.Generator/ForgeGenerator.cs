@@ -441,9 +441,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         bool includeFields = forgeAttr != null && GetBoolNamedArg(forgeAttr, "ShouldIncludeFields");
         bool allowNested = forgeAttr != null && GetBoolNamedArg(forgeAttr, "AllowNestedForging");
         bool allowFlattening = forgeAttr != null && GetBoolNamedArg(forgeAttr, "AllowFlattening");
-        bool methodIgnoreIfNull = forgeAttr != null && GetBoolNamedArg(forgeAttr, "IgnoreIfNull");
+        bool methodIgnoreIfNull = forgeAttr != null && GetForgePolicyAsBoolean(forgeAttr, "IgnoreIfNull");
         bool generateExpression = forgeAttr != null && GetBoolNamedArg(forgeAttr, "GenerateExpression");
-        bool methodShareReference = forgeAttr != null && GetBoolNamedArg(forgeAttr, "ShareReference");
+        bool methodShareReference = forgeAttr != null && GetForgePolicyAsBoolean(forgeAttr, "ShareReference");
         int enumMappingStrategy = GetEnumMappingStrategy(forgeAttr);
 
         // FKF504: GenerateExpression is incompatible with update method shape
@@ -591,12 +591,14 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             matchedSourceKeys.Add(key);
 
             // Determine IgnoreIfNull: per-member overrides method-level.
+            // Precedence: dest-side explicit > src-side explicit > method-level > default (false)
             // srcSymbolForNull and destSymbolForNull may be null (unmatched members), but are explicitly null-checked below.
             var srcSymbolForNull = sourceType.GetMembers().FirstOrDefault(m => m.Name == srcMember.Name);
             var destSymbolForNull = destType.GetMembers().FirstOrDefault(m => m.Name == destMember.Name);
-            bool memberIgnoreIfNull = (srcSymbolForNull != null && GetForgeIgnoreIfNull(srcSymbolForNull))
-                || (destSymbolForNull != null && GetForgeIgnoreIfNull(destSymbolForNull))
-                || methodIgnoreIfNull;
+            bool? memberIgnoreIfNullExplicit = destSymbolForNull != null ? GetForgeIgnoreIfNull(destSymbolForNull) : null;
+            if (memberIgnoreIfNullExplicit == null && srcSymbolForNull != null)
+                memberIgnoreIfNullExplicit = GetForgeIgnoreIfNull(srcSymbolForNull);
+            bool memberIgnoreIfNull = memberIgnoreIfNullExplicit ?? methodIgnoreIfNull;
             string? nullCheckExpr = memberIgnoreIfNull ? $"{srcParamName}.{srcMember.Name}" : null;
 
             // Determine IgnoreIfDefault and Condition
@@ -1583,14 +1585,21 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     {
         var lookup = methodModels.ToDictionary(m => m.MethodName, m => m);
 
-        foreach (var method in methodModels)
+        for (int methodIndex = 0; methodIndex < methodModels.Count; methodIndex++)
         {
+            var method = methodModels[methodIndex];
             if (!method.GenerateExpression) continue;
             ct.ThrowIfCancellationRequested();
 
             int maxDepth = 0;
-            foreach (var assignment in method.Assignments)
+            var updatedAssignments = new List<MemberAssignmentModel>();
+            bool anyUpdated = false;
+
+            for (int i = 0; i < method.Assignments.Count; i++)
             {
+                var assignment = method.Assignments[i];
+                var updated = assignment;
+
                 // Plain nested-forge member: inline the nested expression body directly.
                 if (assignment.NestedForgeMethodName != null && assignment.NestedForgeSourceAccessor != null)
                 {
@@ -1606,13 +1615,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         outerMethodName: method.MethodName,
                         maxDepth: ref maxDepth);
 
-                    assignment.ExpressionAssignment = inlined;
-                    continue;
+                    updated = assignment.WithExpressionAssignment(inlined);
+                    anyUpdated = true;
                 }
-
                 // Collection with nested-forge element conversion: inline the per-element body
                 // into a .Select(x => ...) lambda, then apply the materializer.
-                if (assignment.CollectionElementForgeMethod != null
+                else if (assignment.CollectionElementForgeMethod != null
                     && assignment.CollectionSourceAccessor != null
                     && assignment.CollectionMaterializer != null)
                 {
@@ -1633,21 +1641,26 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     if (elementBody == null)
                     {
-                        assignment.ExpressionAssignment = null;
-                        continue;
-                    }
-
-                    var selectExpr = $"{assignment.CollectionSourceAccessor}.Select(x => {elementBody}){assignment.CollectionMaterializer}";
-                    if (assignment.CollectionSourceIsRefType)
-                    {
-                        assignment.ExpressionAssignment =
-                            $"{assignment.CollectionSourceAccessor} == null ? null : {selectExpr}";
+                        updated = assignment.WithExpressionAssignment(null);
+                        anyUpdated = true;
                     }
                     else
                     {
-                        assignment.ExpressionAssignment = selectExpr;
+                        var selectExpr = $"{assignment.CollectionSourceAccessor}.Select(x => {elementBody}){assignment.CollectionMaterializer}";
+                        if (assignment.CollectionSourceIsRefType)
+                        {
+                            updated = assignment.WithExpressionAssignment(
+                                $"{assignment.CollectionSourceAccessor} == null ? null : {selectExpr}");
+                        }
+                        else
+                        {
+                            updated = assignment.WithExpressionAssignment(selectExpr);
+                        }
+                        anyUpdated = true;
                     }
                 }
+
+                updatedAssignments.Add(updated);
             }
 
             if (maxDepth >= ExpressionNestingErrorThreshold)
@@ -1665,6 +1678,31 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     location: null,
                     method.MethodName,
                     maxDepth));
+            }
+
+            if (anyUpdated)
+            {
+                methodModels[methodIndex] = new ForgeMethodModel(
+                    method.MethodName,
+                    method.Accessibility,
+                    method.SourceTypeFqn,
+                    method.SourceTypeShortName,
+                    method.SourceParameterName,
+                    method.DestTypeFqn,
+                    method.DestTypeShortName,
+                    method.Construction,
+                    updatedAssignments,
+                    method.NestedMethods,
+                    method.MethodKind,
+                    method.DestParameterName,
+                    method.BeforeHookName,
+                    method.AfterHookName,
+                    method.SourceFilePath,
+                    method.SourceLineNumber,
+                    method.CollectionProjectExpression,
+                    method.ConcreteDictInstantiationName,
+                    method.GenerateExpression,
+                    method.ExpressionPropertyName);
             }
         }
     }
@@ -1838,6 +1876,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             foreach (var param in ctor.Parameters)
             {
+                // Validate parameter type accessibility — must be accessible from generated code
+                if (param.Type.DeclaredAccessibility < Accessibility.Internal)
+                {
+                    allSatisfied = false;
+                    break;
+                }
+
                 // Check [ForgeMap] on the constructor parameter first, then fall back to param name
                 var forgeMapName = GetForgeMapName(param);
                 var key = (forgeMapName ?? param.Name).ToLowerInvariant();
@@ -1909,6 +1954,17 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             var ctor = viableCtors[0];
             foreach (var param in ctor.Parameters)
             {
+                // Validate parameter type accessibility
+                if (param.Type.DeclaredAccessibility < Accessibility.Internal)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.NoViableConstructor,
+                        GetSafeLocation(forgeMethod),
+                        destType.Name,
+                        sourceName));
+                    return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
+                }
+
                 var forgeMapName501 = GetForgeMapName(param);
                 var key = (forgeMapName501 ?? param.Name).ToLowerInvariant();
                 var typesMatch = sourceMembers.TryGetValue(key, out var src) &&
@@ -3246,24 +3302,26 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static bool GetForgeIgnoreIfNull(ISymbol member)
+    /// <summary>
+    /// Reads <c>IgnoreIfNull</c> from <c>[ForgeMap]</c> on the given symbol. Returns:
+    ///   - <c>true</c> if the attribute is present AND IgnoreIfNull was explicitly set to True
+    ///   - <c>false</c> if the attribute is present AND IgnoreIfNull was explicitly set to False
+    ///   - <c>null</c> if the attribute is absent OR IgnoreIfNull was set to Inherit
+    /// The null case means "no opinion, inherit from method-level setting."
+    /// </summary>
+    private static bool? GetForgeIgnoreIfNull(ISymbol member)
     {
         var attr = member.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
-        if (attr == null) return false;
-        foreach (var namedArg in attr.NamedArguments)
-        {
-            if (namedArg.Key == "IgnoreIfNull" && namedArg.Value.Value is bool b)
-                return b;
-        }
-        return false;
+        if (attr == null) return null;
+        return GetForgePolicyValue(attr, "IgnoreIfNull");
     }
 
     /// <summary>
     /// Reads <c>ShareReference</c> from <c>[ForgeMap]</c> on the given symbol. Returns:
-    ///   - <c>true</c> if the attribute is present AND ShareReference was explicitly set to true
-    ///   - <c>false</c> if the attribute is present AND ShareReference was explicitly set to false
-    ///   - <c>null</c> if the attribute is absent OR ShareReference was not specified
+    ///   - <c>true</c> if the attribute is present AND ShareReference was explicitly set to True
+    ///   - <c>false</c> if the attribute is present AND ShareReference was explicitly set to False
+    ///   - <c>null</c> if the attribute is absent OR ShareReference was set to Inherit
     /// The null case means "no opinion, inherit from method/default."
     /// </summary>
     private static bool? GetForgeMapShareReference(ISymbol? member)
@@ -3272,10 +3330,29 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var attr = member.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMapAttribute");
         if (attr == null) return null;
+        return GetForgePolicyValue(attr, "ShareReference");
+    }
+
+    /// <summary>
+    /// Reads a ForgePolicy-typed property from an attribute and returns:
+    ///   - true if value is ForgePolicy.True (1)
+    ///   - false if value is ForgePolicy.False (2)
+    ///   - null if value is ForgePolicy.Inherit (0) or not found
+    /// </summary>
+    private static bool? GetForgePolicyValue(AttributeData attr, string propertyName)
+    {
         foreach (var namedArg in attr.NamedArguments)
         {
-            if (namedArg.Key == "ShareReference" && namedArg.Value.Value is bool b)
-                return b;
+            if (namedArg.Key == propertyName && namedArg.Value.Value is int policyValue)
+            {
+                return policyValue switch
+                {
+                    0 => null,  // Inherit
+                    1 => true,  // True
+                    2 => false, // False
+                    _ => null
+                };
+            }
         }
         return null;
     }
@@ -3351,6 +3428,22 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         if (namedArg.Value.Value is bool val)
             return val;
         return false;
+    }
+
+    /// <summary>
+    /// Reads a ForgePolicy-typed property from an attribute and returns:
+    ///   - true if value is ForgePolicy.True (1)
+    ///   - false if value is ForgePolicy.False (2) or ForgePolicy.Inherit (0)
+    /// Defaults to false if the property is not found or is Inherit.
+    /// </summary>
+    private static bool GetForgePolicyAsBoolean(AttributeData attr, string propertyName)
+    {
+        var namedArg = attr.NamedArguments.FirstOrDefault(a => a.Key == propertyName);
+        if (namedArg.Value.Value is int policyValue)
+        {
+            return policyValue == 1; // True
+        }
+        return false; // Default: Inherit (0) or False (2) both map to false
     }
 
     private static int GetEnumMappingStrategy(AttributeData? attr)

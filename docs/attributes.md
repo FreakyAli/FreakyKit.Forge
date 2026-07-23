@@ -389,17 +389,21 @@ Use **AllowNestedForging = true** when:
 - You need custom logic for nested conversions
 - You want to preserve strongly-typed structure
 
-#### `IgnoreIfNull` (`bool`, default: `false`)
+#### `IgnoreIfNull` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
-When true, all property assignments are wrapped in a null check. The destination member is only assigned when the source value is not null. Particularly useful for update methods where you want to preserve existing values when the source field is null.
+Controls whether all property assignments are wrapped in a null check. When set to `ForgePolicy.True`, the destination member is only assigned when the source value is not null. Particularly useful for update methods where you want to preserve existing values when the source field is null.
 
-Can be overridden per-member using `ForgeMapAttribute.IgnoreIfNull`.
+- **`ForgePolicy.Inherit`** (default) — inherit from global default (false / assign even if null)
+- **`ForgePolicy.True`** — all assignments wrapped in null check
+- **`ForgePolicy.False`** — assignments happen even if source is null
+
+Can be overridden per-member using `ForgeMapAttribute.IgnoreIfNull`. Per-member settings always take precedence.
 
 ```csharp
 [Forge]
 public static partial class MyForges
 {
-    [ForgeMethod(IgnoreIfNull = true)]
+    [ForgeMethod(IgnoreIfNull = ForgePolicy.True)]
     public static partial void Update(Source source, Dest existing);
     // Generates: if (source.Name != null) existing.Name = source.Name;
 }
@@ -424,12 +428,13 @@ public static partial class MyForges
 }
 ```
 
-#### `ShareReference` (`bool`, default: `false`)
+#### `ShareReference` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
 Controls how Forge handles same-type **mutable collection** members (e.g. `List<T>` on both source and destination).
 
-- **`false` (default)** — the generated code uses a copy constructor (`new List<T>(source.X)`) so the destination owns an independent collection. Mutations to the destination's collection do not affect the source.
-- **`true`** — the generated code uses direct reference assignment (`dto.Tags = source.Tags`). Faster and allocation-free, but the source and destination share the same collection instance, so mutations leak across.
+- **`ForgePolicy.Inherit`** (default) — inherit from global default (false / deep-copy)
+- **`ForgePolicy.False`** — the generated code uses a copy constructor (`new List<T>(source.X)`) so the destination owns an independent collection. Mutations to the destination's collection do not affect the source.
+- **`ForgePolicy.True`** — the generated code uses direct reference assignment (`dto.Tags = source.Tags`). Faster and allocation-free, but the source and destination share the same collection instance, so mutations leak across.
 
 **Affected collection types** (ShareReference=true uses reference-sharing; ShareReference=false uses copy constructor):
 
@@ -453,11 +458,11 @@ When this flag is `true` and applies to a member, **FKF311** (Info) is emitted p
 [Forge]
 public static partial class MyForges
 {
-    // Default: deep-copy. Tags in PersonDto is a new List<string>, independent of source.
+    // Default (Inherit): deep-copy. Tags in PersonDto is a new List<string>, independent of source.
     public static partial PersonDto ToDto(Person source);
 
-    // Opt-out: reference-share. Tags in PersonUpdate IS source.Tags.
-    [ForgeMethod(ShareReference = true)]
+    // Explicit opt-out (True): reference-share. Tags in PersonUpdate IS source.Tags.
+    [ForgeMethod(ShareReference = ForgePolicy.True)]
     public static partial PersonUpdate ToUpdate(Person source);
 }
 ```
@@ -644,14 +649,18 @@ public class Dest   { public int Age { get; set; } }
 // Generates: __result.Age = source.Age ?? 0;
 ```
 
-#### `IgnoreIfNull` (`bool`, default: `false`)
+#### `IgnoreIfNull` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
-When true, the assignment for this member is wrapped in a null check: the destination member is only assigned when the source value is not null. Useful for update methods where you want to preserve existing values.
+Controls whether the assignment for this member is wrapped in a null check. When set to `ForgePolicy.True`, the destination member is only assigned when the source value is not null. Useful for update methods where you want to preserve existing values.
+
+- **`ForgePolicy.Inherit`** (default) — inherit the method-level setting, or the global default (false) if method-level is not set
+- **`ForgePolicy.True`** — wrap assignment in null check
+- **`ForgePolicy.False`** — assignment happens even if source is null
 
 Can be placed on either the source or destination member. Overrides the method-level `IgnoreIfNull` setting (per-member takes priority).
 
 ```csharp
-public class Source { [ForgeMap("Name", IgnoreIfNull = true)] public string? Name { get; set; } }
+public class Source { [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)] public string? Name { get; set; } }
 public class Dest   { public string Name { get; set; } = ""; }
 // Generates: if (source.Name != null) __result.Name = source.Name;
 ```
@@ -710,27 +719,27 @@ public string Email { get; set; }
 //     __result.Email = source.Email;
 ```
 
-#### `ShareReference` (`bool`, default unset)
+#### `ShareReference` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
-Per-member override of [`ForgeMethod.ShareReference`](#forgemethod) for same-type mutable collections. Setting this overrides the method-level setting for this one member.
+Per-member override of [`ForgeMethod.ShareReference`](#forgemethod) for same-type mutable collections. Controls whether this specific member uses reference-sharing or deep-copying.
 
-- **Unset (default)** — inherit the method-level value (or the default of `false` / deep-copy if the method doesn't set it either).
-- **`true`** — this member is reference-shared regardless of method-level setting.
-- **`false`** — this member is deep-copied regardless of method-level setting.
+- **`ForgePolicy.Inherit`** (default) — inherit the method-level value, or the global default (false / deep-copy) if method-level is not set explicitly
+- **`ForgePolicy.True`** — this member is reference-shared regardless of method-level setting
+- **`ForgePolicy.False`** — this member is deep-copied regardless of method-level setting
 
 Can be placed on either the source or destination member. See [Reference semantics for same-type collections](#reference-semantics-for-same-type-collections) for full precedence rules.
 
 ```csharp
-[ForgeMethod(ShareReference = true)]                       // method default: share all
+[ForgeMethod(ShareReference = ForgePolicy.True)]                       // method default: share all
 public static partial PersonDto ToDto(Person source);
 
 public class Person
 {
-    // Inherits method-level share (true)
+    // Inherits method-level share (True)
     public List<string> Tags { get; set; }
 
     // Per-member override — this one deep-copies even though method says share
-    [ForgeMap("History", ShareReference = false)]
+    [ForgeMap("History", ShareReference = ForgePolicy.False)]
     public List<string> History { get; set; }
 }
 // Generates:
@@ -836,16 +845,41 @@ The choice is controlled by the `ShareReference` flag, which can appear in three
 
 ### Precedence
 
-When multiple `ShareReference` values could apply to the same member, the most specific wins:
+When multiple `ShareReference` values could apply to the same member, the most specific **explicit** value wins. Inheritance is resolved top-to-bottom until an explicit (non-Inherit) value is found:
 
 ```
-1. Source-side  [ForgeMap(ShareReference = X)]   ← most specific
-2. Destination-side [ForgeMap(ShareReference = X)]
+1. Destination-side  [ForgeMap(ShareReference = X)]   ← most specific
+   If explicit (True/False), use it. If Inherit, continue.
+2. Source-side [ForgeMap(ShareReference = X)]
+   If explicit (True/False), use it. If Inherit, continue.
 3. Method-level [ForgeMethod(ShareReference = X)]
-4. Default: false (deep-copy)
+   If explicit (True/False), use it. If Inherit, continue.
+4. Default: ForgePolicy.False (deep-copy)            ← least specific
 ```
 
-Per-member settings always win over method-level. When both source-side and destination-side `[ForgeMap]` explicitly set `ShareReference` to different values, the **destination-side wins** and **FKF313** (Warning) is emitted to surface the conflict.
+**Key behavior:**
+- `ForgePolicy.Inherit` means "use the next level up" — it's transparent in the chain
+- Explicit `True` or `False` always wins and stops the chain immediately
+- When both source-side and destination-side are explicit with different values, the **destination-side wins** and **FKF313** (Warning) is emitted to surface the conflict
+
+**Example:**
+```csharp
+[ForgeMethod(ShareReference = ForgePolicy.Inherit)]  // Explicitly inherit from default
+public static partial PersonDto ToDto(Person source);
+
+public class Person
+{
+    // No [ForgeMap] → inherits method-level (Inherit) → inherits default (False/deep-copy)
+    public List<string> Tags { get; set; }
+
+    // Explicit override with True
+    [ForgeMap("History", ShareReference = ForgePolicy.True)]
+    public List<string> History { get; set; }
+}
+// Generates:
+//   __result.Tags = new List<string>(source.Tags);    // deep-copy (inherited default)
+//   __result.History = source.History;                 // reference-shared (explicit)
+```
 
 ### What's affected
 
@@ -1082,6 +1116,24 @@ public static partial class PersonForges
 | Reuse across multiple parents | ❌ | ✅ |
 | Simple attribute copy (same types) | ✅ | ✔ (works but unnecessary) |
 | Custom transformation needed | ❌ | ✅ (with [ForgeConverter]) |
+
+---
+
+## `ForgePolicy` (Enum)
+
+**Namespace:** `FreakyKit.Forge`
+
+A tri-state enum for properties that support method-level configuration with per-member overrides. Distinguishes between "not set" (inherit from above) and "explicitly false", which is important for correct precedence evaluation.
+
+| Value | Numeric Value | Description |
+|-------|---------------|-------------|
+| `Inherit` | `0` | Inherit the setting from method-level configuration, or use the global default if unset at method level (default) |
+| `True` | `1` | Explicitly set to true |
+| `False` | `2` | Explicitly set to false |
+
+Used for:
+- `[ForgeMethod] ShareReference` and `IgnoreIfNull`
+- `[ForgeMap] ShareReference` and `IgnoreIfNull`
 
 ---
 

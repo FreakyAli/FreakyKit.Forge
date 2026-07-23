@@ -17,7 +17,7 @@ public sealed class IgnoreIfNullGeneratorTests : GeneratorTestBase
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeMethod(IgnoreIfNull = true)]
+                    [ForgeMethod(IgnoreIfNull = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -36,7 +36,7 @@ public sealed class IgnoreIfNullGeneratorTests : GeneratorTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { [ForgeMap("Name", IgnoreIfNull = true)] public string? Name { get; set; } public string? Email { get; set; } }
+                public class Source { [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)] public string? Name { get; set; } public string? Email { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public string Email { get; set; } = ""; }
 
                 [Forge]
@@ -62,7 +62,7 @@ public sealed class IgnoreIfNullGeneratorTests : GeneratorTestBase
             namespace TestNs
             {
                 public class Source { public string? Name { get; set; } }
-                public class Dest   { [ForgeMap("Name", IgnoreIfNull = true)] public string Name { get; set; } = ""; }
+                public class Dest   { [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)] public string Name { get; set; } = ""; }
 
                 [Forge]
                 public static partial class MyForges
@@ -90,7 +90,7 @@ public sealed class IgnoreIfNullGeneratorTests : GeneratorTestBase
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeMethod(IgnoreIfNull = true)]
+                    [ForgeMethod(IgnoreIfNull = ForgePolicy.True)]
                     public static partial void Update(Source source, Dest existing);
                 }
             }

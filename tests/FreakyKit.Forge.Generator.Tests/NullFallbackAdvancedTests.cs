@@ -95,7 +95,7 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", IgnoreIfNull = true, NullFallback = NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", IgnoreIfNull = ForgePolicy.True, NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -245,7 +245,7 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeMethod(ShareReference = true)]
+                    [ForgeMethod(ShareReference = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
