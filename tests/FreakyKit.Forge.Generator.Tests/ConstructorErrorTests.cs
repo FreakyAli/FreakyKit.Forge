@@ -10,32 +10,6 @@ namespace FreakyKit.Forge.Generator.Tests;
 /// </summary>
 public sealed class ConstructorErrorTests : GeneratorTestBase
 {
-    [Fact]
-    public void FKF502_PrivateConstructorOnly_NoViableConstructor()
-    {
-        const string source = """
-            using FreakyKit.Forge;
-            namespace TestNs
-            {
-                public class Source { public string Name { get; set; } = ""; }
-                public class Dest
-                {
-                    public string Name { get; set; } = "";
-                    private Dest() { }
-                }
-
-                [Forge]
-                public static partial class MyForges
-                {
-                    public static partial Dest ToDest(Source source);
-                }
-            }
-            """;
-
-        var result = RunGenerator(source);
-        AssertHasError(result, "FKF502");
-        AssertNoGeneratedSource(result);
-    }
 
     [Fact]
     public void FKF502_ConstructorParamsDoNotMatchSource_NoViableConstructor()

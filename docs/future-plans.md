@@ -696,8 +696,6 @@ Low. Prevents surprise compiler errors on deeply nested mappings.
 
 ---
 
-#### Missing Validation: Constructor Parameter Accessibility
-
 #### Diagnostic Aggregation Masks Primary Errors
 
 **Type:** Fix — Error Reporting

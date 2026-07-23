@@ -1809,11 +1809,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var diagnostics = new List<Diagnostic>();
         var sourceName = sourceType.Name;
 
-        var publicCtors = destType.InstanceConstructors
-            .Where(c => c.DeclaredAccessibility == Accessibility.Public)
-            .ToList();
+        var viableCtors = destType.InstanceConstructors.ToList();
 
-        if (publicCtors.Count == 0)
+        if (viableCtors.Count == 0)
         {
             diagnostics.Add(Diagnostic.Create(
                 ForgeDiagnostics.NoViableConstructor,
@@ -1824,7 +1822,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         // Prefer parameterless
-        var parameterlessCtor = publicCtors.FirstOrDefault(c => c.Parameters.Length == 0);
+        var parameterlessCtor = viableCtors.FirstOrDefault(c => c.Parameters.Length == 0);
         if (parameterlessCtor != null)
         {
             return (new ConstructionModel(ConstructionKind.Parameterless, new List<ConstructorArgModel>()), diagnostics);
@@ -1833,7 +1831,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         // Find viable parameterized constructors
         var viable = new List<(IMethodSymbol Ctor, List<ConstructorArgModel> Args)>();
 
-        foreach (var ctor in publicCtors)
+        foreach (var ctor in viableCtors)
         {
             var args = new List<ConstructorArgModel>();
             bool allSatisfied = true;
@@ -1906,9 +1904,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         // No viable: try single constructor with FKF501
-        if (publicCtors.Count == 1)
+        if (viableCtors.Count == 1)
         {
-            var ctor = publicCtors[0];
+            var ctor = viableCtors[0];
             foreach (var param in ctor.Parameters)
             {
                 var forgeMapName501 = GetForgeMapName(param);

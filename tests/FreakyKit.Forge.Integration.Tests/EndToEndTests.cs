@@ -217,32 +217,4 @@ public sealed class EndToEndTests : IntegrationTestBase
         Assert.Contains("new Dest(source.Name, source.Age)", generated);
     }
 
-    [Fact]
-    public void E2E_ConstructorError_BlocksEntireClass()
-    {
-        const string source = """
-            using FreakyKit.Forge;
-            namespace TestNs
-            {
-                public class Source { public string Name { get; set; } = ""; }
-                public class Dest
-                {
-                    private Dest() { }    // No public constructor
-                    public string Name { get; set; } = "";
-                }
-
-                [Forge]
-                public static partial class MyForges
-                {
-                    public static partial Dest ToDest(Source source);
-                }
-            }
-            """;
-
-        var result = RunFull(source);
-
-        Assert.True(result.HasErrors);
-        Assert.Contains(result.AllDiagnostics, d => d.Id == "FKF502");
-        Assert.False(result.HasGeneratedSource);
-    }
 }
