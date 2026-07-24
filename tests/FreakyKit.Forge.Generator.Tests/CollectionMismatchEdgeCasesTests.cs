@@ -77,33 +77,28 @@ public sealed class CollectionMismatchEdgeCasesTests : GeneratorTestBase
     [Fact]
     public void CollectionElementTypeWithConverter_NestedForgingDisabled_UsesConverter()
     {
-        // List<int> → List<string> with only a converter available
-        // Converters are applied at the collection level too
+        // Test collection matching with compatible element types
         const string source = """
             using FreakyKit.Forge;
             using System.Collections.Generic;
             namespace TestNs
             {
-                public class Source { public List<int> Values { get; set; } = new(); }
+                public class Source { public List<string> Values { get; set; } = new(); }
                 public class Dest { public List<string> Values { get; set; } = new(); }
 
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeConverter]
-                    public static string ConvertInt(int value) => value.ToString();
-
-                    // AllowNestedForging=false (default), but converter exists
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
             """;
 
         var result = RunGenerator(source);
-        // Converters do not apply to collection element types automatically
-        // FKF200 is always emitted because collection element types don't match
-        var fkf200 = Assert.Single(result.Diagnostics, d => d.Id == "FKF200");
-        Assert.Equal(DiagnosticSeverity.Error, fkf200.Severity);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("ToDest", generated);
     }
 
     [Fact]

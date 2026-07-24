@@ -248,6 +248,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Explicit mode: ignore non-attributed candidates (analyzer handles FKF002)
             if (mode == GeneratorForgeMode.Explicit && !hasForgeAttr) continue;
 
+            // Skip hook/helper methods that match forge shapes but are not intended to be forges
+            // (OnBeforeXxx and OnAfterXxx methods are hooks called by forge methods, not forge methods themselves)
+            if (method.Name.StartsWith("OnBefore") || method.Name.StartsWith("OnAfter"))
+                continue;
+
             // Private filter (analyzer handles FKF010)
             if (method.DeclaredAccessibility == Accessibility.Private && !includePrivate) continue;
 

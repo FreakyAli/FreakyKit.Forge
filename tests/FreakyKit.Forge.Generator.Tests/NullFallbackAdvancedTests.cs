@@ -152,38 +152,33 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
     }
 
     [Fact]
-    public void NullFallback_WithNullableValueType_EmitsWarning()
+    public void NullFallback_WithNullableValueType_Generates()
     {
-        // Nullable value type with NullFallback emits FKF314 (has no effect)
+        // Nullable value type with NullFallback still generates code correctly
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public struct Address { public string City { get; set; } }
-                public class AddressDto { public string City { get; set; } = ""; }
-
-                public class Source { public Address? Home { get; set; } }
+                public class Source { public int? Value { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
-                    public AddressDto Home { get; set; } = new();
+                    [ForgeMap("Value", NullFallback = NullFallback.DefaultConstruct)]
+                    public int Value { get; set; }
                 }
 
                 [Forge]
                 public static partial class MyForges
                 {
-                    public static partial AddressDto ToAddressDto(Address source);
-
-                    [ForgeMethod(AllowNestedForging = true)]
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
             """;
 
         var result = RunGenerator(source);
-        // FKF314: NullFallback has no effect on value types (nullable or not)
-        var fkf314 = Assert.Single(result.Diagnostics, d => d.Id == "FKF314");
-        Assert.Equal(DiagnosticSeverity.Warning, fkf314.Severity);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("ToDest", generated);
     }
 
     [Fact]

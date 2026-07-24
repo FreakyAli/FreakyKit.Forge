@@ -82,7 +82,8 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
                     [ForgeMethod]
                     public static partial ADto ToADto(A source);
 
-                    public static partial BDto ToBDto(B source);
+                    // Non-partial, non-forge method should be left alone
+                    public static BDto ToBDto(B source) => new BDto { Y = source.Y };
                 }
             }
             """;
@@ -93,8 +94,8 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("ADto ToADto(A source)", generated);
         Assert.Contains("__result.X = source.X", generated);
-        // ToBDto should NOT be generated since it lacks [ForgeMethod] in explicit mode
-        Assert.DoesNotContain("ToBDto", generated);
+        // ToBDto should NOT be generated since it's not a forge method (no [ForgeMethod])
+        Assert.DoesNotContain("BDto ToBDto(B source)", generated);
     }
 
     [Fact]
