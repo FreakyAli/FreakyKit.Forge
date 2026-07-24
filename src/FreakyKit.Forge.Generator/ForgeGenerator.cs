@@ -2053,7 +2053,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             foreach (var method in model.Methods)
             {
                 ct.ThrowIfCancellationRequested();
-                GenerateExtensionMethod(sb, method, model.ClassName, indent: methodIndent);
+                // Skip extension method generation for private methods — extension methods must be public
+                if (method.Accessibility != "private")
+                {
+                    GenerateExtensionMethod(sb, method, model.ClassName, indent: methodIndent);
+                }
             }
 
             sb.AppendLine($"{baseIndent}}}");
@@ -3467,6 +3471,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     {
         Accessibility.Public => "public",
         Accessibility.Internal => "internal",
+        Accessibility.Private => "private",
         Accessibility.Protected => "protected",
         Accessibility.ProtectedOrInternal => "protected internal",
         Accessibility.ProtectedAndInternal => "private protected",
