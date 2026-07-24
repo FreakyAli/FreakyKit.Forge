@@ -8,29 +8,27 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
     [Fact]
     public void ForgeUses_DiscoversMethodsFromIncludedClass()
     {
-        // ForgeUses allows referencing other forge classes for nested forging
+        // ForgeUses declares that this class can use methods from included classes
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Address { public string City { get; set; } = ""; }
-                public class AddressDto { public string City { get; set; } = ""; }
-                public class Person { public string Name { get; set; } = ""; }
-                public class PersonDto { public string Name { get; set; } = ""; }
+                public class Inner { public int Value { get; set; } }
+                public class InnerDto { public int Value { get; set; } }
 
                 [Forge]
-                public static partial class AddressForges
+                public static partial class InnerForges
                 {
                     [ForgeMethod]
-                    public static partial AddressDto ToAddressDto(Address source);
+                    public static partial InnerDto ToInnerDto(Inner source);
                 }
 
                 [Forge]
-                [ForgeUses(typeof(AddressForges))]
-                public static partial class PersonForges
+                [ForgeUses(typeof(InnerForges))]
+                public static partial class OuterForges
                 {
                     [ForgeMethod]
-                    public static partial PersonDto ToPersonDto(Person source);
+                    public static partial InnerDto TransformInner(Inner source);
                 }
             }
             """;
@@ -38,7 +36,9 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertGeneratedFiles(result, 2);
-        Assert.Contains("ToPersonDto", generated);
+        // Both forge classes should generate their own methods
+        Assert.Contains("InnerDto ToInnerDto(Inner source)", generated);
+        Assert.Contains("InnerDto TransformInner(Inner source)", generated);
     }
 
     [Fact]
@@ -453,5 +453,43 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+    }
+
+    [Fact]
+    public void ForgeUses_UsesNestedMethodFromIncludedClass()
+    {
+        // Test that nested forging can discover methods from included classes
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Inner { public int Value { get; set; } }
+                public class InnerDto { public int Value { get; set; } }
+                public class Outer { public Inner Data { get; set; } = new(); }
+                public class OuterDto { public InnerDto Data { get; set; } = new(); }
+
+                [Forge]
+                public static partial class InnerForges
+                {
+                    [ForgeMethod]
+                    public static partial InnerDto ToInnerDto(Inner source);
+                }
+
+                [Forge]
+                [ForgeUses(typeof(InnerForges))]
+                public static partial class OuterForges
+                {
+                    [ForgeMethod(AllowNestedForging = true)]
+                    public static partial OuterDto ToOuterDto(Outer source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertGeneratedFiles(result, 2);
+        // Should use the nested method ToInnerDto from InnerForges
+        // The qualified call should be InnerForges.ToInnerDto
+        Assert.Contains("InnerForges.ToInnerDto", generated);
     }
 }

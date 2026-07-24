@@ -87,15 +87,16 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
-    public void Flattening_TwoLevels_CoordinatesLatitude()
+    public void Flattening_SupportsDottedPropertyNames()
     {
-        // Test flattening with two levels of nesting
+        // Flattening with dotted property names maps nested properties
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source  { public string Name { get; set; } = ""; }
-                public class Dest    { public string Name { get; set; } = ""; }
+                public class Address { public string City { get; set; } = ""; }
+                public class Source { public Address Address { get; set; } = new(); }
+                public class Dest { public string AddressCity { get; set; } = ""; }
 
                 [Forge]
                 public static partial class MyForges
@@ -109,8 +110,10 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        // Should generate valid code
-        Assert.Contains("Name", generated);
+        // Verify flattening maps the nested property
+        Assert.Contains("AddressCity", generated);
+        // Should access the nested property with dot notation
+        Assert.Contains("Address", generated);
     }
 
     [Fact]
@@ -319,5 +322,36 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         // Should flatten through 4 levels using null-conditional operators
         Assert.Contains("source.Level1?.Level2?.Level3?.Level4?.Value", generated);
+    }
+
+    [Fact]
+    public void Flattening_DeepWithNullableIntermediates_NonNullableDestination()
+    {
+        // Deep flattening with nullable intermediates and non-nullable destination
+        // Should wrap with null coalescing to handle nullable chain
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class GeoPoint { public string Code { get; set; } = ""; }
+                public class Coordinates { public GeoPoint? Point { get; set; } }
+                public class Address { public Coordinates? Coords { get; set; } }
+                public class Source  { public Address? Address { get; set; } }
+                public class Dest    { public string AddressCoordsPointCode { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowFlattening = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // Should flatten through nullable chain
+        Assert.Contains("source.Address?.Coords?.Point?.Code", generated);
     }
 }

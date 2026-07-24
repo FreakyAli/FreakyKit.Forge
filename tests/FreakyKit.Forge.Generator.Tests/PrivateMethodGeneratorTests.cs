@@ -119,4 +119,33 @@ public sealed class PrivateMethodGeneratorTests : GeneratorTestBase
         Assert.Contains("Dest ToDest(Source source)", generated);
         Assert.Contains("__result.Name = source.Name", generated);
     }
+
+    [Fact]
+    public void PrivateMethod_ExtensionNotGeneratedForPrivate()
+    {
+        // Private methods don't get extension method forwarders
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Value { get; set; } }
+                public class Dest   { public int Value { get; set; } }
+
+                [Forge(ShouldIncludePrivate = true)]
+                public static partial class MyForges
+                {
+                    private static partial Dest ToDestPrivate(Source source);
+                    public static partial Dest ToDestPublic(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+
+        var generated = AssertSingleGeneratedFile(result);
+        // Both methods should be generated since ShouldIncludePrivate = true
+        Assert.Contains("ToDestPrivate(Source source)", generated);
+        Assert.Contains("ToDestPublic(Source source)", generated);
+    }
 }

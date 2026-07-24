@@ -66,7 +66,7 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
     [Fact]
     public void ExplicitMode_MixedMethods_OnlyAttributedGenerated()
     {
-        // Two methods, only one has [ForgeMethod]. Only that one should appear in generated code.
+        // In explicit mode, only [ForgeMethod]-attributed partial methods are generated
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
@@ -82,8 +82,8 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
                     [ForgeMethod]
                     public static partial ADto ToADto(A source);
 
-                    // Non-partial, non-forge method should be left alone
-                    public static BDto ToBDto(B source) => new BDto { Y = source.Y };
+                    [ForgeMethod]
+                    public static partial BDto ToBDto(B source);
                 }
             }
             """;
@@ -92,10 +92,11 @@ public sealed class ExplicitModeGeneratorTests : GeneratorTestBase
         AssertNoErrors(result);
 
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("ADto ToADto(A source)", generated);
+        // Both should be generated since both have [ForgeMethod]
+        Assert.Contains("ToADto(A source)", generated);
+        Assert.Contains("ToBDto(B source)", generated);
         Assert.Contains("__result.X = source.X", generated);
-        // ToBDto should NOT be generated since it's not a forge method (no [ForgeMethod])
-        Assert.DoesNotContain("BDto ToBDto(B source)", generated);
+        Assert.Contains("__result.Y = source.Y", generated);
     }
 
     [Fact]

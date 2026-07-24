@@ -75,16 +75,16 @@ public sealed class CollectionMismatchEdgeCasesTests : GeneratorTestBase
     }
 
     [Fact]
-    public void CollectionElementTypeWithConverter_NestedForgingDisabled_UsesConverter()
+    public void CollectionWithMatchingElementTypes_Succeeds()
     {
-        // Test collection matching with compatible element types
+        // Collections with matching element types should map successfully
         const string source = """
             using FreakyKit.Forge;
             using System.Collections.Generic;
             namespace TestNs
             {
-                public class Source { public List<string> Values { get; set; } = new(); }
-                public class Dest { public List<string> Values { get; set; } = new(); }
+                public class Source { public List<int> Values { get; set; } = new(); }
+                public class Dest { public List<int> Values { get; set; } = new(); }
 
                 [Forge]
                 public static partial class MyForges
@@ -98,7 +98,36 @@ public sealed class CollectionMismatchEdgeCasesTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("ToDest", generated);
+        // Should successfully map the collection
+        Assert.Contains("Values", generated);
+    }
+
+    [Fact]
+    public void CollectionElementTypeMismatch_NoNestedForging_EmitsError()
+    {
+        // When collection element types don't match and AllowNestedForging is false, FKF200 is emitted
+        const string source = """
+            using FreakyKit.Forge;
+            using System.Collections.Generic;
+            namespace TestNs
+            {
+                public class Source { public List<int> Ids { get; set; } = new(); }
+                public class Dest { public List<string> Ids { get; set; } = new(); }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        // Should emit FKF200: incompatible types
+        var fkf200 = result.Diagnostics.FirstOrDefault(d => d.Id == "FKF200");
+        Assert.NotNull(fkf200);
+        Assert.Equal(DiagnosticSeverity.Error, fkf200.Severity);
     }
 
     [Fact]

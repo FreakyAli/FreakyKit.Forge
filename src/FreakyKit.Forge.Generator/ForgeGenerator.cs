@@ -564,6 +564,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             flatteningPath ?? flattenExpr.Replace($"{srcParamName}.", "")));
                     }
 
+                    // If the flattened expression has nullable intermediates (contains `?.`)
+                    // but the destination type is non-nullable, wrap with null coalescing
+                    string finalFlattenExpr = flattenExpr;
+                    if (flattenExpr.Contains("?.") && destMember.Type.NullableAnnotation == NullableAnnotation.NotAnnotated)
+                    {
+                        // Coalesce to default value for the destination type
+                        finalFlattenExpr = $"({flattenExpr}) ?? default!";
+                    }
+
                     // Expression-tree form: convert null-conditional (`source.Address?.City`) to a
                     // ternary (`source.Address == null ? null : source.Address.City`) because `?.`
                     // isn't allowed in expression-tree lambdas. Value-type intermediates have no `?.`
@@ -583,7 +592,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     assignments.Add(new MemberAssignmentModel(
                         destMemberName: destMember.Name,
-                        sourceExpression: flattenExpr,
+                        sourceExpression: finalFlattenExpr,
                         isInitOnly: initOnly,
                         expressionAssignment: exprFlatten));
                     continue;
@@ -2654,13 +2663,16 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         {
             if (member is IMethodSymbol m &&
                 m.IsStatic &&
-                m.IsPartialDefinition &&
                 m.Parameters.Length == 1 &&
                 m.Parameters[0].Type.ToDisplayString() == sourceDisplay &&
                 m.ReturnType.ToDisplayString() == destDisplay)
             {
-                methodName = m.Name;
-                return true;
+                // Check if it's a partial method (either declaration or has an implementation part)
+                if (m.IsPartialDefinition || m.PartialDefinitionPart != null)
+                {
+                    methodName = m.Name;
+                    return true;
+                }
             }
         }
 
@@ -2680,19 +2692,22 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         if (member is IMethodSymbol m &&
                             m.IsStatic &&
-                            m.IsPartialDefinition &&
                             m.Parameters.Length == 1 &&
                             m.Parameters[0].Type.ToDisplayString() == sourceDisplay &&
                             m.ReturnType.ToDisplayString() == destDisplay)
                         {
-                            if (firstMatch == null)
+                            // Check if it's a partial method (either declaration or has an implementation part)
+                            if (m.IsPartialDefinition || m.PartialDefinitionPart != null)
                             {
-                                firstMatch = m.Name;
-                                firstMatchFqn = includedFqn;
-                            }
-                            else
-                            {
-                                shadowedMethods.Add((includedFqn, m.Name));
+                                if (firstMatch == null)
+                                {
+                                    firstMatch = m.Name;
+                                    firstMatchFqn = includedFqn;
+                                }
+                                else
+                                {
+                                    shadowedMethods.Add((includedFqn, m.Name));
+                                }
                             }
                         }
                     }
@@ -2714,9 +2729,23 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 }
             }
 
-            if (firstMatch != null)
+            if (firstMatch != null && firstMatchFqn != null)
             {
-                methodName = firstMatch;
+                // Qualify the method name with the class name if it's from an included class
+                // The included class should be in the same namespace or accessible from the current class
+                var includedClass = compilation.GetTypeByMetadataName(firstMatchFqn);
+                if (includedClass != null)
+                {
+                    // Use the short name of the class from the FQN (last part after the last dot)
+                    var shortClassName = firstMatchFqn.Contains(".")
+                        ? firstMatchFqn.Substring(firstMatchFqn.LastIndexOf(".") + 1)
+                        : firstMatchFqn;
+                    methodName = $"{shortClassName}.{firstMatch}";
+                }
+                else
+                {
+                    methodName = firstMatch;
+                }
                 return true;
             }
         }
