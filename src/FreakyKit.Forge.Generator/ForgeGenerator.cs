@@ -4125,6 +4125,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     if (typeValue.Value is INamedTypeSymbol includedType)
                     {
                         var includedFqn = includedType.ToDisplayString();
+                        var forgeClassFqn = forgeClass.ToDisplayString();
 
                         // Check if included class exists and is a forge
                         var includedSymbol = compilation.GetTypeByMetadataName(includedFqn);
@@ -4149,13 +4150,23 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             continue;
                         }
 
-                        // Check for self-include
-                        if (includedFqn == forgeClass.ToDisplayString())
+                        // Check for direct self-include
+                        if (includedFqn == forgeClassFqn)
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.CircularForgeIncludes,
                                 forgeClass.Locations[0],
-                                $"{forgeClass.Name} -> {forgeClass.Name}"));
+                                $"{forgeClass.Name} → {forgeClass.Name}"));
+                            continue;
+                        }
+
+                        // Check for transitive cycles (A uses B uses A, etc.)
+                        if (DetectCircularForgeUses(forgeClassFqn, includedFqn, compilation, new HashSet<string>(), out var cycle))
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.CircularForgeIncludes,
+                                forgeClass.Locations[0],
+                                string.Join(" → ", cycle)));
                             continue;
                         }
 
@@ -4166,6 +4177,72 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         return (includedFqns, diagnostics);
+    }
+
+    /// <summary>
+    /// Detects transitive cycles in ForgeUses relationships.
+    /// Returns true if target's ForgeUses includes origin (directly or transitively).
+    /// </summary>
+    private static bool DetectCircularForgeUses(
+        string origin,
+        string target,
+        Microsoft.CodeAnalysis.Compilation compilation,
+        HashSet<string> visited,
+        out List<string> cycle)
+    {
+        cycle = new List<string>();
+
+        if (visited.Contains(target))
+            return false;
+
+        visited.Add(target);
+
+        var targetSymbol = compilation.GetTypeByMetadataName(target);
+        if (targetSymbol == null)
+            return false;
+
+        var forgeUsesAttr = targetSymbol.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeUsesAttribute");
+
+        if (forgeUsesAttr == null)
+            return false;
+
+        // Check target's ForgeUses for origin
+        if (forgeUsesAttr.ConstructorArguments.Length > 0)
+        {
+            var arg = forgeUsesAttr.ConstructorArguments[0];
+            if (arg.Kind == TypedConstantKind.Array)
+            {
+                foreach (var typeValue in arg.Values)
+                {
+                    if (typeValue.Value is INamedTypeSymbol includedType)
+                    {
+                        var includedFqn = includedType.ToDisplayString();
+
+                        // Found direct back-edge to origin
+                        if (includedFqn == origin)
+                        {
+                            cycle.Add(origin);
+                            cycle.Add(target);
+                            cycle.Add(origin);
+                            return true;
+                        }
+
+                        // Recurse to check transitive relationships
+                        if (DetectCircularForgeUses(origin, includedFqn, compilation, visited, out var innerCycle))
+                        {
+                            cycle = innerCycle;
+                            // Insert current node into the path
+                            if (cycle.Count > 0 && cycle[0] == origin)
+                                cycle.Insert(1, target);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
