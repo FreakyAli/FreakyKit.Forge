@@ -416,6 +416,45 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             }
         }
 
+        // ── Dictionary mapping detection (dict ↔ object) ────────────────────────
+        if (!isUpdate)
+        {
+            var rawSrc = method.Parameters[0].Type;
+            var rawDest = method.ReturnType;
+            bool srcIsDict = GetDictionaryKeyValueTypes(rawSrc, out var srcDictKey, out var srcDictVal);
+            bool destIsDict = GetDictionaryKeyValueTypes(rawDest, out var destDictKey, out var destDictVal);
+
+            // Dict → Object
+            if (srcIsDict && !destIsDict && rawDest is INamedTypeSymbol destObj)
+            {
+                if (srcDictKey?.ToDisplayString() != "string")
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.DictionaryKeyTypeNotString,
+                        GetSafeLocation(method),
+                        rawSrc.ToDisplayString(), srcDictKey?.ToDisplayString() ?? "unknown"));
+                    return (null, diagnostics);
+                }
+                return ExtractDictionaryToObjectMethod(method, forgeClass, rawSrc, destObj,
+                    srcDictVal!, srcParamName, diagnostics, compilation, includedForgeClasses);
+            }
+
+            // Object → Dict
+            if (!srcIsDict && destIsDict && rawSrc is INamedTypeSymbol srcObj)
+            {
+                if (destDictKey?.ToDisplayString() != "string")
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.DictionaryKeyTypeNotString,
+                        GetSafeLocation(method),
+                        rawDest.ToDisplayString(), destDictKey?.ToDisplayString() ?? "unknown"));
+                    return (null, diagnostics);
+                }
+                return ExtractObjectToDictionaryMethod(method, forgeClass, srcObj, rawDest,
+                    destDictVal!, srcParamName, diagnostics, compilation, includedForgeClasses);
+            }
+        }
+
         INamedTypeSymbol? sourceType;
         INamedTypeSymbol? destType;
         string destParameterName;
@@ -575,15 +614,23 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     // Expression-tree form: convert null-conditional (`source.Address?.City`) to a
                     // ternary (`source.Address == null ? null : source.Address.City`) because `?.`
-                    // isn't allowed in expression-tree lambdas. Value-type intermediates have no `?.`
-                    // and can be emitted as-is.
+                    // isn't allowed in expression-tree lambdas. For non-nullable destinations, coalesce to default.
+                    // Value-type intermediates have no `?.` and can be emitted as-is.
                     string exprFlatten;
                     var qIdx = flattenExpr.IndexOf("?.");
                     if (qIdx >= 0)
                     {
                         var prefix = flattenExpr.Substring(0, qIdx);
                         var suffix = flattenExpr.Substring(qIdx + 2);
-                        exprFlatten = $"{prefix} == null ? null : {prefix}.{suffix}";
+                        bool isNonNullableDest = destMember.Type.NullableAnnotation == NullableAnnotation.NotAnnotated;
+                        if (isNonNullableDest)
+                        {
+                            exprFlatten = $"{prefix} == null ? default! : {prefix}.{suffix} ?? default!";
+                        }
+                        else
+                        {
+                            exprFlatten = $"{prefix} == null ? null : {prefix}.{suffix}";
+                        }
                     }
                     else
                     {
@@ -1426,6 +1473,184 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return (model, diagnostics);
     }
 
+    private static (ForgeMethodModel? Model, List<Diagnostic> Diagnostics) ExtractDictionaryToObjectMethod(
+        IMethodSymbol method,
+        INamedTypeSymbol forgeClass,
+        ITypeSymbol sourceDictType,
+        INamedTypeSymbol destType,
+        ITypeSymbol srcDictVal,
+        string srcParamName,
+        List<Diagnostic> diagnostics,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null)
+    {
+        var accessibility = AccessibilityToString(method.DeclaredAccessibility);
+        var srcShort = BuildShortTypeName(sourceDictType);
+        var destShort = destType.Name;
+
+        // Get destination members (properties/fields)
+        var destMembers = CollectMembers(destType, includeFields: false, null, null, isSourceSide: false, forgeAssembly: forgeClass.ContainingAssembly);
+
+        // Get dictionary mapping policies
+        var dictAttr = GetForgeDictionaryAttribute(method);
+        var (keyCasing, missingKey, nullValue) = GetDictionaryPolicies(dictAttr);
+
+        var location = GetSafeLocation(method);
+        var lineNumber = GetSafeLineNumber(method);
+
+        // For now, store dest member info in the assignments list even though we'll generate code differently
+        // This allows GenerateMethodBody to access the destination member info
+        var assignments = new System.Collections.Generic.List<MemberAssignmentModel>();
+        foreach (var kvp in destMembers)
+        {
+            var propertyName = kvp.Value.Name; // Use actual property name, not lowercased key
+            var propertyType = kvp.Value.Type.ToDisplayString(); // Store type for casting during code generation
+            assignments.Add(new MemberAssignmentModel(
+                destMemberName: propertyName,
+                sourceExpression: $"dict[\"{propertyName}\"]", // Placeholder; actual code generation in GenerateMethodBody
+                isInitOnly: IsInitOnlyMember(destType, propertyName),
+                sourceMemberType: propertyType)); // Store type info for casting
+        }
+
+        var dictValueTypeString = srcDictVal?.ToDisplayString();
+        var model = new ForgeMethodModel(
+            methodName: method.Name,
+            accessibility: accessibility,
+            sourceTypeFqn: sourceDictType.ToDisplayString(),
+            sourceTypeShortName: srcShort,
+            sourceParameterName: srcParamName,
+            destTypeFqn: destType.ToDisplayString(),
+            destTypeShortName: destShort,
+            construction: new ConstructionModel(ConstructionKind.Parameterless, new System.Collections.Generic.List<ConstructorArgModel>()),
+            assignments: assignments,
+            nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
+            methodKind: ForgeMethodKind.DictionaryToObject,
+            sourceFilePath: location?.SourceTree?.FilePath,
+            sourceLineNumber: lineNumber,
+            dictKeyCasingPolicy: keyCasing,
+            dictMissingKeyPolicy: missingKey,
+            dictNullValuePolicy: nullValue,
+            dictValueType: dictValueTypeString);
+
+        return (model, diagnostics);
+    }
+
+    private static (ForgeMethodModel? Model, List<Diagnostic> Diagnostics) ExtractObjectToDictionaryMethod(
+        IMethodSymbol method,
+        INamedTypeSymbol forgeClass,
+        INamedTypeSymbol sourceType,
+        ITypeSymbol destDictType,
+        ITypeSymbol destDictVal,
+        string srcParamName,
+        List<Diagnostic> diagnostics,
+        Microsoft.CodeAnalysis.Compilation? compilation = null,
+        IReadOnlyList<string>? includedForgeClasses = null)
+    {
+        var accessibility = AccessibilityToString(method.DeclaredAccessibility);
+        var srcShort = sourceType.Name;
+        var destShort = BuildShortTypeName(destDictType);
+
+        // Get source members (properties/fields)
+        var sourceMembers = CollectMembers(sourceType, includeFields: false, method, null, isSourceSide: true, forgeAssembly: forgeClass.ContainingAssembly);
+
+        // Get dictionary mapping policies
+        var dictAttr = GetForgeDictionaryAttribute(method);
+        var (keyCasing, missingKey, nullValue) = GetDictionaryPolicies(dictAttr);
+
+        var location = GetSafeLocation(method);
+        var lineNumber = GetSafeLineNumber(method);
+
+        // Store source member info in the assignments list
+        var assignments = new System.Collections.Generic.List<MemberAssignmentModel>();
+        foreach (var kvp in sourceMembers)
+        {
+            var propertyName = kvp.Value.Name; // Use actual property name, not lowercased key
+            assignments.Add(new MemberAssignmentModel(
+                destMemberName: propertyName, // Using destMemberName to store the property name as the dict key
+                sourceExpression: $"{srcParamName}.{propertyName}", // Property accessor
+                isInitOnly: false));
+        }
+
+        var model = new ForgeMethodModel(
+            methodName: method.Name,
+            accessibility: accessibility,
+            sourceTypeFqn: sourceType.ToDisplayString(),
+            sourceTypeShortName: srcShort,
+            sourceParameterName: srcParamName,
+            destTypeFqn: destDictType.ToDisplayString(),
+            destTypeShortName: destShort,
+            construction: new ConstructionModel(ConstructionKind.Parameterless, new System.Collections.Generic.List<ConstructorArgModel>()),
+            assignments: assignments,
+            nestedMethods: new System.Collections.Generic.List<ForgeMethodModel>(),
+            methodKind: ForgeMethodKind.ObjectToDictionary,
+            sourceFilePath: location?.SourceTree?.FilePath,
+            sourceLineNumber: lineNumber,
+            dictKeyCasingPolicy: keyCasing,
+            dictMissingKeyPolicy: missingKey,
+            dictNullValuePolicy: nullValue);
+
+        return (model, diagnostics);
+    }
+
+    private static string ApplyKeyCase(string propertyName, int keyCasingPolicy)
+    {
+        return keyCasingPolicy switch
+        {
+            0 => propertyName, // Exact
+            1 => propertyName.ToLowerInvariant(), // IgnoreCase
+            2 => ToCamelCase(propertyName), // CamelCase
+            3 => ToSnakeCase(propertyName), // SnakeCase
+            _ => propertyName
+        };
+    }
+
+    private static string ToCamelCase(string str)
+    {
+        if (string.IsNullOrEmpty(str) || char.IsLower(str[0]))
+            return str;
+        return char.ToLowerInvariant(str[0]) + str.Substring(1);
+    }
+
+    private static string ToSnakeCase(string str)
+    {
+        var sb = new StringBuilder();
+        for (int i = 0; i < str.Length; i++)
+        {
+            if (char.IsUpper(str[i]) && i > 0)
+                sb.Append('_');
+            sb.Append(char.ToLowerInvariant(str[i]));
+        }
+        return sb.ToString();
+    }
+
+    private static string GenerateParseExpression(string targetType, string stringVarName)
+    {
+        // For string dictionary values, generate appropriate parsing code
+        return targetType switch
+        {
+            // Primitives
+            "int" or "System.Int32" => $"int.Parse({stringVarName})",
+            "long" or "System.Int64" => $"long.Parse({stringVarName})",
+            "short" or "System.Int16" => $"short.Parse({stringVarName})",
+            "byte" or "System.Byte" => $"byte.Parse({stringVarName})",
+            "uint" or "System.UInt32" => $"uint.Parse({stringVarName})",
+            "ulong" or "System.UInt64" => $"ulong.Parse({stringVarName})",
+            "ushort" or "System.UInt16" => $"ushort.Parse({stringVarName})",
+            "sbyte" or "System.SByte" => $"sbyte.Parse({stringVarName})",
+            "double" or "System.Double" => $"double.Parse({stringVarName}, System.Globalization.CultureInfo.InvariantCulture)",
+            "float" or "System.Single" => $"float.Parse({stringVarName}, System.Globalization.CultureInfo.InvariantCulture)",
+            "decimal" or "System.Decimal" => $"decimal.Parse({stringVarName}, System.Globalization.CultureInfo.InvariantCulture)",
+            "bool" or "System.Boolean" => $"bool.Parse({stringVarName})",
+            "string" or "System.String" => stringVarName,
+            // DateTime
+            "System.DateTime" => $"System.DateTime.Parse({stringVarName}, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None)",
+            // Guid
+            "System.Guid" => $"System.Guid.Parse({stringVarName})",
+            // For enums and other types, we'll handle generically
+            _ => null!
+        };
+    }
+
     private static string GetCSharpKeyword(ITypeSymbol t) => t.SpecialType switch
     {
         SpecialType.System_Boolean => "bool",
@@ -1861,7 +2086,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var diagnostics = new List<Diagnostic>();
         var sourceName = sourceType.Name;
 
-        var viableCtors = destType.InstanceConstructors.ToList();
+        // Filter to constructors accessible from generated code (internal or public)
+        var viableCtors = destType.InstanceConstructors
+            .Where(c => c.DeclaredAccessibility >= Accessibility.Internal)
+            .ToList();
 
         if (viableCtors.Count == 0)
         {
@@ -2140,6 +2368,165 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 sb.AppendLine($"{indent}        __result[__kvp.Key] = {valueTransform};");
                 sb.AppendLine($"{indent}    return __result;");
             }
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine();
+            return;
+        }
+
+        if (method.MethodKind == ForgeMethodKind.DictionaryToObject)
+        {
+            sb.AppendLine($"{indent}/// <summary>Converts a dictionary to <see cref=\"{method.DestTypeShortName}\"/>. Auto-generated by FreakyKit.Forge.</summary>");
+            sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
+            sb.AppendLine($"{indent}[DebuggerStepThrough]");
+            if (!string.IsNullOrEmpty(method.SourceFilePath) && method.SourceLineNumber > 0)
+                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath?.Replace("\\", "\\\\")}\"");
+            sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
+            sb.AppendLine($"{indent}#line default");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    if ({method.SourceParameterName} == null) return null;");
+            sb.AppendLine($"{indent}    var __result = new {method.DestTypeShortName}();");
+
+            // For each assignment (destination member), generate dict lookup code
+            var isStringDict = method.DictValueType == "string" || method.DictValueType == "System.String";
+            foreach (var assignment in method.Assignments)
+            {
+                var dictKey = ApplyKeyCase(assignment.DestMemberName, method.DictKeyCasingPolicy);
+                var varName = $"__val_{assignment.DestMemberName}";
+                var keyCasing = method.DictKeyCasingPolicy;
+                var missingKeyPolicy = method.DictMissingKeyPolicy;
+                var propType = assignment.SourceMemberType;
+
+                // For string dicts, try to parse; for object dicts, cast
+                string assignExpr;
+                if (isStringDict && !string.IsNullOrEmpty(propType) && propType != "string" && propType != "System.String")
+                {
+                    // Try to generate parse expression
+                    var parseExpr = GenerateParseExpression(propType, varName);
+                    assignExpr = parseExpr ?? varName; // Fallback to direct assignment if no parser
+                }
+                else
+                {
+                    // Object dict or string type - use cast
+                    assignExpr = !string.IsNullOrEmpty(propType)
+                        ? $"({propType}){varName}"
+                        : varName;
+                }
+
+                if (keyCasing == 0) // Exact
+                {
+                    // Exact match: TryGetValue with exact key
+                    if (missingKeyPolicy == 0) // Throw
+                    {
+                        // Throw if key not found
+                        sb.AppendLine($"{indent}    if (!{method.SourceParameterName}.TryGetValue(\"{dictKey}\", out var {varName}))");
+                        sb.AppendLine($"{indent}        throw new KeyNotFoundException(\"{dictKey}\");");
+                        sb.AppendLine($"{indent}    __result.{assignment.DestMemberName} = {assignExpr};");
+                    }
+                    else if (missingKeyPolicy == 1) // UseDefault
+                    {
+                        // Use default if key not found
+                        sb.AppendLine($"{indent}    if ({method.SourceParameterName}.TryGetValue(\"{dictKey}\", out var {varName}))");
+                        sb.AppendLine($"{indent}        __result.{assignment.DestMemberName} = {assignExpr};");
+                        // else: leave at default (already initialized)
+                    }
+                    else if (missingKeyPolicy == 2) // Skip
+                    {
+                        // Skip if key not found (same as UseDefault for Exact match)
+                        sb.AppendLine($"{indent}    if ({method.SourceParameterName}.TryGetValue(\"{dictKey}\", out var {varName}))");
+                        sb.AppendLine($"{indent}        __result.{assignment.DestMemberName} = {assignExpr};");
+                    }
+                    else if (missingKeyPolicy == 3) // ReturnNull
+                    {
+                        // Assign null if key not found (or use default if non-nullable)
+                        var isNullable = propType?.EndsWith("?") == true || propType == "object";
+                        if (isNullable)
+                        {
+                            sb.AppendLine($"{indent}    __result.{assignment.DestMemberName} = {method.SourceParameterName}.TryGetValue(\"{dictKey}\", out var {varName}) ? {assignExpr} : null;");
+                        }
+                        else
+                        {
+                            // For non-nullable, use default
+                            sb.AppendLine($"{indent}    if ({method.SourceParameterName}.TryGetValue(\"{dictKey}\", out var {varName}))");
+                            sb.AppendLine($"{indent}        __result.{assignment.DestMemberName} = {assignExpr};");
+                        }
+                    }
+                }
+                else // IgnoreCase, CamelCase, or SnakeCase
+                {
+                    // Case-insensitive or transformed key matching
+                    sb.AppendLine($"{indent}    var __key_{assignment.DestMemberName} = {method.SourceParameterName}.Keys.FirstOrDefault(k => string.Equals(k, \"{dictKey}\", StringComparison.OrdinalIgnoreCase));");
+
+                    if (missingKeyPolicy == 0) // Throw
+                    {
+                        sb.AppendLine($"{indent}    if (__key_{assignment.DestMemberName} == null)");
+                        sb.AppendLine($"{indent}        throw new KeyNotFoundException(\"{dictKey}\");");
+                        sb.AppendLine($"{indent}    {method.SourceParameterName}.TryGetValue(__key_{assignment.DestMemberName}, out var {varName});");
+                        sb.AppendLine($"{indent}    __result.{assignment.DestMemberName} = {assignExpr};");
+                    }
+                    else if (missingKeyPolicy == 1 || missingKeyPolicy == 2) // UseDefault or Skip
+                    {
+                        sb.AppendLine($"{indent}    if (__key_{assignment.DestMemberName} != null && {method.SourceParameterName}.TryGetValue(__key_{assignment.DestMemberName}, out var {varName}))");
+                        sb.AppendLine($"{indent}        __result.{assignment.DestMemberName} = {assignExpr};");
+                    }
+                    else if (missingKeyPolicy == 3) // ReturnNull
+                    {
+                        var isNullable = propType?.EndsWith("?") == true || propType == "object";
+                        if (isNullable)
+                        {
+                            sb.AppendLine($"{indent}    if (__key_{assignment.DestMemberName} != null && {method.SourceParameterName}.TryGetValue(__key_{assignment.DestMemberName}, out var {varName}))");
+                            sb.AppendLine($"{indent}        __result.{assignment.DestMemberName} = {assignExpr};");
+                            sb.AppendLine($"{indent}    else");
+                            sb.AppendLine($"{indent}        __result.{assignment.DestMemberName} = null;");
+                        }
+                        else
+                        {
+                            sb.AppendLine($"{indent}    if (__key_{assignment.DestMemberName} != null && {method.SourceParameterName}.TryGetValue(__key_{assignment.DestMemberName}, out var {varName}))");
+                            sb.AppendLine($"{indent}        __result.{assignment.DestMemberName} = {assignExpr};");
+                        }
+                    }
+                }
+            }
+
+            sb.AppendLine($"{indent}    return __result;");
+            sb.AppendLine($"{indent}}}");
+            sb.AppendLine();
+            return;
+        }
+
+        if (method.MethodKind == ForgeMethodKind.ObjectToDictionary)
+        {
+            sb.AppendLine($"{indent}/// <summary>Converts <paramref name=\"{method.SourceParameterName}\"/> to a dictionary. Auto-generated by FreakyKit.Forge.</summary>");
+            sb.AppendLine($"{indent}[GeneratedCode(\"FreakyKit.Forge.Generator\", \"1.0.0\")]");
+            sb.AppendLine($"{indent}[DebuggerStepThrough]");
+            if (!string.IsNullOrEmpty(method.SourceFilePath) && method.SourceLineNumber > 0)
+                sb.AppendLine($"{indent}#line {method.SourceLineNumber} \"{method.SourceFilePath?.Replace("\\", "\\\\")}\"");
+            sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
+            sb.AppendLine($"{indent}#line default");
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    if ({method.SourceParameterName} == null) return null;");
+            sb.AppendLine($"{indent}    var __result = new {method.DestTypeShortName}();");
+
+            // For each source member, add it to the dictionary
+            foreach (var assignment in method.Assignments)
+            {
+                var dictKey = ApplyKeyCase(assignment.DestMemberName, method.DictKeyCasingPolicy);
+                var nullValuePolicy = method.DictNullValuePolicy;
+
+                if (nullValuePolicy == 0) // Include
+                {
+                    // Always include, even null
+                    sb.AppendLine($"{indent}    __result[\"{dictKey}\"] = {assignment.SourceExpression};");
+                }
+                else if (nullValuePolicy == 1) // Skip
+                {
+                    // Skip if null
+                    sb.AppendLine($"{indent}    var __val_{assignment.DestMemberName} = {assignment.SourceExpression};");
+                    sb.AppendLine($"{indent}    if (__val_{assignment.DestMemberName} != null)");
+                    sb.AppendLine($"{indent}        __result[\"{dictKey}\"] = __val_{assignment.DestMemberName};");
+                }
+            }
+
+            sb.AppendLine($"{indent}    return __result;");
             sb.AppendLine($"{indent}}}");
             sb.AppendLine();
             return;
@@ -2731,16 +3118,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             if (firstMatch != null && firstMatchFqn != null)
             {
-                // Qualify the method name with the class name if it's from an included class
-                // The included class should be in the same namespace or accessible from the current class
+                // Qualify the method name with the fully qualified class name for included classes
                 var includedClass = compilation.GetTypeByMetadataName(firstMatchFqn);
                 if (includedClass != null)
                 {
-                    // Use the short name of the class from the FQN (last part after the last dot)
-                    var shortClassName = firstMatchFqn.Contains(".")
-                        ? firstMatchFqn.Substring(firstMatchFqn.LastIndexOf(".") + 1)
-                        : firstMatchFqn;
-                    methodName = $"{shortClassName}.{firstMatch}";
+                    // Use fully qualified name to handle cross-namespace scenarios
+                    var fullyQualifiedClassName = includedClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                    methodName = $"{fullyQualifiedClassName}.{firstMatch}";
                 }
                 else
                 {
@@ -3436,6 +3820,34 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     {
         return method.GetAttributes()
             .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeMethodAttribute");
+    }
+
+    private static AttributeData? GetForgeDictionaryAttribute(IMethodSymbol method)
+    {
+        return method.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeDictionaryAttribute");
+    }
+
+    private static (int KeyCasing, int MissingKey, int NullValue) GetDictionaryPolicies(AttributeData? attr)
+    {
+        int keyCasing = 0; // KeyCasingPolicy.Exact
+        int missingKey = 0; // MissingKeyPolicy.Throw
+        int nullValue = 0; // NullValuePolicy.Include
+
+        if (attr != null)
+        {
+            foreach (var namedArg in attr.NamedArguments)
+            {
+                if (namedArg.Key == "KeyCasing" && namedArg.Value.Value is int kc)
+                    keyCasing = kc;
+                else if (namedArg.Key == "MissingKey" && namedArg.Value.Value is int mk)
+                    missingKey = mk;
+                else if (namedArg.Key == "NullValue" && namedArg.Value.Value is int nv)
+                    nullValue = nv;
+            }
+        }
+
+        return (keyCasing, missingKey, nullValue);
     }
 
     private static bool HasImplementationBody(IMethodSymbol method, System.Threading.CancellationToken ct)

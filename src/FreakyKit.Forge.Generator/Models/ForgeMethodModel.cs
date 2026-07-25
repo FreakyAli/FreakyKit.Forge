@@ -49,6 +49,26 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
     /// </summary>
     public string ExpressionPropertyName { get; }
 
+    /// <summary>
+    /// For DictionaryToObject/ObjectToDictionary: Key casing policy (0=Exact, 1=IgnoreCase, 2=CamelCase, 3=SnakeCase).
+    /// </summary>
+    public int DictKeyCasingPolicy { get; }
+
+    /// <summary>
+    /// For DictionaryToObject: Missing key policy (0=Throw, 1=UseDefault, 2=Skip, 3=ReturnNull).
+    /// </summary>
+    public int DictMissingKeyPolicy { get; }
+
+    /// <summary>
+    /// For ObjectToDictionary: Null value policy (0=Include, 1=Skip).
+    /// </summary>
+    public int DictNullValuePolicy { get; }
+
+    /// <summary>
+    /// For DictionaryToObject: The value type of the source dictionary ("string" or "object"). Null if not a dict mapping.
+    /// </summary>
+    public string? DictValueType { get; }
+
     public ForgeMethodModel(
         string methodName,
         string accessibility,
@@ -69,7 +89,11 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
         string? collectionProjectExpression = null,
         string? concreteDictInstantiationName = null,
         bool generateExpression = false,
-        string? expressionPropertyName = null)
+        string? expressionPropertyName = null,
+        int dictKeyCasingPolicy = 0,
+        int dictMissingKeyPolicy = 0,
+        int dictNullValuePolicy = 0,
+        string? dictValueType = null)
     {
         MethodName = methodName;
         Accessibility = accessibility;
@@ -91,6 +115,10 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
         ConcreteDictInstantiationName = concreteDictInstantiationName;
         GenerateExpression = generateExpression;
         ExpressionPropertyName = expressionPropertyName ?? $"{methodName}Expression";
+        DictKeyCasingPolicy = dictKeyCasingPolicy;
+        DictMissingKeyPolicy = dictMissingKeyPolicy;
+        DictNullValuePolicy = dictNullValuePolicy;
+        DictValueType = dictValueType;
     }
 
     public bool Equals(ForgeMethodModel other)

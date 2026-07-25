@@ -969,4 +969,32 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "Flattening is limited to 10 levels of nesting to prevent unbounded recursive traversal. Restructure the source type hierarchy to be less deeply nested, or use nested forging instead of flattening for this member.");
 
+    public static readonly DiagnosticDescriptor DictionaryKeyTypeNotString = new(
+        id: "FKF700",
+        title: "Dictionary key type is not string",
+        messageFormat: "Dictionary type '{0}' has key type '{1}'. Only Dictionary<string, T> is supported; non-string keys are not supported.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Dictionary mapping only supports string keys to enable flexible key-matching policies (IgnoreCase, CamelCase, etc.). Dictionaries with non-string keys cannot be used in forge methods.");
+
+    public static readonly DiagnosticDescriptor UnsupportedDictionaryValueType = new(
+        id: "FKF701",
+        title: "Unsupported dictionary value type",
+        messageFormat: "Dictionary value type '{0}' is not supported for member '{1}'. Complex types without custom converters, collections, and nested objects require explicit forging.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Dictionary mapping supports primitive types, enums, nullable types, and custom converters, but not complex types or collections without explicit mapping.");
+
+    public static readonly DiagnosticDescriptor ReturnNullOnNonNullableType = new(
+        id: "FKF702",
+        title: "MissingKeyPolicy.ReturnNull on non-nullable type",
+        messageFormat: "Member '{0}' has type '{1}' (non-nullable), but MissingKeyPolicy is set to ReturnNull. ReturnNull only applies to nullable types.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "ReturnNull policy cannot be used with non-nullable destination types. Change to UseDefault, Skip, or Throw, or make the type nullable.");
+
 }
+
