@@ -566,39 +566,6 @@ Critical correctness bugs and usability improvements identified through code aud
 
 ### Low-Priority Issues
 
-#### Expression Nesting Depth Limit Not Enforced
-
-**Type:** Fix — Limit Enforcement
-
-**Why**
-
-FKF508 (ExpressionDeepNesting) is emitted as Info when nesting depth exceeds 5. However, there's no hard limit—arbitrarily deep nesting is allowed, just warned about. Very deep nesting can generate megabytes of source code, causing compiler errors with unclear root causes.
-
-**Design**
-
-Implement a hard expression-depth limit (e.g., 10 levels). When exceeded, emit Error FKF5xx and either truncate the expression or fall back to method calls instead of inlining.
-
-**Complexity**
-
-Low. Add a configurable depth check in the expression inlining loop.
-
-**Impact**
-
-Low. Prevents surprise compiler errors on deeply nested mappings.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Expression inlining depth tracking (lines 1440-1447)
-
-**Suggested Approach**
-
-1. Define const MAX_EXPRESSION_DEPTH = 10
-2. When depth exceeds limit, emit Error FKF5xx "Expression nesting depth limit exceeded"
-3. Alternatively, auto-fallback to method calls for deep chains instead of inlining
-4. Add tests with various nesting depths to verify limit enforcement
-
----
-
 #### Diagnostic Aggregation Masks Primary Errors
 
 **Type:** Fix — Error Reporting
@@ -667,67 +634,6 @@ Low-Medium. Closes a gap where ambiguities go undetected and depth limits are si
 
 ---
 
-#### Documentation Gap: Attribute Feature Interaction Matrix
-
-**Type:** Documentation — Guidance
-
-**Why**
-
-Documentation explains what `AllowNestedForging` and `AllowFlattening` do individually, but doesn't provide guidance on when to use each. Users are confused: "Should I use nested forging or flattening for `Customer.Address.City` → `CustomerAddressCity`?"
-
-**Design**
-
-Add a decision matrix in docs explaining the trade-offs and recommending flattening for DTO fields, nested forging for type mismatches.
-
-**Complexity**
-
-Low. Documentation only.
-
-**Impact**
-
-Low. Improves user onboarding.
-
-**Files to Modify**
-
-- `docs/attributes.md` — Add "Design Decision: Flattening vs Nested Forging" section
-
-**Suggested Approach**
-
-1. Create comparison table: Flattening (one-level, implicit) vs Nested Forging (type-aware, multi-level)
-2. Add examples for each use case
-3. Document when to use which feature
-
----
-
-#### Documentation Gap: ShareReference Semantics on Collections
-
-**Why**
-
-`ShareReference` on `[ForgeMethodAttribute]` affects "mutable same-type collections" (documented as a concept, but the exact list of collection types is only in private helper code `IsMutableSameTypeCollection()`). Users can't reliably predict which collection types are deep-copied vs reference-shared without reading source.
-
-**Design**
-
-Add a table to `[ForgeMethod]` documentation listing all collection types affected by `ShareReference`.
-
-**Complexity**
-
-Low. Documentation only.
-
-**Impact**
-
-Low. Users can predict behavior without reading source code.
-
-**Files to Modify**
-
-- `docs/attributes.md` — [ForgeMethod] documentation; add table of mutable collection types
-
-**Suggested Approach**
-
-1. List all collection types checked by `IsMutableSameTypeCollection()`: List<T>, HashSet<T>, Dictionary<K,V>, etc.
-2. Document which types trigger `ShareReference` behavior
-3. Clarify which types are always copied (IEnumerable, IList, etc.)
-
----
 
 ## Implementation Issues & Code Quality Refinements
 
@@ -771,24 +677,6 @@ Medium. Add depth check before inlining; emit FKF509 error when exceeded.
 
 ---
 
-#### Circular ForgeUses Detection with Cycle Reporting
-
-**Type:** Fix — Validation
-
-**Why**
-
-Current self-include check doesn't detect transitive cycles (A → B → A). Cycles cause infinite recursion in lookup logic.
-
-**Complexity**
-
-Medium. Track recursion stack during validation; report full cycle chain in diagnostic.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — ExtractAndValidateForgeUses
-
----
-
 #### Conditional Metadata Refactoring
 
 **Type:** Fix — Code Organization
@@ -804,25 +692,6 @@ High. Extract conditional wrapping into shared method; apply to all assignment t
 **Files to Modify**
 
 - `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Member assignment generation
-
----
-
-#### Analyzer-Generator Accessibility Consistency
-
-**Type:** Fix — Consistency
-
-**Why**
-
-ForgeAnalyzer validates converter accessibility (public/internal only) but ForgeGenerator.FindConverterMethod doesn't apply the same filter, causing analyzer and generator to disagree.
-
-**Complexity**
-
-Low. Apply same accessibility predicate to both analyzer validation and generator lookup.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Analyzers/ForgeAnalyzer.cs` — validation logic
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — FindConverterMethod
 
 ---
 
@@ -976,24 +845,6 @@ Low. Assert qualified method name appears in generated output.
 
 ---
 
-#### Compilation Error Checking in Test Base
-
-**Type:** Test — Infrastructure
-
-**Why**
-
-`AssertNoErrors` only checks diagnostics, not compilation errors. Generated code could have syntax errors that tests don't catch.
-
-**Complexity**
-
-Low. Assert `result.CompilationDiagnostics` contains no Error-severity entries.
-
-**Files to Modify**
-
-- `tests/FreakyKit.Forge.Generator.Tests/GeneratorTestBase.cs`
-
----
-
 #### FlatteningGeneratorTests Coordinate Mapping Assertion
 
 **Type:** Test — Coverage
@@ -1050,36 +901,3 @@ Low. Remove conditional; assert FKF200 always.
 
 ### Documentation Accuracy
 
-#### Flattening Ambiguity Examples Correction
-
-**Type:** Documentation — Accuracy
-
-**Why**
-
-Current examples present direct matches as flattening conflicts. Real FKF530 scenarios require multiple valid prefixes at same depth that both map valid nested paths.
-
-**Complexity**
-
-Low. Replace examples with genuine ambiguity cases.
-
-**Files to Modify**
-
-- `docs/attributes.md` — Flattening examples section
-
----
-
-#### Flattening Example Attributes Completion
-
-**Type:** Documentation — Accuracy
-
-**Why**
-
-Example shows flattening but lacks AllowFlattening = true on [ForgeMethod]; cross-class example lacks [ForgeUses] required for cross-class discovery.
-
-**Complexity**
-
-Low. Add missing attributes to examples.
-
-**Files to Modify**
-
-- `docs/attributes.md` — Flattening examples

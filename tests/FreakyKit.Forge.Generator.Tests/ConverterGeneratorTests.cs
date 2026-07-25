@@ -113,4 +113,60 @@ public sealed class ConverterGeneratorTests : GeneratorTestBase
         AssertHasError(result, "FKF200");
         AssertNoGeneratedSource(result);
     }
+
+    [Fact]
+    public void PrivateConverter_NotUsedByGenerator()
+    {
+        const string source = """
+            using System;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public DateTime Birthday { get; set; } }
+                public class Dest   { public string Birthday { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+
+                    [ForgeConverter]
+                    private static string ConvertDateTime(DateTime value) => value.ToString("yyyy-MM-dd");
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        // Private converter is inaccessible, so FKF200 should be emitted instead of using the converter
+        AssertHasError(result, "FKF200");
+        AssertNoGeneratedSource(result);
+    }
+
+    [Fact]
+    public void InternalConverter_UsedByGenerator()
+    {
+        const string source = """
+            using System;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public DateTime Birthday { get; set; } }
+                public class Dest   { public string Birthday { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+
+                    [ForgeConverter]
+                    internal static string ConvertDateTime(DateTime value) => value.ToString("yyyy-MM-dd");
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("__result.Birthday = ConvertDateTime(source.Birthday)", generated);
+    }
 }

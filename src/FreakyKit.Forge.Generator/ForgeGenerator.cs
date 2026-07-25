@@ -1967,6 +1967,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         if (nested.MethodKind != ForgeMethodKind.Create) return null;
 
+        // Prevent exceeding expression nesting depth limit
+        if (depth >= ExpressionNestingErrorThreshold)
+            return null;
+
         if (depth > maxDepth) maxDepth = depth;
 
         visitedChain.Add(nestedMethodName);
@@ -3188,13 +3192,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var destDisplay = destType.ToDisplayString();
 
         // First search in the current forge class
-        // Note: FKF221 analyzer already validates converter accessibility, so generator trusts the method is valid
         foreach (var member in forgeClass.GetMembers())
         {
             if (member is IMethodSymbol m &&
                 m.IsStatic &&
                 !m.ReturnsVoid &&
                 m.Parameters.Length == 1 &&
+                (m.DeclaredAccessibility == Accessibility.Public || m.DeclaredAccessibility == Accessibility.Internal) &&
                 m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeConverterAttribute") &&
                 m.Parameters[0].Type.ToDisplayString() == srcDisplay &&
                 m.ReturnType.ToDisplayString() == destDisplay)
@@ -3218,6 +3222,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             m.IsStatic &&
                             !m.ReturnsVoid &&
                             m.Parameters.Length == 1 &&
+                            (m.DeclaredAccessibility == Accessibility.Public || m.DeclaredAccessibility == Accessibility.Internal) &&
                             m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeConverterAttribute") &&
                             m.Parameters[0].Type.ToDisplayString() == srcDisplay &&
                             m.ReturnType.ToDisplayString() == destDisplay)

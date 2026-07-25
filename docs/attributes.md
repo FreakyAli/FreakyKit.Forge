@@ -1121,6 +1121,26 @@ public static partial class PersonForges
 
 ---
 
+## Attribute Feature Interaction Matrix
+
+Quick reference for which `[ForgeMethod]` features work together:
+
+| Feature A | Feature B | Compatible? | Notes |
+|-----------|-----------|-------------|-------|
+| `AllowFlattening` | `AllowNestedForging` | ✅ | Both can be true; flattening applies to unmatched members, nested forging applies to matched object members |
+| `AllowNestedForging` | `GenerateExpression` | ✅ | Nested forge calls are inlined into expressions (FKF507 detects cycles) |
+| `AllowFlattening` | `GenerateExpression` | ✅ | Flattened paths become expression-tree property chains |
+| `IgnoreIfNull` | `GenerateExpression` | ❌ | `IgnoreIfNull` has no expression-tree equivalent; member is silently omitted from expression (FKF506) |
+| `ShareReference` | `AllowNestedForging` | ✅ | ShareReference applies to collections; nested forging applies to object members |
+| `GenerateExpression` | Update methods (void) | ❌ | Expressions invalid for void returns; emits FKF504 (Error) |
+| `AllowFlattening` | `StrictMapping` | ✅ | Flattened members count as mapped (no FKF100/FKF110) |
+| `AllowNestedForging` | `StrictMapping` | ✅ | Nested mapped members count as matched (no FKF100/FKF110) |
+| `[ForgeConverter]` | `GenerateExpression` | ❌ | Converter calls can't translate to SQL; member is silently omitted from expression (FKF506) |
+
+**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `[ForgeConverter]` calls, custom materialization).
+
+---
+
 ## `ForgePolicy` (Enum)
 
 **Namespace:** `FreakyKit.Forge`
