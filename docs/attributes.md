@@ -876,12 +876,12 @@ Controls behavior when a dictionary key is not found (dict→object only):
 
 ```csharp
 [ForgeMethod]
-[ForgeDictionary(MissingKeyPolicy = MissingKeyPolicy.UseDefault)]
+[ForgeDictionary(MissingKey = MissingKeyPolicy.UseDefault)]
 public static partial Person FromDict(Dictionary<string, object> dict);
 // Missing keys will use default values instead of throwing
 ```
 
-#### `NullValuePolicy` (`NullValuePolicy`, default: `NullValuePolicy.Include`)
+#### `NullValue` (`NullValuePolicy`, default: `NullValuePolicy.Include`)
 
 Controls whether null values are included when converting object to dictionary:
 
@@ -892,7 +892,7 @@ Controls whether null values are included when converting object to dictionary:
 
 ```csharp
 [ForgeMethod]
-[ForgeDictionary(NullValuePolicy = NullValuePolicy.Skip)]
+[ForgeDictionary(NullValue = NullValuePolicy.Skip)]
 public static partial Dictionary<string, object> ToDict(Person person);
 // Null properties will be excluded from the generated dictionary
 ```

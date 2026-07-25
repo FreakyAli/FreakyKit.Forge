@@ -249,8 +249,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (mode == GeneratorForgeMode.Explicit && !hasForgeAttr) continue;
 
             // Skip hook/helper methods that match forge shapes but are not intended to be forges
-            // (OnBeforeXxx and OnAfterXxx methods are hooks called by forge methods, not forge methods themselves)
-            if (method.Name.StartsWith("OnBefore") || method.Name.StartsWith("OnAfter"))
+            // (OnBeforeXxx and OnAfterXxx void methods are hooks called by forge methods, not forge methods themselves)
+            // Non-void methods like OnAfterSummary are eligible forge methods
+            if ((method.Name.StartsWith("OnBefore") || method.Name.StartsWith("OnAfter")) && method.ReturnsVoid)
                 continue;
 
             // Private filter (analyzer handles FKF010)
@@ -616,25 +617,28 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     // ternary (`source.Address == null ? null : source.Address.City`) because `?.`
                     // isn't allowed in expression-tree lambdas. For non-nullable destinations, coalesce to default.
                     // Value-type intermediates have no `?.` and can be emitted as-is.
-                    string exprFlatten;
-                    var qIdx = flattenExpr.IndexOf("?.");
-                    if (qIdx >= 0)
+                    // Process all `?.` operators, not just the first one.
+                    string exprFlatten = flattenExpr;
+                    bool isNonNullableDest = destMember.Type.NullableAnnotation == NullableAnnotation.NotAnnotated;
+
+                    while (exprFlatten.Contains("?."))
                     {
-                        var prefix = flattenExpr.Substring(0, qIdx);
-                        var suffix = flattenExpr.Substring(qIdx + 2);
-                        bool isNonNullableDest = destMember.Type.NullableAnnotation == NullableAnnotation.NotAnnotated;
+                        var qIdx = exprFlatten.IndexOf("?.");
+                        var prefix = exprFlatten.Substring(0, qIdx);
+                        var suffix = exprFlatten.Substring(qIdx + 2);
+
+                        // Only add parentheses if the prefix contains a ternary (from previous iteration)
+                        bool needsParens = prefix.Contains("?");
+                        string prefixExpr = needsParens ? $"({prefix})" : prefix;
+
                         if (isNonNullableDest)
                         {
-                            exprFlatten = $"{prefix} == null ? default! : {prefix}.{suffix} ?? default!";
+                            exprFlatten = $"{prefixExpr} == null ? default! : {prefixExpr}.{suffix} ?? default!";
                         }
                         else
                         {
-                            exprFlatten = $"{prefix} == null ? null : {prefix}.{suffix}";
+                            exprFlatten = $"{prefixExpr} == null ? null : {prefixExpr}.{suffix}";
                         }
-                    }
-                    else
-                    {
-                        exprFlatten = flattenExpr;
                     }
 
                     assignments.Add(new MemberAssignmentModel(
@@ -1623,7 +1627,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static string GenerateParseExpression(string targetType, string stringVarName)
+    private static string? GenerateParseExpression(string targetType, string stringVarName)
     {
         // For string dictionary values, generate appropriate parsing code
         return targetType switch
@@ -1646,8 +1650,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             "System.DateTime" => $"System.DateTime.Parse({stringVarName}, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None)",
             // Guid
             "System.Guid" => $"System.Guid.Parse({stringVarName})",
-            // For enums and other types, we'll handle generically
-            _ => null!
+            // For enums and other types, unsupported
+            _ => null
         };
     }
 
@@ -3191,14 +3195,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var srcDisplay = sourceType.ToDisplayString();
         var destDisplay = destType.ToDisplayString();
 
-        // First search in the current forge class
+        // First search in the current forge class (allow private converters on the same class)
         foreach (var member in forgeClass.GetMembers())
         {
             if (member is IMethodSymbol m &&
                 m.IsStatic &&
                 !m.ReturnsVoid &&
                 m.Parameters.Length == 1 &&
-                (m.DeclaredAccessibility == Accessibility.Public || m.DeclaredAccessibility == Accessibility.Internal) &&
                 m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeConverterAttribute") &&
                 m.Parameters[0].Type.ToDisplayString() == srcDisplay &&
                 m.ReturnType.ToDisplayString() == destDisplay)
@@ -3222,7 +3225,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             m.IsStatic &&
                             !m.ReturnsVoid &&
                             m.Parameters.Length == 1 &&
-                            (m.DeclaredAccessibility == Accessibility.Public || m.DeclaredAccessibility == Accessibility.Internal) &&
+                            IsMemberAccessibleFromStaticContext(m, forgeClass.ContainingAssembly) &&
                             m.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeConverterAttribute") &&
                             m.Parameters[0].Type.ToDisplayString() == srcDisplay &&
                             m.ReturnType.ToDisplayString() == destDisplay)
@@ -3893,12 +3896,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     /// </summary>
     private static bool GetForgePolicyAsBoolean(AttributeData attr, string propertyName)
     {
-        var namedArg = attr.NamedArguments.FirstOrDefault(a => a.Key == propertyName);
-        if (namedArg.Value.Value is int policyValue)
-        {
-            return policyValue == 1; // True
-        }
-        return false; // Default: Inherit (0) or False (2) both map to false
+        var policy = GetForgePolicyValue(attr, propertyName);
+        return policy ?? false;
     }
 
     private static int GetEnumMappingStrategy(AttributeData? attr)

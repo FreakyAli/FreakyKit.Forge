@@ -115,7 +115,7 @@ public sealed class ConverterGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
-    public void PrivateConverter_NotUsedByGenerator()
+    public void PrivateConverter_UsedByGeneratorWhenSameClass()
     {
         const string source = """
             using System;
@@ -137,9 +137,10 @@ public sealed class ConverterGeneratorTests : GeneratorTestBase
             """;
 
         var result = RunGenerator(source);
-        // Private converter is inaccessible, so FKF200 should be emitted instead of using the converter
-        AssertHasError(result, "FKF200");
-        AssertNoGeneratedSource(result);
+        // Private converters declared on the same forge class are accessible and should be used
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("ConvertDateTime", generated);
     }
 
     [Fact]

@@ -211,6 +211,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
 
         // FKF221: validate [ForgeConverter] method signatures
+        // Private converters on the same class are allowed; public/internal filtering is for cross-class imports (handled by generator)
         foreach (var member in type.GetMembers().OfType<IMethodSymbol>())
         {
             bool hasConverterAttr = member.GetAttributes()
@@ -226,8 +227,6 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 reason = "must not be generic";
             else if (member.Parameters.Length != 1)
                 reason = $"must have exactly one parameter (found {member.Parameters.Length})";
-            else if (member.DeclaredAccessibility != Accessibility.Public && member.DeclaredAccessibility != Accessibility.Internal)
-                reason = "must be public or internal (not private or protected)";
 
             if (reason != null)
             {
@@ -253,9 +252,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             // Only count valid converters (invalid ones are already flagged by FKF221)
             if (!member.IsStatic || member.ReturnsVoid || member.TypeParameters.Length > 0 || member.Parameters.Length != 1)
                 continue;
-            // Only accessible converters (public or internal)
-            if (member.DeclaredAccessibility != Accessibility.Public && member.DeclaredAccessibility != Accessibility.Internal)
-                continue;
+            // Include all accessible converters, including private ones on the same class
 
             var pairKey = (member.Parameters[0].Type.ToDisplayString(), member.ReturnType.ToDisplayString());
             if (!convertersByTypePair.TryGetValue(pairKey, out var bucket))

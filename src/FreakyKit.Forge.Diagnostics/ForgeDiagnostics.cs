@@ -969,6 +969,9 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "Flattening is limited to 10 levels of nesting to prevent unbounded recursive traversal. Restructure the source type hierarchy to be less deeply nested, or use nested forging instead of flattening for this member.");
 
+    /// <summary>
+    /// FKF700 (Error): Dictionary key type is not string.
+    /// </summary>
     public static readonly DiagnosticDescriptor DictionaryKeyTypeNotString = new(
         id: "FKF700",
         title: "Dictionary key type is not string",
@@ -978,6 +981,9 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "Dictionary mapping only supports string keys to enable flexible key-matching policies (IgnoreCase, CamelCase, etc.). Dictionaries with non-string keys cannot be used in forge methods.");
 
+    /// <summary>
+    /// FKF701 (Error): Unsupported dictionary value type.
+    /// </summary>
     public static readonly DiagnosticDescriptor UnsupportedDictionaryValueType = new(
         id: "FKF701",
         title: "Unsupported dictionary value type",
@@ -987,6 +993,9 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "Dictionary mapping supports primitive types, enums, nullable types, and custom converters, but not complex types or collections without explicit mapping.");
 
+    /// <summary>
+    /// FKF702 (Error): MissingKeyPolicy.ReturnNull on non-nullable type.
+    /// </summary>
     public static readonly DiagnosticDescriptor ReturnNullOnNonNullableType = new(
         id: "FKF702",
         title: "MissingKeyPolicy.ReturnNull on non-nullable type",

@@ -149,10 +149,22 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
 
     public MemberAssignmentModel WithExpressionAssignment(string? expr) =>
         new(
-            DestMemberName, SourceExpression, IgnoreIfNull, NullCheckExpression, IsInitOnly,
-            expr,
-            NestedForgeMethodName, NestedForgeSourceAccessor, NestedForgeSourceIsRefType,
-            CollectionElementForgeMethod, CollectionSourceAccessor, CollectionMaterializer,
-            CollectionSourceIsRefType, NestedForgeNullFallback, IgnoreIfDefault,
-            ConditionMethodName, SourceMemberName, SourceMemberType);
+            destMemberName: DestMemberName,
+            sourceExpression: SourceExpression,
+            ignoreIfNull: IgnoreIfNull,
+            nullCheckExpression: NullCheckExpression,
+            isInitOnly: IsInitOnly,
+            expressionAssignment: expr,
+            nestedForgeMethodName: NestedForgeMethodName,
+            nestedForgeSourceAccessor: NestedForgeSourceAccessor,
+            nestedForgeSourceIsRefType: NestedForgeSourceIsRefType,
+            collectionElementForgeMethod: CollectionElementForgeMethod,
+            collectionSourceAccessor: CollectionSourceAccessor,
+            collectionMaterializer: CollectionMaterializer,
+            collectionSourceIsRefType: CollectionSourceIsRefType,
+            nestedForgeNullFallback: NestedForgeNullFallback,
+            ignoreIfDefault: IgnoreIfDefault,
+            conditionMethodName: ConditionMethodName,
+            sourceMemberName: SourceMemberName,
+            sourceMemberType: SourceMemberType);
 }

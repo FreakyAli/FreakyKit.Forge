@@ -84,7 +84,7 @@ public sealed class IgnoreIfNullGeneratorTests : GeneratorTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { public string? Name { get; set; } public int Age { get; set; } }
+                public class Source { public string? Name { get; set; } public int? Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
                 [Forge]
@@ -99,7 +99,7 @@ public sealed class IgnoreIfNullGeneratorTests : GeneratorTestBase
         var result = RunGenerator(source);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("if (source.Name != null) existing.Name = source.Name;", generated);
-        Assert.Contains("if (source.Age != null) existing.Age = source.Age;", generated);
+        Assert.Contains("if (source.Age != null) existing.Age = source.Age.Value;", generated);
     }
 
     [Fact]

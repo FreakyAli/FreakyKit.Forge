@@ -70,7 +70,7 @@ public sealed class IgnoreIfNullIntegrationTests : IntegrationTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
+                public class Source { public string? Name { get; set; } public int? Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
                 [Forge]
