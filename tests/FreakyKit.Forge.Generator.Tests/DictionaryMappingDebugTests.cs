@@ -415,4 +415,5 @@ public sealed class DictionaryMappingTests : GeneratorTestBase
         Assert.Contains("double.Parse", generated);
         Assert.Contains("CultureInfo.InvariantCulture", generated);
     }
+
 }

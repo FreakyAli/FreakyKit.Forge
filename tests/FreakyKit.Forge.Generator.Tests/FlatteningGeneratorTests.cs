@@ -354,4 +354,32 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         // Should flatten through nullable chain
         Assert.Contains("source.Address?.Coords?.Point?.Code", generated);
     }
+
+    [Fact]
+    public void FKF106_FlattenedMapping_EmitsDiagnostic()
+    {
+        // FKF106: Info diagnostic when a member is mapped via flattening
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Address { public string City { get; set; } = ""; }
+                public class Source  { public Address Address { get; set; } = new(); }
+                public class Dest    { public string AddressCity { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowFlattening = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        // Verify FKF106 diagnostic is emitted for flattened mapping
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF106");
+    }
+
 }

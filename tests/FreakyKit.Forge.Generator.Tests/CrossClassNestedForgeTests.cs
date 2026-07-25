@@ -492,4 +492,27 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
         // The qualified call should be InnerForges.ToInnerDto
         Assert.Contains("InnerForges.ToInnerDto", generated);
     }
+
+    [Fact]
+    public void FKF520_IncludedForgeClassNotFound_EmitsError()
+    {
+        // FKF520: Error when [ForgeUses] references a non-existent class
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                [ForgeUses(typeof(NonExistentForges))]
+                public static partial class MyForges
+                {
+                    [ForgeMethod]
+                    public static partial string Transform(int value);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        // Should emit FKF520 error for missing class
+        AssertHasError(result, "FKF520");
+    }
 }

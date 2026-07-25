@@ -203,4 +203,79 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("source.Age ?? 0", generated);
     }
+
+    [Fact]
+    public void FKF203_LossyImplicitConversion_EmitsWarning_FloatToDouble()
+    {
+        // FKF203: Warning when lossy implicit conversion may occur (float to double can lose precision)
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public float Value { get; set; } }
+                public class Dest   { public double Value { get; set; } }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        // FKF203 should be emitted for float->double (potentially lossy)
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF203");
+    }
+
+    [Fact]
+    public void FKF203_LossyConversion_IntToFloat()
+    {
+        // FKF203: Warning when int converts to float (can lose precision for large values)
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Value { get; set; } }
+                public class Dest   { public float Value { get; set; } }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        // FKF203 should be emitted for int->float (lossy)
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF203");
+    }
+
+    [Fact]
+    public void NoFKF203_ForSafeConversions()
+    {
+        // No FKF203 for safe conversions like int->long
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Value { get; set; } }
+                public class Dest   { public long Value { get; set; } }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        // No FKF203 for safe conversion int->long
+        Assert.DoesNotContain(result.Diagnostics, d => d.Id == "FKF203");
+    }
 }

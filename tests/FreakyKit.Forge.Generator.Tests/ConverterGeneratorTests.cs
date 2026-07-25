@@ -169,4 +169,36 @@ public sealed class ConverterGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Birthday = ConvertDateTime(source.Birthday)", generated);
     }
+
+    [Fact]
+    public void FKF220_ConverterUsed_EmitsDiagnostic()
+    {
+        // FKF220: Info diagnostic when a type converter is used for member mapping
+        const string source = """
+            using System;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public DateTime Birthday { get; set; } }
+                public class Dest   { public string Birthday { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+
+                    [ForgeConverter]
+                    public static string ConvertDateTime(DateTime value) => value.ToString("yyyy-MM-dd");
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // FKF220 should be emitted for converter usage
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF220");
+        // Verify the converter is actually called
+        Assert.Contains("ConvertDateTime(source.Birthday)", generated);
+    }
 }
