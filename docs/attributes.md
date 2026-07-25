@@ -834,6 +834,147 @@ Without `[ForgeMap]`, the generator looks for a source member named `name` and e
 
 ---
 
+## `[ForgeDictionary]`
+
+**Namespace:** `FreakyKit.Forge`
+**Target:** Method (optional; applies to the entire forge method)
+
+Controls dictionary mapping behavior when converting between dictionaries and domain objects. Apply to any `[ForgeMethod]` where the source parameter or return type is a dictionary.
+
+**Auto-detection:** The generator automatically detects `Dictionary<string, T>` parameters/returns and generates appropriate mapping code. Use `[ForgeDictionary]` to customize the behavior via policies.
+
+### Properties
+
+#### `KeyCasing` (`KeyCasingPolicy`, default: `KeyCasingPolicy.Exact`)
+
+Controls how dictionary keys are matched against property names:
+
+| Policy | Behavior | Example |
+|--------|----------|---------|
+| **Exact** (default) | Match property name exactly | `FirstName` → `"FirstName"` |
+| **IgnoreCase** | Case-insensitive matching | `FirstName` matches `"firstname"`, `"FIRSTNAME"`, etc. |
+| **CamelCase** | Convert property to camelCase | `FirstName` → `"firstName"` |
+| **SnakeCase** | Convert property to snake_case | `FirstName` → `"first_name"` |
+
+```csharp
+[ForgeMethod]
+[ForgeDictionary(KeyCasing = KeyCasingPolicy.CamelCase)]
+public static partial Person FromDict(Dictionary<string, object> dict);
+// Will look for "firstName", "age" in the dictionary
+```
+
+#### `MissingKeyPolicy` (`MissingKeyPolicy`, default: `MissingKeyPolicy.Throw`)
+
+Controls behavior when a dictionary key is not found (dict→object only):
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| **Throw** (default) | Throw `KeyNotFoundException` | Strict validation—all keys required |
+| **UseDefault** | Assign `default(T)` | Permissive—use default for missing keys |
+| **Skip** | Don't assign—leave at default | Same as UseDefault but more explicit |
+| **ReturnNull** | Assign null (nullable types only) | Allow null for missing optional fields |
+
+```csharp
+[ForgeMethod]
+[ForgeDictionary(MissingKeyPolicy = MissingKeyPolicy.UseDefault)]
+public static partial Person FromDict(Dictionary<string, object> dict);
+// Missing keys will use default values instead of throwing
+```
+
+#### `NullValuePolicy` (`NullValuePolicy`, default: `NullValuePolicy.Include`)
+
+Controls whether null values are included when converting object to dictionary:
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| **Include** (default) | Add all properties including nulls | Include everything in output |
+| **Skip** | Only add non-null values | Omit null properties from result |
+
+```csharp
+[ForgeMethod]
+[ForgeDictionary(NullValuePolicy = NullValuePolicy.Skip)]
+public static partial Dictionary<string, object> ToDict(Person person);
+// Null properties will be excluded from the generated dictionary
+```
+
+### Examples
+
+**JSON deserialization with CamelCase keys:**
+```csharp
+public class ApiResponse
+{
+    public string FirstName { get; set; } = "";
+    public int Age { get; set; }
+}
+
+[Forge]
+public static partial class ApiForges
+{
+    [ForgeMethod]
+    [ForgeDictionary(KeyCasing = KeyCasingPolicy.CamelCase)]
+    public static partial ApiResponse FromJson(Dictionary<string, object> json);
+}
+
+// JSON: { "firstName": "John", "age": 30 }
+var response = ApiForges.FromJson(apiData);  // Maps correctly
+```
+
+**Configuration with defaults:**
+```csharp
+[Forge]
+public static partial class ConfigForges
+{
+    [ForgeMethod]
+    [ForgeDictionary(
+        KeyCasing = KeyCasingPolicy.IgnoreCase,
+        MissingKeyPolicy = MissingKeyPolicy.UseDefault
+    )]
+    public static partial AppSettings FromConfig(Dictionary<string, object> config);
+}
+```
+
+**Omit null values:**
+```csharp
+[Forge]
+public static partial class ApiForges
+{
+    [ForgeMethod]
+    [ForgeDictionary(NullValuePolicy = NullValuePolicy.Skip)]
+    public static partial Dictionary<string, object> ToApiFormat(UserDto user);
+}
+
+var user = new UserDto { Id = 1, Name = "Alice", Email = null };
+var apiData = ApiForges.ToApiFormat(user);
+// Result: { "Id": 1, "Name": "Alice" } — Email omitted
+```
+
+### Supported Dictionary Types
+
+- `Dictionary<string, object>` ✅ (with casting)
+- `Dictionary<string, string>` ✅ (with parsing for primitives)
+- `IReadOnlyDictionary<string, T>` ✅
+- `IDictionary<string, T>` ✅
+
+**Non-string keys are not supported** (emits FKF700 diagnostic).
+
+### Type Conversion
+
+**Dictionary<string, object>:** Values are cast to the target type. Type mismatches throw `InvalidCastException` at runtime.
+
+**Dictionary<string, string>:** Values are parsed using type-specific parsers:
+- Primitives: `int.Parse()`, `bool.Parse()`, `double.Parse()`, etc.
+- Enums: `Enum.Parse<EnumType>(value)`
+- DateTime: `DateTime.Parse(value, CultureInfo.InvariantCulture)`
+- Guid: `Guid.Parse(value)`
+
+### Diagnostics
+
+- **FKF700** — Dictionary key type is not string (only `Dictionary<string, T>` supported)
+- **FKF701** — Unsupported dictionary value type (complex types, collections)
+- **FKF702** — ReturnNull policy used on non-nullable type
+
+---
+
 ## Reference semantics for same-type collections
 
 When a member has the **same exact type** on source and destination (e.g. `List<string>` → `List<string>`), Forge has two possible semantics:
