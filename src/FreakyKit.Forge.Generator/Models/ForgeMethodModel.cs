@@ -143,7 +143,11 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
             && CollectionProjectExpression == other.CollectionProjectExpression
             && ConcreteDictInstantiationName == other.ConcreteDictInstantiationName
             && GenerateExpression == other.GenerateExpression
-            && ExpressionPropertyName == other.ExpressionPropertyName;
+            && ExpressionPropertyName == other.ExpressionPropertyName
+            && DictKeyCasingPolicy == other.DictKeyCasingPolicy
+            && DictMissingKeyPolicy == other.DictMissingKeyPolicy
+            && DictNullValuePolicy == other.DictNullValuePolicy
+            && DictValueType == other.DictValueType;
     }
 
     public override bool Equals(object obj) => Equals(obj as ForgeMethodModel);
@@ -171,6 +175,10 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
             hash = hash * 31 + (ConcreteDictInstantiationName?.GetHashCode() ?? 0);
             hash = hash * 31 + GenerateExpression.GetHashCode();
             hash = hash * 31 + (ExpressionPropertyName?.GetHashCode() ?? 0);
+            hash = hash * 31 + DictKeyCasingPolicy.GetHashCode();
+            hash = hash * 31 + DictMissingKeyPolicy.GetHashCode();
+            hash = hash * 31 + DictNullValuePolicy.GetHashCode();
+            hash = hash * 31 + (DictValueType?.GetHashCode() ?? 0);
             return hash;
         }
     }

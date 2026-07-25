@@ -143,7 +143,7 @@ public static partial class ConfigForges
 }
 
 // Missing keys get default values:
-// - string → empty string
+// - string → null (unless property initializer sets default)
 // - int → 0
 // - bool? → null
 var settings = ConfigForges.FromConfig(config);
@@ -176,7 +176,7 @@ var apiData = ApiForges.ToApiFormat(user);
 ## Supported Dictionary Types
 
 - `Dictionary<string, object>` ✅
-- `Dictionary<string, string>` ✅ (parsing from future phase)
+- `Dictionary<string, string>` ✅ (with full parsing support)
 - `IReadOnlyDictionary<string, T>` ✅
 - `IDictionary<string, T>` ✅
 
@@ -185,15 +185,17 @@ var apiData = ApiForges.ToApiFormat(user);
 ## Limitations & Future Enhancements
 
 **Currently Working:**
-- Basic key lookup with casing policies
-- Null value filtering on object→dict conversion
-- Non-string key validation
-
-**Coming in Phase 4:**
+- Key lookup with all casing policies (Exact, IgnoreCase, CamelCase, SnakeCase)
 - Missing key policy code generation (Throw, UseDefault, Skip, ReturnNull)
 - Type conversion (casting for object dicts, parsing for string dicts)
-- Comprehensive test coverage
-- Custom type converters
+- Null value filtering on object→dict conversion
+- Non-string key validation
+- Comprehensive test coverage (13 dictionary mapping tests)
+
+**Future Enhancements:**
+- Custom type converters for unsupported types
+- Nested dictionary mappings
+- Dictionary<string, T> with complex nested types
 
 ## Generated Code
 
@@ -207,12 +209,11 @@ public static partial Person FromDict(Dictionary<string, object> dict);
 // Generated
 public static partial Person FromDict(Dictionary<string, object> dict)
 {
-    if (dict == null) return null;
     var __result = new Person();
     if (dict.TryGetValue("Name", out var __val_Name))
-        __result.Name = __val_Name;
+        __result.Name = (string)__val_Name;
     if (dict.TryGetValue("Age", out var __val_Age))
-        __result.Age = __val_Age;
+        __result.Age = (int)__val_Age;
     return __result;
 }
 ```
@@ -225,10 +226,19 @@ For case-insensitive key matching:
 public static partial Person FromDict(Dictionary<string, object> dict);
 
 // Generated
-var __key_Name = dict.Keys.FirstOrDefault(k => 
-    string.Equals(k, "Name", StringComparison.OrdinalIgnoreCase));
-if (__key_Name != null && dict.TryGetValue(__key_Name, out var __val_Name))
-    __result.Name = __val_Name;
+public static partial Person FromDict(Dictionary<string, object> dict)
+{
+    var __result = new Person();
+    var __key_Name = dict.Keys.FirstOrDefault(k => 
+        string.Equals(k, "Name", StringComparison.OrdinalIgnoreCase));
+    if (__key_Name != null && dict.TryGetValue(__key_Name, out var __val_Name))
+        __result.Name = (string)__val_Name;
+    var __key_Age = dict.Keys.FirstOrDefault(k => 
+        string.Equals(k, "Age", StringComparison.OrdinalIgnoreCase));
+    if (__key_Age != null && dict.TryGetValue(__key_Age, out var __val_Age))
+        __result.Age = (int)__val_Age;
+    return __result;
+}
 ```
 
 ## Error Diagnostics
@@ -240,7 +250,8 @@ if (__key_Name != null && dict.TryGetValue(__key_Name, out var __val_Name))
 ## Performance
 
 Dictionary mapping generates zero-allocation code for simple cases:
-- No LINQ or reflection involved
-- Direct dictionary lookups via `TryGetValue`
+- No LINQ or reflection involved for Exact casing
+- Direct dictionary lookups via `TryGetValue` for Exact matching
+- Case-insensitive matching uses `Keys.FirstOrDefault` for key resolution
 - Minimal conditional logic
 - Perfect for hot paths and performance-critical code

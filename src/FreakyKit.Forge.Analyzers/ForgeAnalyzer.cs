@@ -253,6 +253,9 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             // Only count valid converters (invalid ones are already flagged by FKF221)
             if (!member.IsStatic || member.ReturnsVoid || member.TypeParameters.Length > 0 || member.Parameters.Length != 1)
                 continue;
+            // Only accessible converters (public or internal)
+            if (member.DeclaredAccessibility != Accessibility.Public && member.DeclaredAccessibility != Accessibility.Internal)
+                continue;
 
             var pairKey = (member.Parameters[0].Type.ToDisplayString(), member.ReturnType.ToDisplayString());
             if (!convertersByTypePair.TryGetValue(pairKey, out var bucket))
