@@ -205,14 +205,14 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
-    public void FKF203_LossyImplicitConversion_EmitsWarning_DoubleToFloat()
+    public void FKF203_LossyImplicitConversion_EmitsWarning_FloatToDouble()
     {
-        // FKF203: Warning when lossy implicit conversion may occur (double to float loses precision)
+        // FKF203: Warning when lossy implicit conversion may occur (int to float loses precision)
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { public double Value { get; set; } }
+                public class Source { public int Value { get; set; } }
                 public class Dest   { public float Value { get; set; } }
 
                 [Forge]
@@ -225,7 +225,7 @@ public sealed class NullableGeneratorTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
-        // FKF203 should be emitted for double->float (lossy, requires explicit cast)
+        // FKF203 should be emitted for int->float (implicit but can lose precision for large values)
         Assert.Contains(result.Diagnostics, d => d.Id == "FKF203");
     }
 

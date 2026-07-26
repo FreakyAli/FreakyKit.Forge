@@ -89,6 +89,6 @@ public sealed class IgnoreIfNullIntegrationTests : IntegrationTestBase
 
         var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("if (source.Name != null) existing.Name = source.Name;", generated);
-        Assert.Contains("if (source.Age != null) existing.Age = source.Age;", generated);
+        Assert.Contains("if (source.Age != null) existing.Age = source.Age.Value;", generated);
     }
 }
