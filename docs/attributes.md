@@ -389,17 +389,21 @@ Use **AllowNestedForging = true** when:
 - You need custom logic for nested conversions
 - You want to preserve strongly-typed structure
 
-#### `IgnoreIfNull` (`bool`, default: `false`)
+#### `IgnoreIfNull` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
-When true, all property assignments are wrapped in a null check. The destination member is only assigned when the source value is not null. Particularly useful for update methods where you want to preserve existing values when the source field is null.
+Controls whether all property assignments are wrapped in a null check. When set to `ForgePolicy.True`, the destination member is only assigned when the source value is not null. Particularly useful for update methods where you want to preserve existing values when the source field is null.
 
-Can be overridden per-member using `ForgeMapAttribute.IgnoreIfNull`.
+- **`ForgePolicy.Inherit`** (default) — inherit from global default (false / assign even if null)
+- **`ForgePolicy.True`** — all assignments wrapped in null check
+- **`ForgePolicy.False`** — assignments happen even if source is null
+
+Can be overridden per-member using `ForgeMapAttribute.IgnoreIfNull`. Per-member settings always take precedence.
 
 ```csharp
 [Forge]
 public static partial class MyForges
 {
-    [ForgeMethod(IgnoreIfNull = true)]
+    [ForgeMethod(IgnoreIfNull = ForgePolicy.True)]
     public static partial void Update(Source source, Dest existing);
     // Generates: if (source.Name != null) existing.Name = source.Name;
 }
@@ -424,12 +428,13 @@ public static partial class MyForges
 }
 ```
 
-#### `ShareReference` (`bool`, default: `false`)
+#### `ShareReference` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
 Controls how Forge handles same-type **mutable collection** members (e.g. `List<T>` on both source and destination).
 
-- **`false` (default)** — the generated code uses a copy constructor (`new List<T>(source.X)`) so the destination owns an independent collection. Mutations to the destination's collection do not affect the source.
-- **`true`** — the generated code uses direct reference assignment (`dto.Tags = source.Tags`). Faster and allocation-free, but the source and destination share the same collection instance, so mutations leak across.
+- **`ForgePolicy.Inherit`** (default) — inherit from global default (false / deep-copy)
+- **`ForgePolicy.False`** — the generated code uses a copy constructor (`new List<T>(source.X)`) so the destination owns an independent collection. Mutations to the destination's collection do not affect the source.
+- **`ForgePolicy.True`** — the generated code uses direct reference assignment (`dto.Tags = source.Tags`). Faster and allocation-free, but the source and destination share the same collection instance, so mutations leak across.
 
 **Affected collection types** (ShareReference=true uses reference-sharing; ShareReference=false uses copy constructor):
 
@@ -453,11 +458,11 @@ When this flag is `true` and applies to a member, **FKF311** (Info) is emitted p
 [Forge]
 public static partial class MyForges
 {
-    // Default: deep-copy. Tags in PersonDto is a new List<string>, independent of source.
+    // Default (Inherit): deep-copy. Tags in PersonDto is a new List<string>, independent of source.
     public static partial PersonDto ToDto(Person source);
 
-    // Opt-out: reference-share. Tags in PersonUpdate IS source.Tags.
-    [ForgeMethod(ShareReference = true)]
+    // Explicit opt-out (True): reference-share. Tags in PersonUpdate IS source.Tags.
+    [ForgeMethod(ShareReference = ForgePolicy.True)]
     public static partial PersonUpdate ToUpdate(Person source);
 }
 ```
@@ -644,14 +649,18 @@ public class Dest   { public int Age { get; set; } }
 // Generates: __result.Age = source.Age ?? 0;
 ```
 
-#### `IgnoreIfNull` (`bool`, default: `false`)
+#### `IgnoreIfNull` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
-When true, the assignment for this member is wrapped in a null check: the destination member is only assigned when the source value is not null. Useful for update methods where you want to preserve existing values.
+Controls whether the assignment for this member is wrapped in a null check. When set to `ForgePolicy.True`, the destination member is only assigned when the source value is not null. Useful for update methods where you want to preserve existing values.
+
+- **`ForgePolicy.Inherit`** (default) — inherit the method-level setting, or the global default (false) if method-level is not set
+- **`ForgePolicy.True`** — wrap assignment in null check
+- **`ForgePolicy.False`** — assignment happens even if source is null
 
 Can be placed on either the source or destination member. Overrides the method-level `IgnoreIfNull` setting (per-member takes priority).
 
 ```csharp
-public class Source { [ForgeMap("Name", IgnoreIfNull = true)] public string? Name { get; set; } }
+public class Source { [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)] public string? Name { get; set; } }
 public class Dest   { public string Name { get; set; } = ""; }
 // Generates: if (source.Name != null) __result.Name = source.Name;
 ```
@@ -710,27 +719,27 @@ public string Email { get; set; }
 //     __result.Email = source.Email;
 ```
 
-#### `ShareReference` (`bool`, default unset)
+#### `ShareReference` (`ForgePolicy`, default: `ForgePolicy.Inherit`)
 
-Per-member override of [`ForgeMethod.ShareReference`](#forgemethod) for same-type mutable collections. Setting this overrides the method-level setting for this one member.
+Per-member override of [`ForgeMethod.ShareReference`](#forgemethod) for same-type mutable collections. Controls whether this specific member uses reference-sharing or deep-copying.
 
-- **Unset (default)** — inherit the method-level value (or the default of `false` / deep-copy if the method doesn't set it either).
-- **`true`** — this member is reference-shared regardless of method-level setting.
-- **`false`** — this member is deep-copied regardless of method-level setting.
+- **`ForgePolicy.Inherit`** (default) — inherit the method-level value, or the global default (false / deep-copy) if method-level is not set explicitly
+- **`ForgePolicy.True`** — this member is reference-shared regardless of method-level setting
+- **`ForgePolicy.False`** — this member is deep-copied regardless of method-level setting
 
 Can be placed on either the source or destination member. See [Reference semantics for same-type collections](#reference-semantics-for-same-type-collections) for full precedence rules.
 
 ```csharp
-[ForgeMethod(ShareReference = true)]                       // method default: share all
+[ForgeMethod(ShareReference = ForgePolicy.True)]                       // method default: share all
 public static partial PersonDto ToDto(Person source);
 
 public class Person
 {
-    // Inherits method-level share (true)
+    // Inherits method-level share (True)
     public List<string> Tags { get; set; }
 
     // Per-member override — this one deep-copies even though method says share
-    [ForgeMap("History", ShareReference = false)]
+    [ForgeMap("History", ShareReference = ForgePolicy.False)]
     public List<string> History { get; set; }
 }
 // Generates:
@@ -825,6 +834,147 @@ Without `[ForgeMap]`, the generator looks for a source member named `name` and e
 
 ---
 
+## `[ForgeDictionary]`
+
+**Namespace:** `FreakyKit.Forge`
+**Target:** Method (optional; applies to the entire forge method)
+
+Controls dictionary mapping behavior when converting between dictionaries and domain objects. Apply to any `[ForgeMethod]` where the source parameter or return type is a dictionary.
+
+**Auto-detection:** The generator automatically detects `Dictionary<string, T>` parameters/returns and generates appropriate mapping code. Use `[ForgeDictionary]` to customize the behavior via policies.
+
+### Properties
+
+#### `KeyCasing` (`KeyCasingPolicy`, default: `KeyCasingPolicy.Exact`)
+
+Controls how dictionary keys are matched against property names:
+
+| Policy | Behavior | Example |
+|--------|----------|---------|
+| **Exact** (default) | Match property name exactly | `FirstName` → `"FirstName"` |
+| **IgnoreCase** | Case-insensitive matching | `FirstName` matches `"firstname"`, `"FIRSTNAME"`, etc. |
+| **CamelCase** | Convert property to camelCase | `FirstName` → `"firstName"` |
+| **SnakeCase** | Convert property to snake_case | `FirstName` → `"first_name"` |
+
+```csharp
+[ForgeMethod]
+[ForgeDictionary(KeyCasing = KeyCasingPolicy.CamelCase)]
+public static partial Person FromDict(Dictionary<string, object> dict);
+// Will look for "firstName", "age" in the dictionary
+```
+
+#### `MissingKeyPolicy` (`MissingKeyPolicy`, default: `MissingKeyPolicy.Throw`)
+
+Controls behavior when a dictionary key is not found (dict→object only):
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| **Throw** (default) | Throw `KeyNotFoundException` | Strict validation—all keys required |
+| **UseDefault** | Assign `default(T)` | Permissive—use default for missing keys |
+| **Skip** | Don't assign—leave at default | Same as UseDefault but more explicit |
+| **ReturnNull** | Assign null (nullable types only) | Allow null for missing optional fields |
+
+```csharp
+[ForgeMethod]
+[ForgeDictionary(MissingKey = MissingKeyPolicy.UseDefault)]
+public static partial Person FromDict(Dictionary<string, object> dict);
+// Missing keys will use default values instead of throwing
+```
+
+#### `NullValue` (`NullValuePolicy`, default: `NullValuePolicy.Include`)
+
+Controls whether null values are included when converting object to dictionary:
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| **Include** (default) | Add all properties including nulls | Include everything in output |
+| **Skip** | Only add non-null values | Omit null properties from result |
+
+```csharp
+[ForgeMethod]
+[ForgeDictionary(NullValue = NullValuePolicy.Skip)]
+public static partial Dictionary<string, object> ToDict(Person person);
+// Null properties will be excluded from the generated dictionary
+```
+
+### Examples
+
+**JSON deserialization with CamelCase keys:**
+```csharp
+public class ApiResponse
+{
+    public string FirstName { get; set; } = "";
+    public int Age { get; set; }
+}
+
+[Forge]
+public static partial class ApiForges
+{
+    [ForgeMethod]
+    [ForgeDictionary(KeyCasing = KeyCasingPolicy.CamelCase)]
+    public static partial ApiResponse FromJson(Dictionary<string, object> json);
+}
+
+// JSON: { "firstName": "John", "age": 30 }
+var response = ApiForges.FromJson(apiData);  // Maps correctly
+```
+
+**Configuration with defaults:**
+```csharp
+[Forge]
+public static partial class ConfigForges
+{
+    [ForgeMethod]
+    [ForgeDictionary(
+        KeyCasing = KeyCasingPolicy.IgnoreCase,
+        MissingKeyPolicy = MissingKeyPolicy.UseDefault
+    )]
+    public static partial AppSettings FromConfig(Dictionary<string, object> config);
+}
+```
+
+**Omit null values:**
+```csharp
+[Forge]
+public static partial class ApiForges
+{
+    [ForgeMethod]
+    [ForgeDictionary(NullValuePolicy = NullValuePolicy.Skip)]
+    public static partial Dictionary<string, object> ToApiFormat(UserDto user);
+}
+
+var user = new UserDto { Id = 1, Name = "Alice", Email = null };
+var apiData = ApiForges.ToApiFormat(user);
+// Result: { "Id": 1, "Name": "Alice" } — Email omitted
+```
+
+### Supported Dictionary Types
+
+- `Dictionary<string, object>` ✅ (with casting)
+- `Dictionary<string, string>` ✅ (with parsing for primitives)
+- `IReadOnlyDictionary<string, T>` ✅
+- `IDictionary<string, T>` ✅
+
+**Non-string keys are not supported** (emits FKF700 diagnostic).
+
+### Type Conversion
+
+**Dictionary<string, object>:** Values are cast to the target type. Type mismatches throw `InvalidCastException` at runtime.
+
+**Dictionary<string, string>:** Values are parsed using type-specific parsers:
+- Primitives: `int.Parse()`, `bool.Parse()`, `double.Parse()`, etc.
+- Enums: `Enum.Parse<EnumType>(value)`
+- DateTime: `DateTime.Parse(value, CultureInfo.InvariantCulture)`
+- Guid: `Guid.Parse(value)`
+
+### Diagnostics
+
+- **FKF700** — Dictionary key type is not string (only `Dictionary<string, T>` supported)
+- **FKF701** — Unsupported dictionary value type (complex types, collections)
+- **FKF702** — ReturnNull policy used on non-nullable type
+
+---
+
 ## Reference semantics for same-type collections
 
 When a member has the **same exact type** on source and destination (e.g. `List<string>` → `List<string>`), Forge has two possible semantics:
@@ -836,16 +986,41 @@ The choice is controlled by the `ShareReference` flag, which can appear in three
 
 ### Precedence
 
-When multiple `ShareReference` values could apply to the same member, the most specific wins:
+When multiple `ShareReference` values could apply to the same member, the most specific **explicit** value wins. Inheritance is resolved top-to-bottom until an explicit (non-Inherit) value is found:
 
 ```
-1. Source-side  [ForgeMap(ShareReference = X)]   ← most specific
-2. Destination-side [ForgeMap(ShareReference = X)]
+1. Destination-side  [ForgeMap(ShareReference = X)]   ← most specific
+   If explicit (True/False), use it. If Inherit, continue.
+2. Source-side [ForgeMap(ShareReference = X)]
+   If explicit (True/False), use it. If Inherit, continue.
 3. Method-level [ForgeMethod(ShareReference = X)]
-4. Default: false (deep-copy)
+   If explicit (True/False), use it. If Inherit, continue.
+4. Default: ForgePolicy.False (deep-copy)            ← least specific
 ```
 
-Per-member settings always win over method-level. When both source-side and destination-side `[ForgeMap]` explicitly set `ShareReference` to different values, the **destination-side wins** and **FKF313** (Warning) is emitted to surface the conflict.
+**Key behavior:**
+- `ForgePolicy.Inherit` means "use the next level up" — it's transparent in the chain
+- Explicit `True` or `False` always wins and stops the chain immediately
+- When both source-side and destination-side are explicit with different values, the **destination-side wins** and **FKF313** (Warning) is emitted to surface the conflict
+
+**Example:**
+```csharp
+[ForgeMethod(ShareReference = ForgePolicy.Inherit)]  // Explicitly inherit from default
+public static partial PersonDto ToDto(Person source);
+
+public class Person
+{
+    // No [ForgeMap] → inherits method-level (Inherit) → inherits default (False/deep-copy)
+    public List<string> Tags { get; set; }
+
+    // Explicit override with True
+    [ForgeMap("History", ShareReference = ForgePolicy.True)]
+    public List<string> History { get; set; }
+}
+// Generates:
+//   __result.Tags = new List<string>(source.Tags);    // deep-copy (inherited default)
+//   __result.History = source.History;                 // reference-shared (explicit)
+```
 
 ### What's affected
 
@@ -1028,6 +1203,7 @@ When mapping hierarchical source models to flat DTOs, you have two main options:
 [Forge]
 public static partial class PersonForges
 {
+    [ForgeMethod(AllowFlattening = true)]
     public static partial PersonDto ToDto(Person source);
     // source.Company.Address.City → auto-mapped to dest.CompanyAddressCity
 }
@@ -1063,11 +1239,12 @@ public static partial class AddressForges
 }
 
 [Forge]
+[ForgeUses(typeof(AddressForges))]
 public static partial class PersonForges
 {
     [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonDto ToDto(Person source);
-    // source.Company (Company entity) → auto-discovered as CompanyForges.ToDto(...)
+    // source.Address (Address entity) → discovered in AddressForges as ToDto(...)
 }
 ```
 
@@ -1082,6 +1259,44 @@ public static partial class PersonForges
 | Reuse across multiple parents | ❌ | ✅ |
 | Simple attribute copy (same types) | ✅ | ✔ (works but unnecessary) |
 | Custom transformation needed | ❌ | ✅ (with [ForgeConverter]) |
+
+---
+
+## Attribute Feature Interaction Matrix
+
+Quick reference for which `[ForgeMethod]` features work together:
+
+| Feature A | Feature B | Compatible? | Notes |
+|-----------|-----------|-------------|-------|
+| `AllowFlattening` | `AllowNestedForging` | ✅ | Both can be true; flattening applies to unmatched members, nested forging applies to matched object members |
+| `AllowNestedForging` | `GenerateExpression` | ✅ | Nested forge calls are inlined into expressions (FKF507 detects cycles) |
+| `AllowFlattening` | `GenerateExpression` | ✅ | Flattened paths become expression-tree property chains |
+| `IgnoreIfNull` | `GenerateExpression` | ❌ | `IgnoreIfNull` has no expression-tree equivalent; member is silently omitted from expression (FKF506) |
+| `ShareReference` | `AllowNestedForging` | ✅ | ShareReference applies to collections; nested forging applies to object members |
+| `GenerateExpression` | Update methods (void) | ❌ | Expressions invalid for void returns; emits FKF504 (Error) |
+| `AllowFlattening` | `StrictMapping` | ✅ | Flattened members count as mapped (no FKF100/FKF110) |
+| `AllowNestedForging` | `StrictMapping` | ✅ | Nested mapped members count as matched (no FKF100/FKF110) |
+| `[ForgeConverter]` | `GenerateExpression` | ❌ | Converter calls can't translate to SQL; member is silently omitted from expression (FKF506) |
+
+**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `[ForgeConverter]` calls, custom materialization).
+
+---
+
+## `ForgePolicy` (Enum)
+
+**Namespace:** `FreakyKit.Forge`
+
+A tri-state enum for properties that support method-level configuration with per-member overrides. Distinguishes between "not set" (inherit from above) and "explicitly false", which is important for correct precedence evaluation.
+
+| Value | Numeric Value | Description |
+|-------|---------------|-------------|
+| `Inherit` | `0` | Inherit the setting from method-level configuration, or use the global default if unset at method level (default) |
+| `True` | `1` | Explicitly set to true |
+| `False` | `2` | Explicitly set to false |
+
+Used for:
+- `[ForgeMethod] ShareReference` and `IgnoreIfNull`
+- `[ForgeMap] ShareReference` and `IgnoreIfNull`
 
 ---
 

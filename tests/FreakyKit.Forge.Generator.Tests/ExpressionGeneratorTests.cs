@@ -261,7 +261,7 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
                 public class A
                 {
                     public string Name { get; set; } = "";
-                    [ForgeMap("Tag", IgnoreIfNull = true)] public string? Tag { get; set; }
+                    [ForgeMap("Tag", IgnoreIfNull = ForgePolicy.True)] public string? Tag { get; set; }
                 }
                 public class B { public string Name { get; set; } = ""; public string? Tag { get; set; } }
                 [Forge]
@@ -493,7 +493,7 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class A { [ForgeMap("Name", IgnoreIfNull = true)] public string? Name { get; set; } }
+                public class A { [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)] public string? Name { get; set; } }
                 public class B { public string? Name { get; set; } }
                 [Forge]
                 public static partial class F
@@ -516,7 +516,7 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
     [Fact]
     public void Phase2_IgnoreIfNull_MethodLevel_AllMembersExcluded_FKF506_PerMember()
     {
-        // [ForgeMethod(IgnoreIfNull = true)] applies to every assignment.
+        // [ForgeMethod(IgnoreIfNull = ForgePolicy.True)] applies to every assignment.
         // Expression mode excludes every member with one FKF506 per member.
         const string source = """
             using FreakyKit.Forge;
@@ -527,7 +527,7 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
                 [Forge]
                 public static partial class F
                 {
-                    [ForgeMethod(GenerateExpression = true, IgnoreIfNull = true)]
+                    [ForgeMethod(GenerateExpression = true, IgnoreIfNull = ForgePolicy.True)]
                     public static partial B Map(A source);
                 }
             }
@@ -579,7 +579,7 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class A { [ForgeMap("Name", IgnoreIfNull = true)] public string? Name { get; set; } }
+                public class A { [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)] public string? Name { get; set; } }
                 public class B { public string? Name { get; set; } }
                 [Forge]
                 public static partial class F

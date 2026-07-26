@@ -19,7 +19,7 @@ public sealed class IgnoreIfNullIntegrationTests : IntegrationTestBase
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeMethod(IgnoreIfNull = true)]
+                    [ForgeMethod(IgnoreIfNull = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -42,7 +42,7 @@ public sealed class IgnoreIfNullIntegrationTests : IntegrationTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { [ForgeMap("Name", IgnoreIfNull = true)] public string Name { get; set; } = ""; public string Email { get; set; } = ""; }
+                public class Source { [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)] public string Name { get; set; } = ""; public string Email { get; set; } = ""; }
                 public class Dest   { public string Name { get; set; } = ""; public string Email { get; set; } = ""; }
 
                 [Forge]
@@ -70,13 +70,13 @@ public sealed class IgnoreIfNullIntegrationTests : IntegrationTestBase
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Source { public string Name { get; set; } = ""; public int Age { get; set; } }
+                public class Source { public string? Name { get; set; } public int? Age { get; set; } }
                 public class Dest   { public string Name { get; set; } = ""; public int Age { get; set; } }
 
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeMethod(IgnoreIfNull = true)]
+                    [ForgeMethod(IgnoreIfNull = ForgePolicy.True)]
                     public static partial void Update(Source source, Dest existing);
                 }
             }
@@ -89,6 +89,6 @@ public sealed class IgnoreIfNullIntegrationTests : IntegrationTestBase
 
         var generated = result.RunResult.GeneratedTrees[0].GetText(TestContext.Current.CancellationToken).ToString();
         Assert.Contains("if (source.Name != null) existing.Name = source.Name;", generated);
-        Assert.Contains("if (source.Age != null) existing.Age = source.Age;", generated);
+        Assert.Contains("if (source.Age != null) existing.Age = source.Age.Value;", generated);
     }
 }

@@ -110,4 +110,5 @@ public sealed class TypeSafetyAndNestedTests : AnalyzerTestBase
         AssertContainsDiagnostic(source, "FKF200");
         AssertNotContainsDiagnostic(source, "FKF300");
     }
+
 }

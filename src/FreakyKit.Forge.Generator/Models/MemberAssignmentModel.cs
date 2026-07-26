@@ -20,11 +20,9 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
     /// <summary>
     /// Expression-tree-compatible right-hand-side for this assignment. Null when the imperative
     /// <see cref="SourceExpression"/> is not safe to use inside <c>Expression&lt;Func&lt;,&gt;&gt;</c>.
-    /// Mutable because nested-forge inlining is resolved in a post-extraction pass once all method
-    /// models exist. The mutation occurs within ExtractForgeClass before the model enters the
-    /// incremental pipeline, so the cached value is always up-to-date.
+    /// Set during post-extraction once all method models exist.
     /// </summary>
-    public string? ExpressionAssignment { get; set; }
+    public string? ExpressionAssignment { get; }
 
     /// <summary>
     /// For nested-forge members: the name of the forge method whose expression body should be
@@ -148,4 +146,25 @@ internal sealed class MemberAssignmentModel : IEquatable<MemberAssignmentModel>
             return hash;
         }
     }
+
+    public MemberAssignmentModel WithExpressionAssignment(string? expr) =>
+        new(
+            destMemberName: DestMemberName,
+            sourceExpression: SourceExpression,
+            ignoreIfNull: IgnoreIfNull,
+            nullCheckExpression: NullCheckExpression,
+            isInitOnly: IsInitOnly,
+            expressionAssignment: expr,
+            nestedForgeMethodName: NestedForgeMethodName,
+            nestedForgeSourceAccessor: NestedForgeSourceAccessor,
+            nestedForgeSourceIsRefType: NestedForgeSourceIsRefType,
+            collectionElementForgeMethod: CollectionElementForgeMethod,
+            collectionSourceAccessor: CollectionSourceAccessor,
+            collectionMaterializer: CollectionMaterializer,
+            collectionSourceIsRefType: CollectionSourceIsRefType,
+            nestedForgeNullFallback: NestedForgeNullFallback,
+            ignoreIfDefault: IgnoreIfDefault,
+            conditionMethodName: ConditionMethodName,
+            sourceMemberName: SourceMemberName,
+            sourceMemberType: SourceMemberType);
 }

@@ -38,11 +38,12 @@ public sealed class ForgeMethodAttribute : Attribute
     public bool AllowFlattening { get; set; } = false;
 
     /// <summary>
-    /// When true, all property assignments are wrapped in a null check:
+    /// When set to <see cref="ForgePolicy.True"/>, all property assignments are wrapped in a null check:
     /// the destination member is only assigned when the source value is not null.
+    /// When set to <see cref="ForgePolicy.Inherit"/> (default), uses the global default (false / assign even if null).
     /// Can be overridden per-member using <see cref="ForgeMapAttribute.IgnoreIfNull"/>.
     /// </summary>
-    public bool IgnoreIfNull { get; set; } = false;
+    public ForgePolicy IgnoreIfNull { get; set; } = ForgePolicy.Inherit;
 
     /// <summary>
     /// When true, unmapped destination members (FKF110) and unused source members (FKF111)
@@ -62,11 +63,12 @@ public sealed class ForgeMethodAttribute : Attribute
 
     /// <summary>
     /// Controls how Forge handles same-type mutable collection members (e.g. <c>List&lt;T&gt;</c> on
-    /// both source and destination). When false (default), the generator emits a copy-constructor
+    /// both source and destination). When set to <see cref="ForgePolicy.False"/> (default), the generator emits a copy-constructor
     /// expression (<c>new List&lt;T&gt;(source.X)</c>) so the destination owns an independent
-    /// collection instance. When true, the generator emits direct reference assignment
+    /// collection instance. When set to <see cref="ForgePolicy.True"/>, the generator emits direct reference assignment
     /// (<c>dto.Tags = source.Tags</c>), sharing the same list between source and destination —
     /// faster and allocation-free, but mutations to the destination will affect the source.
+    /// When set to <see cref="ForgePolicy.Inherit"/>, uses the global default (false / copy).
     ///
     /// Affects: <c>List&lt;T&gt;</c>, <c>Dictionary&lt;K,V&gt;</c>, <c>HashSet&lt;T&gt;</c>,
     /// <c>T[]</c>, and their interfaces (<c>IList</c>, <c>ICollection</c>, etc.).
@@ -76,5 +78,5 @@ public sealed class ForgeMethodAttribute : Attribute
     /// Can be overridden per-member via <see cref="ForgeMapAttribute.ShareReference"/>.
     /// Emits FKF311 (info) for each member that is reference-shared per this flag.
     /// </summary>
-    public bool ShareReference { get; set; } = false;
+    public ForgePolicy ShareReference { get; set; } = ForgePolicy.Inherit;
 }

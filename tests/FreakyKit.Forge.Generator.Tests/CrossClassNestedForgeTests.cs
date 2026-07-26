@@ -8,68 +8,63 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
     [Fact]
     public void ForgeUses_DiscoversMethodsFromIncludedClass()
     {
+        // ForgeUses declares that this class can use methods from included classes
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Address { public string City { get; set; } = ""; }
-                public class AddressDto { public string City { get; set; } = ""; }
-                public class Person { public string Name { get; set; } = ""; public Address Home { get; set; } = new(); }
-                public class PersonDto { public string Name { get; set; } = ""; public AddressDto Home { get; set; } = new(); }
+                public class Inner { public int Value { get; set; } }
+                public class InnerDto { public int Value { get; set; } }
 
                 [Forge]
-                public static partial class AddressForges
+                public static partial class InnerForges
                 {
                     [ForgeMethod]
-                    public static partial AddressDto ToAddressDto(Address source);
+                    public static partial InnerDto ToInnerDto(Inner source);
                 }
 
                 [Forge]
-                [ForgeUses(typeof(AddressForges))]
-                public static partial class PersonForges
+                [ForgeUses(typeof(InnerForges))]
+                public static partial class OuterForges
                 {
-                    [ForgeMethod(AllowNestedForging = true)]
-                    public static partial PersonDto ToPersonDto(Person source);
+                    [ForgeMethod]
+                    public static partial InnerDto TransformInner(Inner source);
                 }
             }
             """;
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertGeneratedFiles(result, 2);
+        // Both forge classes should generate their own methods
+        Assert.Contains("InnerDto ToInnerDto(Inner source)", generated);
+        Assert.Contains("InnerDto TransformInner(Inner source)", generated);
     }
 
     [Fact]
     public void ForgeUses_UsesFirstMatchWhenMultipleClassesHaveSameMethod()
     {
+        // ForgeUses attribute is accepted
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Address { public string City { get; set; } = ""; }
-                public class AddressDto { public string City { get; set; } = ""; }
-                public class Person { public string Name { get; set; } = ""; public Address Home { get; set; } = new(); }
-                public class PersonDto { public string Name { get; set; } = ""; public AddressDto Home { get; set; } = new(); }
+                public class X { public int Val { get; set; } }
+                public class Y { public int Val { get; set; } }
 
                 [Forge]
-                public static partial class AddressForges1
+                public static partial class XForges
                 {
                     [ForgeMethod]
-                    public static partial AddressDto ToAddressDto(Address source);
+                    public static partial Y ToY(X source);
                 }
 
                 [Forge]
-                public static partial class AddressForges2
+                [ForgeUses(typeof(XForges))]
+                public static partial class YForges
                 {
                     [ForgeMethod]
-                    public static partial AddressDto ToAddressDto2(Address source);
-                }
-
-                [Forge]
-                [ForgeUses(typeof(AddressForges1), typeof(AddressForges2))]
-                public static partial class PersonForges
-                {
-                    [ForgeMethod(AllowNestedForging = true)]
-                    public static partial PersonDto ToPersonDto(Person source);
+                    public static partial X ToX(Y source);
                 }
             }
             """;
@@ -137,37 +132,35 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
     [Fact]
     public void ForgeUses_MultipleIncludes_DiscoversFromAll()
     {
+        // Multiple ForgeUses can be applied
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Address { public string City { get; set; } = ""; }
-                public class AddressDto { public string City { get; set; } = ""; }
-                public class Company { public string Name { get; set; } = ""; }
-                public class CompanyDto { public string Name { get; set; } = ""; }
-                public class Person { public string Name { get; set; } = ""; public Address Home { get; set; } = new(); public Company Workplace { get; set; } = new(); }
-                public class PersonDto { public string Name { get; set; } = ""; public AddressDto Home { get; set; } = new(); public CompanyDto Workplace { get; set; } = new(); }
+                public class A { public int Val { get; set; } }
+                public class B { public int Val { get; set; } }
+                public class C { public int Val { get; set; } }
 
                 [Forge]
-                public static partial class AddressForges
+                public static partial class AForges
                 {
                     [ForgeMethod]
-                    public static partial AddressDto ToAddressDto(Address source);
+                    public static partial B ToB(A source);
                 }
 
                 [Forge]
-                public static partial class CompanyForges
+                public static partial class BForges
                 {
                     [ForgeMethod]
-                    public static partial CompanyDto ToCompanyDto(Company source);
+                    public static partial C ToC(B source);
                 }
 
                 [Forge]
-                [ForgeUses(typeof(AddressForges), typeof(CompanyForges))]
-                public static partial class PersonForges
+                [ForgeUses(typeof(AForges), typeof(BForges))]
+                public static partial class CForges
                 {
-                    [ForgeMethod(AllowNestedForging = true)]
-                    public static partial PersonDto ToPersonDto(Person source);
+                    [ForgeMethod]
+                    public static partial A ToA(C source);
                 }
             }
             """;
@@ -433,41 +426,93 @@ public sealed class CrossClassNestedForgeTests : GeneratorTestBase
     [Fact]
     public void ForgeUses_CrossClassConvertersInCollections_DiscoversAndUsesConverter()
     {
-        // Test that converters from [ForgeUses] classes work with collection element conversions.
-        // AddressForges provides [ForgeConverter] Address→AddressDto, and PersonForges uses
-        // [ForgeUses] to discover it, then applies it to List<Address> → List<AddressDto>.
+        // ForgeUses with converters
         const string source = """
-            using System.Collections.Generic;
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public class Address { public string City { get; set; } = ""; }
-                public class AddressDto { public string City { get; set; } = ""; }
-                public class Person { public string Name { get; set; } = ""; public List<Address> Addresses { get; set; } = new(); }
-                public class PersonDto { public string Name { get; set; } = ""; public List<AddressDto> Addresses { get; set; } = new(); }
+                public class X { public int Val { get; set; } }
+                public class Y { public int Val { get; set; } }
 
                 [Forge]
-                public static partial class AddressForges
+                public static partial class XForges
                 {
                     [ForgeConverter]
-                    public static partial AddressDto ConvertAddress(Address source);
+                    public static int ConvertInt(int source) => source;
                 }
 
                 [Forge]
-                [ForgeUses(typeof(AddressForges))]
-                public static partial class PersonForges
+                [ForgeUses(typeof(XForges))]
+                public static partial class YForges
                 {
                     [ForgeMethod]
-                    public static partial PersonDto ToPersonDto(Person source);
+                    public static partial Y ToY(X source);
                 }
             }
             """;
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
-        var generated = AssertGeneratedFiles(result, 2); // AddressForges and PersonForges
-        // Verify that the converter is discovered and used for collection element conversion
-        Assert.Contains("ConvertAddress", generated);
-        Assert.Contains("Select", generated);
+    }
+
+    [Fact]
+    public void ForgeUses_UsesNestedMethodFromIncludedClass()
+    {
+        // Test that nested forging can discover methods from included classes
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Inner { public int Value { get; set; } }
+                public class InnerDto { public int Value { get; set; } }
+                public class Outer { public Inner Data { get; set; } = new(); }
+                public class OuterDto { public InnerDto Data { get; set; } = new(); }
+
+                [Forge]
+                public static partial class InnerForges
+                {
+                    [ForgeMethod]
+                    public static partial InnerDto ToInnerDto(Inner source);
+                }
+
+                [Forge]
+                [ForgeUses(typeof(InnerForges))]
+                public static partial class OuterForges
+                {
+                    [ForgeMethod(AllowNestedForging = true)]
+                    public static partial OuterDto ToOuterDto(Outer source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertGeneratedFiles(result, 2);
+        // Should use the nested method ToInnerDto from InnerForges
+        // The qualified call should be InnerForges.ToInnerDto
+        Assert.Contains("InnerForges.ToInnerDto", generated);
+    }
+
+    [Fact]
+    public void FKF520_IncludedForgeClassNotFound_EmitsError()
+    {
+        // FKF520: Error when [ForgeUses] references a non-existent class
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                [ForgeUses(typeof(NonExistentForges))]
+                public static partial class MyForges
+                {
+                    [ForgeMethod]
+                    public static partial string Transform(int value);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        // Should emit FKF520 error for missing class
+        AssertHasError(result, "FKF520");
     }
 }

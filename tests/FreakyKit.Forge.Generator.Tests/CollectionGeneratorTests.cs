@@ -8,7 +8,7 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
     public void Collection_SameType_DeepCopiesByDefault()
     {
         // Same List<string> on both sides — Forge deep-copies via copy ctor by default so
-        // mutations to the DTO don't leak back to the source. The opt-out is ShareReference = true.
+        // mutations to the DTO don't leak back to the source. The opt-out is ShareReference = ForgePolicy.True.
         const string source = """
             using System.Collections.Generic;
             using FreakyKit.Forge;
@@ -34,7 +34,7 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
     [Fact]
     public void Collection_SameType_ShareReferenceTrue_OptsOutOfCopy()
     {
-        // With [ForgeMethod(ShareReference = true)], same-type mutable collection members are
+        // With [ForgeMethod(ShareReference = ForgePolicy.True)], same-type mutable collection members are
         // reference-shared instead of copied. Faster, less alloc, but mutations to the DTO leak
         // back to the source. FKF311 (Info) is emitted for visibility.
         const string source = """
@@ -48,7 +48,7 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeMethod(ShareReference = true)]
+                    [ForgeMethod(ShareReference = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -141,5 +141,34 @@ public sealed class CollectionGeneratorTests : GeneratorTestBase
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("__result.Name = source.Name", generated);
         Assert.Contains("__result.Values = source.Values != null ? source.Values.ToArray() : null", generated);
+    }
+
+    [Fact]
+    public void FKF310_CollectionMapping_EmitsDiagnostic()
+    {
+        // FKF310: Info diagnostic when collection mapping is applied
+        const string source = """
+            using System.Collections.Generic;
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public List<int> Values { get; set; } = new(); }
+                public class Dest   { public int[] Values { get; set; } = System.Array.Empty<int>(); }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // FKF310 should be emitted for collection mapping
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF310");
+        // Verify collection mapping is generated correctly
+        Assert.Contains("source.Values != null ? source.Values.ToArray() : null", generated);
     }
 }

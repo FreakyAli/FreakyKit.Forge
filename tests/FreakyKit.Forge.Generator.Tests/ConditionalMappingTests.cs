@@ -15,7 +15,7 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
                 public class Source { public int Value { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Value", Condition = nameof(IsPositive))]
+                    [ForgeMap("Value", Condition = "IsPositive")]
                     public int Value { get; set; }
                 }
 
@@ -32,6 +32,10 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // Verify condition guards the assignment
+        Assert.Contains("if (IsPositive(source))", generated);
+        Assert.Contains("__result.Value = source.Value", generated);
     }
 
     [Fact]
@@ -71,7 +75,7 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest
                 {
-                    [ForgeMap("Name", Condition = nameof(ShouldMap))]
+                    [ForgeMap("Name", Condition = "ShouldMap")]
                     public string Name { get; set; } = "";
                 }
 
@@ -100,7 +104,7 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
                 public class Source { public int Value { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Value", Condition = nameof(IsPositive))]
+                    [ForgeMap("Value", Condition = "IsPositive")]
                     public int Value { get; set; }
                 }
 
@@ -156,7 +160,7 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
                 public class Source { public string Name { get; set; } = ""; }
                 public class Dest
                 {
-                    [ForgeMap("Name", IgnoreIfDefault = true, Condition = nameof(IsValid))]
+                    [ForgeMap("Name", IgnoreIfDefault = true, Condition = "IsValid")]
                     public string Name { get; set; } = "";
                 }
 
@@ -239,7 +243,7 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
                 public class Source { public int Value { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Value", Condition = nameof(GetValue))]
+                    [ForgeMap("Value", Condition = "GetValue")]
                     public int Value { get; set; }
                 }
 
@@ -268,7 +272,7 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
                 public class Source { public int Value { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Value", Condition = nameof(Validate))]
+                    [ForgeMap("Value", Condition = "Validate")]
                     public int Value { get; set; }
                 }
 

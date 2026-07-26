@@ -165,7 +165,7 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
         Assert.Contains("__result.Name = source.Name;", generated);
     }
 
-    // ─── Method-level opt-out: ShareReference = true on [ForgeMethod] ────────
+    // ─── Method-level opt-out: ShareReference = ForgePolicy.True on [ForgeMethod] ────────
 
     [Fact]
     public void MethodLevel_ShareReferenceTrue_AllCollectionsSharedAndFKF311Emitted()
@@ -180,7 +180,7 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
                 [Forge]
                 public static partial class F
                 {
-                    [ForgeMethod(ShareReference = true)]
+                    [ForgeMethod(ShareReference = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -212,13 +212,13 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
                 public class Dest
                 {
                     public List<int> A { get; set; } = new();
-                    [ForgeMap("B", ShareReference = false)]
+                    [ForgeMap("B", ShareReference = ForgePolicy.False)]
                     public List<int> B { get; set; } = new();
                 }
                 [Forge]
                 public static partial class F
                 {
-                    [ForgeMethod(ShareReference = true)]
+                    [ForgeMethod(ShareReference = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -242,14 +242,14 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
                 public class Source
                 {
                     public List<int> A { get; set; } = new();
-                    [ForgeMap("B", ShareReference = false)]
+                    [ForgeMap("B", ShareReference = ForgePolicy.False)]
                     public List<int> B { get; set; } = new();
                 }
                 public class Dest { public List<int> A { get; set; } = new(); public List<int> B { get; set; } = new(); }
                 [Forge]
                 public static partial class F
                 {
-                    [ForgeMethod(ShareReference = true)]
+                    [ForgeMethod(ShareReference = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
@@ -273,7 +273,7 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
                 public class Dest
                 {
                     public List<int> A { get; set; } = new();
-                    [ForgeMap("B", ShareReference = true)]
+                    [ForgeMap("B", ShareReference = ForgePolicy.True)]
                     public List<int> B { get; set; } = new();
                 }
                 [Forge]
@@ -306,12 +306,12 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
             {
                 public class Source
                 {
-                    [ForgeMap("Tags", ShareReference = true)]
+                    [ForgeMap("Tags", ShareReference = ForgePolicy.True)]
                     public List<string> Tags { get; set; } = new();
                 }
                 public class Dest
                 {
-                    [ForgeMap("Tags", ShareReference = false)]
+                    [ForgeMap("Tags", ShareReference = ForgePolicy.False)]
                     public List<string> Tags { get; set; } = new();
                 }
                 [Forge]
@@ -339,12 +339,12 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
             {
                 public class Source
                 {
-                    [ForgeMap("Tags", ShareReference = false)]
+                    [ForgeMap("Tags", ShareReference = ForgePolicy.False)]
                     public List<string> Tags { get; set; } = new();
                 }
                 public class Dest
                 {
-                    [ForgeMap("Tags", ShareReference = true)]
+                    [ForgeMap("Tags", ShareReference = ForgePolicy.True)]
                     public List<string> Tags { get; set; } = new();
                 }
                 [Forge]
@@ -372,12 +372,12 @@ public sealed class ShareReferenceGeneratorTests : GeneratorTestBase
             {
                 public class Source
                 {
-                    [ForgeMap("Tags", ShareReference = true)]
+                    [ForgeMap("Tags", ShareReference = ForgePolicy.True)]
                     public List<string> Tags { get; set; } = new();
                 }
                 public class Dest
                 {
-                    [ForgeMap("Tags", ShareReference = true)]
+                    [ForgeMap("Tags", ShareReference = ForgePolicy.True)]
                     public List<string> Tags { get; set; } = new();
                 }
                 [Forge]

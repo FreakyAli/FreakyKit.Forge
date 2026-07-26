@@ -81,6 +81,11 @@ public abstract class GeneratorTestBase
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .ToList();
         Assert.Empty(errors);
+
+        var compilationErrors = result.CompilationDiagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .ToList();
+        Assert.Empty(compilationErrors);
     }
 
     protected static void AssertHasError(ForgeRunResult result, string diagnosticId)

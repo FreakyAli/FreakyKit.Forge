@@ -110,7 +110,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", IgnoreIfNull = true, NullFallback = NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", IgnoreIfNull = ForgePolicy.True, NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -344,7 +344,7 @@ public sealed class NullFallbackGeneratorTests : GeneratorTestBase
                 public class Source { public int Id { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Id", IgnoreIfNull = true)]
+                    [ForgeMap("Id", IgnoreIfNull = ForgePolicy.True)]
                     public int Id { get; set; }
                 }
 

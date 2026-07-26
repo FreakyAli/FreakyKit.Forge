@@ -230,4 +230,117 @@ public sealed class CircularForgeGeneratorTests : GeneratorTestBase
         var circularDiags = result.Diagnostics.ToList().Where(d => d.Id == "FKF301").ToList();
         Assert.Empty(circularDiags);
     }
+
+    // ─── FKF522: Circular ForgeUses (transitive cycles) ─────────────────────────
+
+    [Fact]
+    public void ForgeUses_DirectCycle_AUsesA_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                [ForgeUses(typeof(ForgesA))]
+                public static partial class ForgesA { }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF522");
+    }
+
+    [Fact]
+    public void ForgeUses_TwoClassCycle_AUsesBUsesA_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                [ForgeUses(typeof(ForgesB))]
+                public static partial class ForgesA { }
+
+                [Forge]
+                [ForgeUses(typeof(ForgesA))]
+                public static partial class ForgesB { }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF522");
+    }
+
+    [Fact]
+    public void ForgeUses_ThreeClassCycle_AUsesBUsesCUsesA_EmitsError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                [ForgeUses(typeof(ForgesB))]
+                public static partial class ForgesA { }
+
+                [Forge]
+                [ForgeUses(typeof(ForgesC))]
+                public static partial class ForgesB { }
+
+                [Forge]
+                [ForgeUses(typeof(ForgesA))]
+                public static partial class ForgesC { }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF522");
+    }
+
+    [Fact]
+    public void ForgeUses_LinearChain_NoError()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                [ForgeUses(typeof(ForgesB))]
+                public static partial class ForgesA { }
+
+                [Forge]
+                [ForgeUses(typeof(ForgesC))]
+                public static partial class ForgesB { }
+
+                [Forge]
+                public static partial class ForgesC { }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+    }
+
+    [Fact]
+    public void ForgeUses_MultipleIncludes_CycleDetected()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                [Forge]
+                [ForgeUses(typeof(ForgesB), typeof(ForgesC))]
+                public static partial class ForgesA { }
+
+                [Forge]
+                public static partial class ForgesB { }
+
+                [Forge]
+                [ForgeUses(typeof(ForgesA))]
+                public static partial class ForgesC { }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF522");
+    }
 }

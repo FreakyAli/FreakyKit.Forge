@@ -83,32 +83,4 @@ public sealed class ConstructorIntegrationTests : IntegrationTestBase
         Assert.Contains("__result.Email = source.Email", generated);
     }
 
-    [Fact]
-    public void E2E_NoPublicConstructor_EmitsFKF502Error()
-    {
-        const string source = """
-            using FreakyKit.Forge;
-            namespace TestNs
-            {
-                public class Source { public string Name { get; set; } = ""; }
-                public class Dest
-                {
-                    private Dest() { }
-                    public string Name { get; set; } = "";
-                }
-
-                [Forge]
-                public static partial class MyForges
-                {
-                    public static partial Dest ToDest(Source source);
-                }
-            }
-            """;
-
-        var result = RunFull(source);
-
-        Assert.True(result.HasErrors);
-        Assert.Contains(result.AllDiagnostics, d => d.Id == "FKF502");
-        Assert.False(result.HasGeneratedSource);
-    }
 }

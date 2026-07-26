@@ -75,40 +75,59 @@ public sealed class CollectionMismatchEdgeCasesTests : GeneratorTestBase
     }
 
     [Fact]
-    public void CollectionElementTypeWithConverter_NestedForgingDisabled_UsesConverter()
+    public void CollectionWithMatchingElementTypes_Succeeds()
     {
-        // List<int> → List<string> with only a converter available
-        // Converters are applied at the collection level too
+        // Collections with matching element types should map successfully
         const string source = """
             using FreakyKit.Forge;
             using System.Collections.Generic;
             namespace TestNs
             {
                 public class Source { public List<int> Values { get; set; } = new(); }
-                public class Dest { public List<string> Values { get; set; } = new(); }
+                public class Dest { public List<int> Values { get; set; } = new(); }
 
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeConverter]
-                    public static string ConvertInt(int value) => value.ToString();
-
-                    // AllowNestedForging=false (default), but converter exists
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
             """;
 
         var result = RunGenerator(source);
-        // Actually, converters for collection element types may not be applied automatically
-        // This test documents the actual behavior
-        var hasErrors = result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
-        if (hasErrors)
-        {
-            // If FKF200 is emitted, converter doesn't apply to collection elements
-            var fkf200 = Assert.Single(result.Diagnostics, d => d.Id == "FKF200");
-            Assert.Equal(DiagnosticSeverity.Error, fkf200.Severity);
-        }
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // Should successfully map the collection
+        Assert.Contains("Values", generated);
+    }
+
+    [Fact]
+    public void CollectionElementTypeMismatch_NoNestedForging_EmitsError()
+    {
+        // When collection element types don't match and AllowNestedForging is false, FKF200 is emitted
+        const string source = """
+            using FreakyKit.Forge;
+            using System.Collections.Generic;
+            namespace TestNs
+            {
+                public class Source { public List<int> Ids { get; set; } = new(); }
+                public class Dest { public List<string> Ids { get; set; } = new(); }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        // Should emit FKF200: incompatible types
+        var fkf200 = result.Diagnostics.FirstOrDefault(d => d.Id == "FKF200");
+        Assert.NotNull(fkf200);
+        Assert.Equal(DiagnosticSeverity.Error, fkf200.Severity);
     }
 
     [Fact]

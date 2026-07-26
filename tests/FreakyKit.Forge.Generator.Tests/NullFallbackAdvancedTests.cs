@@ -95,7 +95,7 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
                 public class Source { public Address Home { get; set; } = new(); }
                 public class Dest
                 {
-                    [ForgeMap("Home", IgnoreIfNull = true, NullFallback = NullFallback.DefaultConstruct)]
+                    [ForgeMap("Home", IgnoreIfNull = ForgePolicy.True, NullFallback = NullFallback.DefaultConstruct)]
                     public AddressDto Home { get; set; } = new();
                 }
 
@@ -152,37 +152,33 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
     }
 
     [Fact]
-    public void NullFallback_WithNullableValueType_EmitsWarning()
+    public void NullFallback_WithNullableValueType_Generates()
     {
-        // Nullable value type with NullFallback emits FKF314 (has no effect)
+        // Nullable value type with NullFallback still generates code correctly
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
             {
-                public struct Address { public string City { get; set; } }
-                public class AddressDto { public string City { get; set; } = ""; }
-
-                public class Source { public Address Home { get; set; } }
+                public class Source { public int? Value { get; set; } }
                 public class Dest
                 {
-                    [ForgeMap("Home", NullFallback = NullFallback.DefaultConstruct)]
-                    public AddressDto Home { get; set; } = new();
+                    [ForgeMap("Value", NullFallback = NullFallback.DefaultConstruct)]
+                    public int Value { get; set; }
                 }
 
                 [Forge]
                 public static partial class MyForges
                 {
-                    public static partial AddressDto ToAddressDto(Address source);
-
-                    [ForgeMethod(AllowNestedForging = true)]
+                    [ForgeMethod]
                     public static partial Dest ToDest(Source source);
                 }
             }
             """;
 
         var result = RunGenerator(source);
-        // Note: Value types don't have NullFallback effect, but this is a valid setup
         AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("ToDest", generated);
     }
 
     [Fact]
@@ -245,7 +241,7 @@ public sealed class NullFallbackAdvancedTests : GeneratorTestBase
                 [Forge]
                 public static partial class MyForges
                 {
-                    [ForgeMethod(ShareReference = true)]
+                    [ForgeMethod(ShareReference = ForgePolicy.True)]
                     public static partial Dest ToDest(Source source);
                 }
             }
