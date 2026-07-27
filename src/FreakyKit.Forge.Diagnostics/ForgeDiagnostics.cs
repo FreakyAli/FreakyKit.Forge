@@ -774,7 +774,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor ExpressionNestingDepthLimitExceeded = new(
         id: "FKF509",
         title: "Expression nesting depth limit exceeded",
-        messageFormat: "Expression property for '{0}' exceeds the maximum nesting depth of 10 levels. This generates excessive source code and may cause compiler errors. Consider using flattening or a converter instead of nested-forge inlining.",
+        messageFormat: "Expression property for '{0}' exceeds the maximum nesting depth of 7 levels. This generates excessive source code and may cause compiler errors. Consider using flattening or a converter instead of nested-forge inlining.",
         category: Category_Nested,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,

@@ -23,8 +23,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 {
     // Depth limits for flattening and expression nesting
     private const int FlatteningDiagnosticThreshold = 3;
-    private const int ExpressionNestingWarningThreshold = 5;
-    private const int ExpressionNestingErrorThreshold = 10;
+    private const int ExpressionNestingWarningThreshold = 4;
+    private const int ExpressionNestingErrorThreshold = 7;
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -584,8 +584,22 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (!sourceMembers.TryGetValue(key, out var srcMember))
             {
                 // Try flattening: dest "AddressCity" → source "Address.City"
-                if (allowFlattening && TryResolveFlattenedMapping(sourceType, key, destMember.Type, srcParamName, out var flattenExpr, out var flatteningDepth, out var flatteningPath))
+                bool depthLimitExceeded = false;
+                bool ambiguousFlattening = false;
+                if (allowFlattening && TryResolveFlattenedMapping(sourceType, key, destMember.Type, srcParamName, out var flattenExpr, out var flatteningDepth, out var flatteningPath, out depthLimitExceeded, out ambiguousFlattening))
                 {
+                    // FKF530: Ambiguous flattening detected
+                    if (ambiguousFlattening)
+                    {
+                        // Note: The message needs the longest matching prefix and the full key
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.AmbiguousFlatteningAutoResolved,
+                            GetSafeLocation(method),
+                            destMember.Name,
+                            key,
+                            flatteningPath?.Split('.').Last() ?? "unknown"));
+                    }
+
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.FlattenedMapping,
                         GetSafeLocation(method),
@@ -647,6 +661,14 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         isInitOnly: initOnly,
                         expressionAssignment: exprFlatten));
                     continue;
+                }
+                else if (allowFlattening && depthLimitExceeded)
+                {
+                    // FKF532: Flattening depth limit exceeded
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.FlatteningDepthLimitExceeded,
+                        GetSafeLocation(method),
+                        destMember.Name));
                 }
 
                 // FKF100: handled by analyzer — generator just skips
@@ -1499,6 +1521,35 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var dictAttr = GetForgeDictionaryAttribute(method);
         var (keyCasing, missingKey, nullValue) = GetDictionaryPolicies(dictAttr);
 
+        // FKF702: Check if ReturnNull policy is used on non-nullable members
+        if (missingKey == 3) // ReturnNull
+        {
+            foreach (var kvp in destMembers)
+            {
+                var memberType = kvp.Value.Type;
+                // Check if type is nullable: either reference type or value type with nullable annotation
+                var isNullable = memberType.IsReferenceType || memberType.NullableAnnotation == NullableAnnotation.Annotated;
+                if (!isNullable)
+                {
+                    // Non-nullable type (both value types and reference types)
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ReturnNullOnNonNullableType,
+                        GetSafeLocation(method),
+                        kvp.Value.Name,
+                        memberType.ToDisplayString()));
+                }
+            }
+        }
+
+        // FKF701: Check if dictionary value type is supported (primitives, object, enums)
+        if (!IsSupportedDictionaryValueType(srcDictVal))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.UnsupportedDictionaryValueType,
+                GetSafeLocation(method),
+                srcDictVal.ToDisplayString()));
+        }
+
         var location = GetSafeLocation(method);
         var lineNumber = GetSafeLineNumber(method);
 
@@ -1971,11 +2022,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         if (nested.MethodKind != ForgeMethodKind.Create) return null;
 
+        // Track maximum depth reached before checking limit
+        if (depth > maxDepth) maxDepth = depth;
+
         // Prevent exceeding expression nesting depth limit
         if (depth >= ExpressionNestingErrorThreshold)
             return null;
-
-        if (depth > maxDepth) maxDepth = depth;
 
         visitedChain.Add(nestedMethodName);
         try
@@ -2868,11 +2920,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         string sourceParamName,
         out string flattenExpression,
         out int flatteningDepth,
-        out string? flatteningPath)
+        out string? flatteningPath,
+        out bool depthLimitExceeded,
+        out bool ambiguousFlatteningDetected)
     {
         flattenExpression = "";
         flatteningDepth = 0;
         flatteningPath = null;
+        depthLimitExceeded = false;
+        ambiguousFlatteningDetected = false;
 
         // Recursively search all nested levels
         var result = TryResolveFlattenedMappingRecursive(
@@ -2883,7 +2939,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             currentAccess: "",
             intermediateChain: new List<ITypeSymbol>(),
             depth: 0,
-            pathParts: new List<string>());
+            pathParts: new List<string>(),
+            depthExceeded: out depthLimitExceeded,
+            ambiguousMatch: out ambiguousFlatteningDetected);
 
         if (result?.Expression != null)
         {
@@ -2909,9 +2967,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         string currentAccess,
         List<ITypeSymbol> intermediateChain,
         int depth,
-        List<string> pathParts)
+        List<string> pathParts,
+        out bool depthExceeded,
+        out bool ambiguousMatch)
     {
         const int MaxFlatteningDepth = 10;
+        depthExceeded = false;
+        ambiguousMatch = false;
 
         // Safety: prevent infinite recursion on circular types
         if (intermediateChain.Contains(currentType, SymbolEqualityComparer.Default))
@@ -2919,9 +2981,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         // Check depth limit
         if (depth > MaxFlatteningDepth)
+        {
+            depthExceeded = true;
             return null;
+        }
 
-        // Try each member as a prefix of the remaining key
+        // Detect potential ambiguous matches at this level
+        var prefixMatches = new List<IPropertySymbol>();
         foreach (var member in currentType.GetMembers())
         {
             if (member.IsStatic || member.DeclaredAccessibility == Accessibility.Private)
@@ -2934,10 +3000,18 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 continue;
 
             var memberNameLower = prop.Name.ToLowerInvariant();
+            if (remainingKeyLower.StartsWith(memberNameLower))
+                prefixMatches.Add(prop);
+        }
 
-            // Check if this member's name matches the start of the remaining key
-            if (!remainingKeyLower.StartsWith(memberNameLower))
-                continue;
+        // If multiple prefixes match, it's ambiguous
+        if (prefixMatches.Count > 1)
+            ambiguousMatch = true;
+
+        // Try each member as a prefix of the remaining key (use longest match first due to sorting)
+        foreach (var prop in prefixMatches.OrderByDescending(p => p.Name.Length))
+        {
+            var memberNameLower = prop.Name.ToLowerInvariant();
 
             // If the member name exactly matches the entire remaining key
             if (memberNameLower == remainingKeyLower)
@@ -2985,8 +3059,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     nextAccess,
                     nextChain,
                     depth + 1,
-                    nextPathParts);
+                    nextPathParts,
+                    out var nestedDepthExceeded,
+                    out var nestedAmbiguous);
 
+                if (nestedDepthExceeded) depthExceeded = true;
+                if (nestedAmbiguous) ambiguousMatch = true;
                 if (result?.Expression != null)
                     return result;
             }
@@ -4390,5 +4468,34 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             ForgeDiagnostics.ForgeIgnoreOnSourceMember,
             member.Locations.FirstOrDefault(),
             $"{containingType.Name}.{memberName}");
+    }
+
+    private static bool IsSupportedDictionaryValueType(ITypeSymbol type)
+    {
+        var display = type.ToDisplayString();
+
+        // object is always supported (catch-all type)
+        if (display == "object") return true;
+
+        // Primitive types
+        var primitives = new[]
+        {
+            "string", "int", "long", "short", "byte", "sbyte", "float", "double", "decimal",
+            "bool", "char", "uint", "ulong", "ushort", "System.Guid", "System.DateTime",
+            "System.DateTimeOffset", "System.TimeSpan"
+        };
+        if (primitives.Contains(display)) return true;
+
+        // Nullable primitive types
+        if (type is INamedTypeSymbol named && named.IsGenericType && named.Name == "Nullable")
+        {
+            var underlyingType = named.TypeArguments.FirstOrDefault();
+            if (underlyingType != null) return IsSupportedDictionaryValueType(underlyingType);
+        }
+
+        // Enum types
+        if (type.TypeKind == TypeKind.Enum) return true;
+
+        return false;
     }
 }

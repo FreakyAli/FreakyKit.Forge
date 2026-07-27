@@ -52,7 +52,8 @@ The analyzer validates every `[Forge]`-decorated static partial class and its fo
 | Collection mapping applied | FKF310 (Info) |
 | Member excluded from generated expression (custom converter, IgnoreIfNull, non-translatable materializer) | FKF506 (Info) |
 | Circular nested forge in expression property | FKF507 (Error) |
-| Deep nested-forge inlining (>5 levels) in expression property | FKF508 (Info) |
+| Deep nested-forge inlining (>4 levels) in expression property | FKF508 (Warning) |
+| Expression nesting depth limit exceeded (≥7 levels) | FKF509 (Error) |
 
 ### Construction Checks
 

@@ -382,4 +382,137 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
         Assert.Contains(result.Diagnostics, d => d.Id == "FKF106");
     }
 
+    [Fact]
+    public void FKF532_FlatteningDepthLimitExceeded_EmitsError()
+    {
+        // FKF532: Error when flattening depth exceeds 10 levels
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class L11 { public string Value { get; set; } = ""; }
+                public class L10 { public L11 L11 { get; set; } = new(); }
+                public class L9 { public L10 L10 { get; set; } = new(); }
+                public class L8 { public L9 L9 { get; set; } = new(); }
+                public class L7 { public L8 L8 { get; set; } = new(); }
+                public class L6 { public L7 L7 { get; set; } = new(); }
+                public class L5 { public L6 L6 { get; set; } = new(); }
+                public class L4 { public L5 L5 { get; set; } = new(); }
+                public class L3 { public L4 L4 { get; set; } = new(); }
+                public class L2 { public L3 L3 { get; set; } = new(); }
+                public class L1 { public L2 L2 { get; set; } = new(); }
+                public class Source { public L1 L1 { get; set; } = new(); }
+                public class Dest { public string L1L2L3L4L5L6L7L8L9L10L11Value { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowFlattening = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        // Should emit FKF532 for depth limit exceeded
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF532");
+    }
+
+    [Fact]
+    public void FKF532_NoError_WhenDepthWithinLimit()
+    {
+        // No FKF532 when flattening depth is within 10 levels
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class L10 { public string Value { get; set; } = ""; }
+                public class L9 { public L10 L10 { get; set; } = new(); }
+                public class L8 { public L9 L9 { get; set; } = new(); }
+                public class L7 { public L8 L8 { get; set; } = new(); }
+                public class L6 { public L7 L7 { get; set; } = new(); }
+                public class L5 { public L6 L6 { get; set; } = new(); }
+                public class L4 { public L5 L5 { get; set; } = new(); }
+                public class L3 { public L4 L4 { get; set; } = new(); }
+                public class L2 { public L3 L3 { get; set; } = new(); }
+                public class L1 { public L2 L2 { get; set; } = new(); }
+                public class Source { public L1 L1 { get; set; } = new(); }
+                public class Dest { public string L1L2L3L4L5L6L7L8L9L10Value { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowFlattening = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        // No FKF532 - depth is exactly 10, which is the limit
+        Assert.DoesNotContain(result.Diagnostics, d => d.Id == "FKF532");
+    }
+
+    [Fact]
+    public void FKF530_AmbiguousFlattening_EmitsError()
+    {
+        // FKF530: Error when multiple source properties at same level could match flattening path
+        // Both "City" and "CityData" are prefixes of "CityDataInfo"
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Data { public string Info { get; set; } = ""; }
+                public class City { public Data Data { get; set; } = new(); }
+
+                public class Source
+                {
+                    public City City { get; set; } = new();
+                    public Data CityData { get; set; } = new();
+                }
+
+                public class Dest { public string CityDataInfo { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowFlattening = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        // Should emit FKF530 for ambiguous flattening - both "City" and "CityData" are prefixes of "CityDataInfo"
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF530");
+    }
+
+    [Fact]
+    public void FKF530_NoError_WhenSinglePath()
+    {
+        // No FKF530 when only one path could match
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Address { public string Code { get; set; } = ""; }
+                public class Source { public Address Address { get; set; } = new(); }
+                public class Dest { public string AddressCode { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowFlattening = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        // No FKF530 - only one path (Address.Code) could match
+        Assert.DoesNotContain(result.Diagnostics, d => d.Id == "FKF530");
+    }
+
 }

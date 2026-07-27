@@ -654,24 +654,6 @@ High. Restructure recursion to accumulate all candidates, post-process for longe
 
 ---
 
-#### Expression Nesting Depth Enforcement
-
-**Type:** Fix — Limit Enforcement
-
-**Why**
-
-FKF508 (deep nesting) warns at depth 5+ but allows arbitrary nesting. No hard limit; very deep expressions generate megabytes of code causing unclear compiler errors.
-
-**Complexity**
-
-Medium. Add depth check before inlining; emit FKF509 error when exceeded.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Expression inlining loops
-
----
-
 #### Conditional Metadata Refactoring
 
 **Type:** Fix — Code Organization
@@ -900,20 +882,16 @@ Low. Remove conditional; assert FKF200 always.
 
 **Type:** Test — Coverage Gap
 
-**Status:** As of 2026-07-25, systematic diagnostic audit identified 73 tested diagnostics (94.8% coverage) with 8 remaining untested edge cases that require deeper investigation or different test patterns.
+**Status:** As of 2026-07-27, systematic diagnostic audit identified 73 tested diagnostics (94.8% coverage) with 4 remaining untested edge cases that require deeper investigation or different test patterns.
 
 **Why**
 
-Every diagnostic ID defined in `ForgeDiagnostics.cs` should have corresponding tests (both positive cases where it's emitted, and negative cases where it isn't). Initial audit found 16 untested diagnostics; implementation resolved 8, leaving 8 that require special handling.
+Every diagnostic ID defined in `ForgeDiagnostics.cs` should have corresponding tests (both positive cases where it's emitted, and negative cases where it isn't). Initial audit found 16 untested diagnostics; implementation resolved 12, leaving 4 that require special handling.
 
-**Untested Diagnostics (8 of 77 total)**
+**Untested Diagnostics (4 of 77 total)**
 
 | ID | Title | Severity | Issue | Approach |
 |---|---|---|---|---|
-| **FKF050** | Before hook detected (Info) | Info | Partial method implementation requirements conflict; hook emission logic needs verification | Verify hook detection works; refactor test to avoid C# partial method constraints |
-| **FKF051** | After hook detected (Info) | Info | Same as FKF050; both are info diagnostics from hook detection | Same as FKF050 |
-| **FKF508** | Deep nested-forge inlining (Info) | Info | Requires 6+ levels of nested forge calls; conflicts with FKF030 (unique method names) | Use different method names per level or create multi-class test setup |
-| **FKF509** | Expression nesting depth limit (Error) | Error | Requires 11+ levels; test complexity vs actual trigger conditions | Confirm hard limit is actually enforced; simplify test approach |
 | **FKF530** | Ambiguous flattening auto-resolved (Error) | Error | Test cases don't trigger the ambiguous pattern; greedy algorithm returns first match | Refactor flattening algorithm to collect all candidates (see "Exhaustive Flattening" fix above); then test ambiguity detection |
 | **FKF532** | Flattening depth limit exceeded (Error) | Error | Depth-checking logic may have off-by-one errors; limits silently ignored in current code | Fix depth accounting (see "Flattening Depth Check" fix above); then add test |
 | **FKF701** | Unsupported dictionary value type (Error) | Error | Complex type validation in dictionary context doesn't emit expected diagnostic | Investigate dictionary type-support validation; refine test with correct type scenarios |
@@ -922,19 +900,15 @@ Every diagnostic ID defined in `ForgeDiagnostics.cs` should have corresponding t
 **Implementation Plan**
 
 **Phase 1 — Investigation & Fixes (P2)**
-1. Verify FKF050/FKF051 hook detection is actually emitting diagnostics in ForgeGenerator
-2. Confirm FKF508/FKF509 expression depth enforcement logic exists and works
-3. Audit FKF530 flattening algorithm — currently returns first match instead of collecting all candidates (see "Exhaustive Flattening Candidate Collection" fix)
-4. Audit FKF532 depth-checking logic for off-by-one errors in threshold comparison
-5. Verify FKF701/FKF702 trigger conditions in dictionary mapping validation logic
+1. Audit FKF530 flattening algorithm — currently returns first match instead of collecting all candidates (see "Exhaustive Flattening Candidate Collection" fix)
+2. Audit FKF532 depth-checking logic for off-by-one errors in threshold comparison
+3. Verify FKF701/FKF702 trigger conditions in dictionary mapping validation logic
 
 **Phase 2 — Test Implementation (P2)**
 Once diagnostic emission is confirmed and/or fixes are applied:
-1. **FKF050/FKF051**: Refactor hook tests to work around C# partial method constraints; use internal/public modifiers or static initialization
-2. **FKF508/FKF509**: Create multi-class test setup with unique method names per level; verify depth is actually tracked
-3. **FKF530**: After implementing "Exhaustive Flattening" fix, add test that constructs genuinely ambiguous flattening patterns
-4. **FKF532**: After fixing depth accounting, add test with exactly 11 levels of nesting
-5. **FKF701/FKF702**: Investigate and implement correct test cases with proper attribute placement and type scenarios
+1. **FKF530**: After implementing "Exhaustive Flattening" fix, add test that constructs genuinely ambiguous flattening patterns
+2. **FKF532**: After fixing depth accounting, add test with exactly 11 levels of nesting
+3. **FKF701/FKF702**: Investigate and implement correct test cases with proper attribute placement and type scenarios
 
 **Complexity**
 
@@ -951,8 +925,6 @@ Low-Medium. These are edge cases and diagnostics already implemented and mostly 
 - `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Confirm diagnostic definitions match emission conditions
 
 **Test Implementation Phase:**
-- `tests/FreakyKit.Forge.Generator.Tests/HooksGeneratorTests.cs` (new) — FKF050, FKF051
-- `tests/FreakyKit.Forge.Generator.Tests/ExpressionInliningTests.cs` (new) — FKF508, FKF509
 - `tests/FreakyKit.Forge.Generator.Tests/FlatteningGeneratorTests.cs` — Add FKF530, FKF532 tests after algorithm fix
 - `tests/FreakyKit.Forge.Generator.Tests/DictionaryMappingDebugTests.cs` — Add FKF701, FKF702 tests with refined setup
 
@@ -969,7 +941,6 @@ Low-Medium. These are edge cases and diagnostics already implemented and mostly 
 
 This test-coverage item depends on successful implementation of:
 - "Exhaustive Flattening Candidate Collection" (enables FKF530/FKF532 testing)
-- "Expression Nesting Depth Enforcement" (enables FKF509 testing)
 - "Flattening Depth Check Accounting" (correctness fix for FKF532)
 
 **Target Completion**: Q3 2026 (after core fixes are merged)
