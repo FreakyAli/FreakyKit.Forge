@@ -72,7 +72,7 @@ public sealed class ExpressionNestingTests : GeneratorTestBase
         AssertNoErrors(result);
 
         // FKF508 should trigger for depth > 4 (6 nested forge calls reach depth 5)
-        Assert.Contains(result.Diagnostics, d => d.Id == "FKF508");
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF508" && d.Severity == DiagnosticSeverity.Warning);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public sealed class ExpressionNestingTests : GeneratorTestBase
         var result = RunGenerator(source);
 
         // FKF509 should now trigger at depth >= 7 (it's expected to error)
-        Assert.Contains(result.Diagnostics, d => d.Id == "FKF509");
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF509" && d.Severity == DiagnosticSeverity.Error);
     }
 
     [Fact]

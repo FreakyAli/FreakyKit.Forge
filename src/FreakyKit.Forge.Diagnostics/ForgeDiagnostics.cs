@@ -757,16 +757,16 @@ public static class ForgeDiagnostics
         description: "Expression properties must inline nested forge methods because EF cannot translate Expression.Invoke. A cycle in the nested call chain (A → B → A or longer) would inline forever. Either break the cycle or remove GenerateExpression from the involved methods.");
 
     /// <summary>
-    /// FKF508 (Info): A deeply-nested expression property was inlined.
+    /// FKF508 (Warning): A deeply-nested expression property was inlined.
     /// </summary>
     public static readonly DiagnosticDescriptor ExpressionDeepNesting = new(
         id: "FKF508",
         title: "Deep nested-forge inlining in expression property",
         messageFormat: "Expression property for '{0}' inlines nested forge methods {1} levels deep. The generated source size grows multiplicatively; consider whether flattening or a converter would be cleaner.",
         category: Category_Nested,
-        defaultSeverity: DiagnosticSeverity.Info,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
-        description: "Each level of nested-forge inlining substitutes the full body of the nested expression into the outer one. Deep chains can produce large generated source files. This diagnostic fires when depth exceeds 5 to surface the cost; no action is required.");
+        description: "Each level of nested-forge inlining substitutes the full body of the nested expression into the outer one. Deep chains can produce large generated source files. This diagnostic fires when depth exceeds 4 to surface the cost; no action is required.");
 
     /// <summary>
     /// FKF509 (Error): Expression nesting depth limit exceeded.
@@ -778,7 +778,7 @@ public static class ForgeDiagnostics
         category: Category_Nested,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Expression property nesting is limited to 10 levels to prevent unbounded source code growth and compiler errors. Restructure the mapping to use flattening or converters instead.");
+        description: "Expression property nesting is limited to 7 levels to prevent unbounded source code growth and compiler errors. Restructure the mapping to use flattening or converters instead.");
 
     /// <summary>
     /// FKF510 (Error): A condition method referenced in [ForgeMap] was not found.
@@ -987,7 +987,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor UnsupportedDictionaryValueType = new(
         id: "FKF701",
         title: "Unsupported dictionary value type",
-        messageFormat: "Dictionary value type '{0}' is not supported for member '{1}'. Complex types without custom converters, collections, and nested objects require explicit forging.",
+        messageFormat: "Dictionary value type '{0}' is not supported. Complex types without custom converters, collections, and nested objects require explicit forging.",
         category: Category_TypeSafety,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
