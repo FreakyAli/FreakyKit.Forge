@@ -91,8 +91,8 @@ its type (`AllowNestedForging = true`), the generator inlines that method's expr
 directly into the parent. For a circular reference (A → B → A, etc.) the generator emits
 **FKF507** and the expression property is suppressed because inlining would produce infinite source.
 
-When inlining depth exceeds five levels, **FKF508** fires as informational notice — the expression
-property still emits, but generated source size grows multiplicatively at deep nesting.
+When inlining depth exceeds four levels, **FKF508** fires as a warning — the expression
+property still emits, but generated source size grows multiplicatively at deep nesting. At seven levels or deeper, **FKF509** errors and the expression property is suppressed.
 
 ## What gets excluded
 
@@ -123,7 +123,8 @@ and blocks generation for the entire class. Drop the flag or split into a create
 | FKF505 | Warning | `GenerateExpression = true` with before/after hooks (hooks omitted from expression) |
 | FKF506 | Info | Member excluded from generated expression — reason in message |
 | FKF507 | Error | Cycle in nested-forge inlining chain |
-| FKF508 | Info | Inlined nesting depth exceeds five levels |
+| FKF508 | Warning | Inlined nesting depth exceeds four levels |
+| FKF509 | Error | Inlined nesting depth exceeds seven levels |
 
 See [diagnostics.md](diagnostics.md) for the full diagnostic catalogue.
 
@@ -137,5 +138,5 @@ See [diagnostics.md](diagnostics.md) for the full diagnostic catalogue.
   you at build time which members aren't going to translate — if your build is clean, the expression
   is safe.
 - **Generated source size**: deeply nested mappings produce large inlined expression bodies. FKF508
-  surfaces the cost at depth > 5. The runtime cost is identical to hand-written code; only the
+  surfaces the cost at depth > 4; FKF509 errors at depth ≥ 7. The runtime cost is identical to hand-written code; only the
   generated file size grows.

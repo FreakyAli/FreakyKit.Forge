@@ -516,7 +516,7 @@ var dtos = await dbContext.People
   - Collection materializers other than `.ToList()` / `.ToArray()` (HashSet, ImmutableArray, etc.)
 - Nested forge methods are **inlined** into the expression body (EF Core cannot translate
   `Expression.Invoke`). A cycle in the nested chain emits **FKF507** (Error). Inlining depth
-  greater than five levels emits **FKF508** (Info).
+  greater than four levels emits **FKF508** (Warning), and exceeding seven levels emits **FKF509** (Error).
 
 See [projections.md](projections.md) for the full coverage matrix and translation reference.
 

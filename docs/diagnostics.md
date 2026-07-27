@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-FreakyKit.Forge emits 74 diagnostics across 8 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+FreakyKit.Forge emits 77 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -1125,15 +1125,27 @@ public static partial AddressDto ToAddressDto(Address source);  // FKF507
 
 | | |
 |--|--|
-| **Severity** | Info |
+| **Severity** | Warning |
 | **Category** | FreakyKit.Forge.Nested |
 | **Message** | Expression property for '{0}' inlines nested forge methods {1} levels deep. The generated source size grows multiplicatively; consider whether flattening or a converter would be cleaner. |
 
 Each level of nested-forge inlining substitutes the full body of the nested expression into the
 outer one. Deep chains produce large generated source files. This diagnostic fires when depth
-exceeds five to surface the cost. No action is required — the expression still emits and runs
+exceeds four to surface the cost. No action is required — the expression still emits and runs
 correctly. Consider flattening with `AllowFlattening = true` for shallow-but-wide member access if
 the generated source is becoming unwieldy.
+
+---
+
+### FKF509 — Expression nesting depth limit exceeded
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Expression property for '{0}' exceeds the maximum nesting depth of 7 levels. This generates excessive source code and may cause compiler errors. Consider using flattening or a converter instead of nested-forge inlining. |
+
+Expression property nesting depth is capped at 7 levels to prevent generating excessively large source files that could exceed compiler limits or cause performance issues. If your mapping requires deeper nesting, refactor to use flattening (`AllowFlattening = true`) or a custom converter instead.
 
 ---
 
