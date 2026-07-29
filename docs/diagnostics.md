@@ -1149,7 +1149,7 @@ Expression property nesting depth is capped at 7 levels to prevent generating ex
 
 ---
 
-## Conditional/Predicate Mapping Diagnostics (FKF510–FKF512)
+## Conditional/Predicate Mapping Diagnostics (FKF510–FKF513)
 
 ### FKF510 — Condition method not found
 
@@ -1222,6 +1222,46 @@ private static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Nam
 
 // Correct
 internal static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Name);
+```
+
+---
+
+### FKF513 — Condition method shadowed by included class
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' exists in multiple included forge classes. Using '{2}' (first match); '{3}' is shadowed. |
+
+Condition method resolution searches the current forge class first, then falls back to classes listed in `[ForgeUses]`, in declaration order. If more than one included class declares a static method with the condition's name, the first one (by `[ForgeUses]` order) is used and the rest are shadowed.
+
+**Note:** This is a warning, not an error. It's intentional if you want a fallback, but it's worth knowing about to avoid calling the wrong method by accident.
+
+**Fix (optional):** Reorder classes in `[ForgeUses]` if a different priority is preferred, or rename one of the methods to avoid the collision.
+
+```csharp
+// Generates FKF513 warning
+[Forge]
+public static partial class ConditionHelpersA
+{
+    public static bool IsPositive(Source source) => source.Value > 0;
+}
+
+[Forge]
+public static partial class ConditionHelpersB
+{
+    public static bool IsPositive(Source source) => source.Value >= 0;
+}
+
+[Forge]
+[ForgeUses(typeof(ConditionHelpersA), typeof(ConditionHelpersB))]
+public static partial class MyForges
+{
+    [ForgeMethod]
+    public static partial Dest ToDto(Source source);
+}
+// Both included classes declare IsPositive. ConditionHelpersA's method is used; ConditionHelpersB's is shadowed.
 ```
 
 ---

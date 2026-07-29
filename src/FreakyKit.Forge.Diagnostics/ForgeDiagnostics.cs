@@ -816,6 +816,18 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "Condition methods must be publicly or internally accessible to be discovered and called by the generator.");
 
+    /// <summary>
+    /// FKF513 (Warning): A condition method name matches methods in multiple included forge classes.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ShadowedConditionMethod = new(
+        id: "FKF513",
+        title: "Condition method shadowed by included class",
+        messageFormat: "Member '{0}': condition method '{1}' exists in multiple included forge classes. Using '{2}' (first match); '{3}' is shadowed.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "Multiple included forge classes declare a static method with the condition's name. The first included class in [ForgeUses] is used; others are shadowed. Reorder classes or rename methods if unintentional.");
+
     // ─── Cross-Class Nested Forge ────────────────────────────────────────────
 
     /// <summary>

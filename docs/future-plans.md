@@ -33,7 +33,6 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
 | 6 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
-| 7 | Dictionary mapping | P3 | Medium | Medium | Dict ↔ typed object conversion |
 | 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
 | 9 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
@@ -160,176 +159,6 @@ Medium. Solves EF Core TPH scenarios; eliminates hand-written dispatch logic.
 4. Generate switch expression: order patterns by inheritance depth (derived first)
 5. Default arm calls base mapping or throws `InvalidOperationException`
 6. Add analyzer diagnostics: unreachable patterns, missing methods, type mismatches
-
----
-
-### 7. Dictionary Mapping — `P3` [PHASE 2 & 3 INFRASTRUCTURE COMPLETE]
-
-**Type:** Feature — Mapping Type Support
-
-**Status:** 
-- ✅ **PHASE 2 COMPLETE**: Detection, basic code generation, diagnostic infrastructure
-- ✅ **PHASE 3 COMPLETE**: Key casing policies, null value policies, policy-driven code generation, type casting, comprehensive test coverage (9 tests passing)
-- ✅ **PHASE 4 COMPLETE**: Missing key policy code generation (Throw, UseDefault, ReturnNull), Dictionary<string, string> parsing (13 tests passing)
-
-**Why**
-
-Many APIs return data as dictionaries (JSON deserialization, configuration systems, dynamic data). Being able to forge a typed object from a dictionary and vice versa bridges the gap between dynamic and static typing entirely at compile time with zero runtime overhead.
-
-**What's Implemented**
-
-Dictionary type detection automatically triggers when method signature uses `Dictionary<string, T>` as source or destination. Behavior is controlled via optional `[ForgeDictionary]` attribute on the method.
-
-**Infrastructure Complete:**
-- ✅ Three policy enums: `KeyCasingPolicy`, `MissingKeyPolicy`, `NullValuePolicy`
-- ✅ `[ForgeDictionary]` attribute with configurable policies
-- ✅ Dictionary→Object and Object→Dictionary detection in ExtractMethod
-- ✅ Code generation for both directions with policy support
-- ✅ Diagnostics FKF700-702 for validation
-
-**Dictionary to object (dict→object):**
-```csharp
-[ForgeDictionary(KeyCasing = KeyCasingPolicy.Exact, MissingKeyBehavior = MissingKeyPolicy.Throw)]
-public static partial PersonDto FromDict(Dictionary<string, object> source);
-// Generates (for each destination member):
-// if (!source.ContainsKey("Name")) throw new KeyNotFoundException("Name");
-// __result.Name = (string)source["Name"];  // Direct cast for object dict
-//
-// For numeric: if (!source.ContainsKey("Age")) throw ...;
-// __result.Age = (int)source["Age"];  // Cast to target type
-```
-
-**Dictionary to object with string values (parse mode):**
-```csharp
-[ForgeDictionary(KeyCasing = KeyCasingPolicy.Exact, MissingKeyBehavior = MissingKeyPolicy.UseDefault)]
-public static partial PersonDto FromDict(Dictionary<string, string> source);
-// Generates:
-// __result.Name = source.ContainsKey("Name") ? source["Name"] : null;
-// __result.Age = source.ContainsKey("Age") ? int.Parse(source["Age"]) : 0;
-```
-
-**Object to dictionary (object→dict):**
-```csharp
-[ForgeDictionary(KeyCasing = KeyCasingPolicy.Exact, NullValueBehavior = NullValuePolicy.Include)]
-public static partial Dictionary<string, object> ToDict(PersonDto source);
-// Generates:
-// var __result = new Dictionary<string, object>();
-// __result["Name"] = source.Name;  // Always include, even if null
-// __result["Age"] = source.Age;
-```
-
-**Type Conversion & Error Policy:**
-
-**Dict-to-object conversions:**
-1. **Dictionary<string, object>**: Direct cast `(TargetType)source["Key"]`
-   - Runtime cast failure if value is wrong type or null → InvalidCastException propagates
-   - For nullable destination: null values are allowed, propagate directly
-   - For non-nullable destination: null values cause InvalidCastException
-
-2. **Dictionary<string, string>**: Parse or convert with proper error handling
-   - Missing key: guarded by ContainsKey; use MissingKeyBehavior (Throw, UseDefault)
-   - Parse failures: when value is present but malformed, throws `FormatException`; not caught by MissingKeyBehavior
-   - Primitive types: `int.Parse()`, `bool.Parse()`, `decimal.Parse()`, etc.
-   - Enum types: `Enum.Parse<EnumType>(value)`
-   - DateTime: requires explicit culture and styles, e.g. `DateTime.Parse(value, CultureInfo.InvariantCulture)` or `DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var result)`
-   - Nullable types: if value is null or missing, null is assigned; otherwise parse
-
-3. **Unsupported type conversions** (emit diagnostic, skip member):
-   - Complex types without custom converter → FKF7xx diagnostic, member excluded
-   - Collections (List<T>, IEnumerable<T>) from dict values → FKF7xx diagnostic
-   - Nested objects requiring deep mapping → suggest using nested forge instead
-
-**Missing key behavior (configurable via `[ForgeDictionary]`):**
-- `Throw` (default): `if (!source.ContainsKey(key)) throw new KeyNotFoundException(key);`
-- `UseDefault`: `__result.Member = source.ContainsKey(key) ? source[key] : default(T);`
-- `Skip`: No assignment at all if key missing (member left uninitialized or at default)
-- `ReturnNull`: Only valid for nullable destination types; assign null if key missing
-
-**Key casing policy (configurable via `[ForgeDictionary]`):**
-- `Exact` (default): Match member name exactly (`Name` → `"Name"`)
-  - Direct key lookup: `source["Name"]`
-  - If key not found, triggers `MissingKeyPolicy` (Throw, UseDefault, Skip, ReturnNull)
-- `IgnoreCase`: Case-insensitive key lookup with fallback to `MissingKeyPolicy`
-  - Lookup: `source.Keys.FirstOrDefault(k => k.Equals(memberName, StringComparison.OrdinalIgnoreCase))`
-  - If `FirstOrDefault` returns null (no matching key), triggers `MissingKeyPolicy` instead of throwing KeyNotFoundException
-  - Code pattern: `var resolvedKey = source.Keys.FirstOrDefault(...); if (resolvedKey == null) { apply MissingKeyPolicy } else { access source[resolvedKey] }`
-- `CamelCase`: Transform member name to camelCase (`PersonFirstName` → `"personFirstName"`), then apply exact lookup
-  - Triggers `MissingKeyPolicy` if transformed key not found
-- `SnakeCase`: Transform member name to snake_case (`PersonFirstName` → `"person_first_name"`), then apply exact lookup
-  - Triggers `MissingKeyPolicy` if transformed key not found
-
-**Null value behavior in object-to-dict (configurable via `[ForgeDictionary]`):**
-- `Include` (default): All values included, even if null → `__result["Name"] = source.Name;`
-- `Skip`: Skip null values → `if (source.Name != null) __result["Name"] = source.Name;`
-
-**Complexity**
-
-Medium-high. Type conversion logic must handle primitives (cast vs parse), enums, nullable types, and error cases. Key lookup with casing options adds conditional logic. Member discovery is inverted for dict→object. Validation must reject unsupported types with clear diagnostics.
-
-**Impact**
-
-Medium. Solves dynamic-to-static mapping scenarios; commonly needed for JSON deserialization, configuration readers, and API integrations.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Enums/KeyCasingPolicy.cs` — New enum: Exact, IgnoreCase, CamelCase, SnakeCase
-- `src/FreakyKit.Forge/Enums/MissingKeyPolicy.cs` — New enum: Throw, UseDefault, Skip, ReturnNull
-- `src/FreakyKit.Forge/Enums/NullValuePolicy.cs` — New enum: Include, Skip
-- `src/FreakyKit.Forge/Attributes/ForgeDictionaryAttribute.cs` — New attribute with properties: `KeyCasingPolicy`, `MissingKeyPolicy`, `NullValuePolicy`
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — 
-  - Detect dictionary type in `ExtractMethod`
-  - New private method `GenerateDictToObjectAssignment()` for dict→object conversions
-  - New private method `GenerateObjectToDictAssignment()` for object→dict conversions
-  - Type support validation: reject unsupported types with FKF7xx diagnostic
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `bool IsDictionaryMapping`, `DictionaryMappingInfo DictInfo` (stores conversion mode, policies)
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics:
-  - FKF7xx: Unsupported dictionary value type (complex type, collection, etc.)
-  - FKF7xx: Dictionary<TKey, TValue> with non-string key type not supported
-  - FKF7xx: Parse error for Dictionary<string, string> with incompatible destination type
-
-**What's Complete (Phase 2 & 3)**
-
-✅ Policy enums defined: `KeyCasingPolicy` (Exact, IgnoreCase, CamelCase, SnakeCase), `MissingKeyPolicy` (Throw, UseDefault, Skip, ReturnNull), `NullValuePolicy` (Include, Skip)
-✅ `[ForgeDictionary]` attribute with configurable policies
-✅ Dictionary type detection in `ExtractMethod` (lines 419-456 in ForgeGenerator.cs)
-✅ Code generation for Dict→Object with key casing support (TryGetValue for Exact, FirstOrDefault for case-insensitive)
-✅ Code generation for Object→Dict with null value policy support (conditional assignment for Skip policy)
-✅ Diagnostics FKF700-702 for validation (non-string keys, unsupported value types, ReturnNull on non-nullable)
-✅ Helper methods for key transformation: `ApplyKeyCase()`, `ToCamelCase()`, `ToSnakeCase()`
-✅ ForgeMethodModel extended with `DictKeyCasingPolicy`, `DictMissingKeyPolicy`, `DictNullValuePolicy` properties
-✅ **Type Conversion** for `Dictionary<string, object>`: Explicit cast `(TargetType)value` applied to all assignments
-✅ **Missing Key Policy Code Generation** (Phase 4):
-  - ✅ Throw: Generates `if (!dict.TryGetValue(key, out value)) throw new KeyNotFoundException(key);`
-  - ✅ UseDefault: Generates optional assignment via `TryGetValue` (leave at default if missing)
-  - ✅ Skip: Already implemented (identical to UseDefault for Exact match)
-  - ✅ ReturnNull: Generates ternary assignment `__result.Prop = dict.TryGetValue(...) ? value : null;` for nullable types
-✅ **Comprehensive Testing**: 9 tests covering all casing policies, null value policies, and diagnostic validation; all passing (569/569 total)
-
-**Dictionary Mapping Feature Complete** ✅
-
-All phases implemented and tested. Dictionary mapping is production-ready for:
-- Dictionary<string, object> with all key casing policies (Exact, IgnoreCase, CamelCase, SnakeCase)
-- Dictionary<string, object> with all missing key policies (Throw, UseDefault, Skip, ReturnNull)
-- Dictionary<string, object> with null value policies (Include, Skip)
-- Dictionary<string, string> with full parsing support for primitives, DateTime, Guid
-- Type safety with explicit casting/parsing to destination types
-- Comprehensive test coverage (13 dictionary mapping tests + existing feature tests)
-  - See `dictionary_mapping_test_templates.md` in memory for test structure
-
-⏳ **Documentation** (being updated now)
-  - Usage examples with [ForgeDictionary] attribute
-  - Generated code examples for each policy combination
-  - API documentation for the three policy enums
-
-**Implementation Complete**
-
-All four phases of dictionary mapping are fully implemented, tested, and documented:
-- Phase 1: Detection and basic infrastructure
-- Phase 2: Type casting and policy enums
-- Phase 3: Key casing policies and null value policies
-- Phase 4: Missing key policies and string dictionary parsing
-
-Move to the next P3 feature: [Polymorphic Mapping](#6-polymorphic-mapping--derived-type-support--p3)
 
 ---
 
@@ -561,38 +390,6 @@ Critical correctness bugs and usability improvements identified through code aud
 
 ### Low-Priority Issues
 
-#### Diagnostic Aggregation Masks Primary Errors
-
-**Type:** Fix — Error Reporting
-
-**Why**
-
-The generator collects diagnostics throughout extraction and continues processing even after critical errors. This causes multiple confusing diagnostics to appear (e.g., FKF020 "has a body" + FKF100 "member missing source") when only FKF020 is the real blocker. Users must fix FKF020 first before understanding the actual mapping issues.
-
-**Design**
-
-Implement early termination per method on critical errors. Stop analyzing a problematic method after emitting a fatal diagnostic, preventing cascading secondary errors.
-
-**Complexity**
-
-Low. Add early-return logic after critical diagnostics.
-
-**Impact**
-
-Low. Improves usability by reducing noise.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Error collection and early return (lines 186-210)
-
-**Suggested Approach**
-
-1. When FKF020 (has a body), FKF003-005 (invalid class), or other fatal diagnostics are emitted, return immediately from method processing
-2. Skip member-mapping analysis for that method
-3. Prevents secondary "missing member" diagnostics from appearing
-
----
-
 #### Algorithm Enhancement: Exhaustive Flattening Candidate Collection
 
 **Why**
@@ -616,7 +413,7 @@ Low-Medium. Closes a gap where ambiguities go undetected and depth limits are si
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (lines 2444-2537) and TryResolveFlattenedMapping (lines 2404-2437)
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (lines 2962-3020) and TryResolveFlattenedMapping (line 2916)
 
 **Suggested Approach**
 
@@ -690,24 +487,6 @@ Medium. Extend condition lookup to search included classes; apply accessibility 
 
 ---
 
-#### Per-Member IgnoreIfNull Precedence
-
-**Type:** Fix — Correctness
-
-**Why**
-
-When a `[ForgeMap]` attribute explicitly specifies IgnoreIfNull, the code OR-combines it with method-level setting instead of respecting explicit configuration. Explicit member values should take precedence.
-
-**Complexity**
-
-Low. Track whether each member's IgnoreIfNull was explicitly set; prefer explicit over inherited.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Member IgnoreIfNull calculation
-
----
-
 #### Orphaned Attributes Validation Redesign
 
 **Type:** Fix — Diagnostic Accuracy
@@ -730,59 +509,6 @@ High. Inspect forge method signatures to determine actual source/destination rol
 
 ### Generator Expression Trees & Flattening
 
-#### Null-Conditional Operator Lowering in Flattening
-
-**Type:** Fix — Expression Trees
-
-**Why**
-
-When flattening paths use expression properties, only the outermost null-conditional is lowered to ternaries. Intermediate `?.` operators remain, causing expression-tree compilation failures.
-
-**Complexity**
-
-Medium. Lower all `?.` in flattening paths to nested ternaries before expression compilation.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Flattening expression lowering
-
----
-
-#### Flattening Depth Check Accounting
-
-**Type:** Fix — Correctness
-
-**Why**
-
-Depth checks compare absolute depth to thresholds without accounting for zero-based indexing. Paths at threshold level silently fail instead of emitting FKF531 diagnostic.
-
-**Complexity**
-
-Low. Compare effective component count (depth + 1) against thresholds.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Depth threshold checks
-
----
-
-#### Receiver Type for Null-Propagating Access
-
-**Type:** Fix — Correctness
-
-**Why**
-
-`nextAccess` construction uses `prop.Type` to determine null-propagation, but should use the receiver type `currentType`. Incorrect operator selection for intermediate properties in chains.
-
-**Complexity**
-
-Low. Check `currentType.IsReferenceType` instead of `prop.Type.IsReferenceType`.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — nextAccess construction
-
----
 
 ### Test Coverage Gaps
 
@@ -804,24 +530,6 @@ Low. Add assertions verifying conditional guard structure and combined condition
 
 ---
 
-#### CrossClassNestedForgeTests Qualified Names Verification
-
-**Type:** Test — Coverage
-
-**Why**
-
-Test asserts "ConvertAddress" appears in generated code but doesn't verify it's qualified (AddressForges.ConvertAddress). Doesn't detect the correctness issue when namespace differs.
-
-**Complexity**
-
-Low. Assert qualified method name appears in generated output.
-
-**Files to Modify**
-
-- `tests/FreakyKit.Forge.Generator.Tests/CrossClassNestedForgeTests.cs`
-
----
-
 #### FlatteningGeneratorTests Coordinate Mapping Assertion
 
 **Type:** Test — Coverage
@@ -837,44 +545,6 @@ Low. Add assertion verifying correct operator usage in generated path.
 **Files to Modify**
 
 - `tests/FreakyKit.Forge.Generator.Tests/FlatteningGeneratorTests.cs`
-
----
-
-#### NullFallbackAdvancedTests Nullable Value Type Fix
-
-**Type:** Test — Coverage
-
-**Why**
-
-Test uses non-nullable Source.Home but intends to verify nullable-to-non-nullable mapping behavior. Should use nullable value type.
-
-**Complexity**
-
-Low. Change Source.Home to nullable (Address?); assert FKF314 diagnostic.
-
-**Files to Modify**
-
-- `tests/FreakyKit.Forge.Generator.Tests/NullFallbackAdvancedTests.cs`
-
----
-
-#### CollectionMismatchEdgeCasesTests Assertion Unconditional
-
-**Type:** Test — Coverage
-
-**Why**
-
-Test has conditional assertion based on hasErrors flag. Should unconditionally assert FKF200 diagnostic, ensuring generator properly detects incompatibilities.
-
-**Complexity**
-
-Low. Remove conditional; assert FKF200 always.
-
-**Files to Modify**
-
-- `tests/FreakyKit.Forge.Generator.Tests/CollectionMismatchEdgeCasesTests.cs`
-
----
 
 ---
 
