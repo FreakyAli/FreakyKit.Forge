@@ -986,6 +986,42 @@ public AddressDto Home { get; set; }
 
 ---
 
+### FKF316 — Conditional guard has no effect on init-only member
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': '{1}' has no effect because the member is init-only (or required) — it can only be set inside the object initializer, which cannot express a runtime guard. |
+
+`IgnoreIfNull`, `IgnoreIfDefault`, and `Condition` all require a runtime `if` around the assignment. Init-only (`init;`) and `required` destination members can only be set inside the constructor's object initializer — there's no way to conditionally skip one there. Generation is blocked for that method until the conflict is resolved.
+
+**Fix:** remove the guard attribute, or make the member settable outside the initializer (drop `init` in favor of a regular setter).
+
+```csharp
+// Wrong — FKF316: Id is init-only, IgnoreIfDefault has nowhere to apply
+public class Dest
+{
+    [ForgeMap("Id", IgnoreIfDefault = true)]
+    public int Id { get; init; }
+}
+
+// Correct — drop the guard
+public class Dest
+{
+    public int Id { get; init; }
+}
+
+// OR — keep the guard, make the member settable
+public class Dest
+{
+    [ForgeMap("Id", IgnoreIfDefault = true)]
+    public int Id { get; set; }
+}
+```
+
+---
+
 ## Construction
 
 ### FKF500 — Constructor ambiguity
@@ -1096,6 +1132,8 @@ Some mapping cases have no equivalent encoding inside an expression tree:
 
 - **Custom converter** — user-defined static methods aren't translatable to SQL.
 - **`IgnoreIfNull`** — conditional skipping doesn't exist in expression trees; every binding evaluates.
+- **`IgnoreIfDefault`** — same issue as `IgnoreIfNull`: the guard is a runtime `if`, not expressible in an expression tree.
+- **`Condition`** — a `[ForgeMap(Condition = ...)]` guard (including one resolved from a `[ForgeUses]`-included class) has no expression-tree form.
 - **Non-translatable collection materializer** — EF translates only `.ToList()` and `.ToArray()`. Destinations like `HashSet<T>`, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ReadOnlyCollection<T>` are excluded.
 
 The imperative method continues to map the member normally. The expression property emits with the
@@ -1149,7 +1187,7 @@ Expression property nesting depth is capped at 7 levels to prevent generating ex
 
 ---
 
-## Conditional/Predicate Mapping Diagnostics (FKF510–FKF512)
+## Conditional/Predicate Mapping Diagnostics (FKF510–FKF513)
 
 ### FKF510 — Condition method not found
 
@@ -1222,6 +1260,46 @@ private static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Nam
 
 // Correct
 internal static bool ShouldMap(Source source) => !string.IsNullOrEmpty(source.Name);
+```
+
+---
+
+### FKF513 — Condition method shadowed by included class
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': condition method '{1}' exists in multiple included forge classes. Using '{2}' (first match); '{3}' is shadowed. |
+
+Condition method resolution searches the current forge class first, then falls back to classes listed in `[ForgeUses]`, in declaration order. If more than one included class declares a static method with the condition's name, the first one (by `[ForgeUses]` order) is used and the rest are shadowed.
+
+**Note:** This is a warning, not an error. It's intentional if you want a fallback, but it's worth knowing about to avoid calling the wrong method by accident.
+
+**Fix (optional):** Reorder classes in `[ForgeUses]` if a different priority is preferred, or rename one of the methods to avoid the collision.
+
+```csharp
+// Generates FKF513 warning
+[Forge]
+public static partial class ConditionHelpersA
+{
+    public static bool IsPositive(Source source) => source.Value > 0;
+}
+
+[Forge]
+public static partial class ConditionHelpersB
+{
+    public static bool IsPositive(Source source) => source.Value >= 0;
+}
+
+[Forge]
+[ForgeUses(typeof(ConditionHelpersA), typeof(ConditionHelpersB))]
+public static partial class MyForges
+{
+    [ForgeMethod]
+    public static partial Dest ToDto(Source source);
+}
+// Both included classes declare IsPositive. ConditionHelpersA's method is used; ConditionHelpersB's is shadowed.
 ```
 
 ---

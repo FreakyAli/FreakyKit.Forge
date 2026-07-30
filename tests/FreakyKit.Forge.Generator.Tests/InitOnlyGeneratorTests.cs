@@ -221,4 +221,90 @@ public sealed class InitOnlyGeneratorTests : GeneratorTestBase
         Assert.Contains("existing.Name = source.Name", generated);
         Assert.Contains("existing.Email = source.Email", generated);
     }
+
+    [Fact]
+    public void InitOnlyProperty_WithIgnoreIfNull_EmitsFKF316()
+    {
+        // Regression test: init-only members can't have a runtime guard — the object initializer
+        // has no way to conditionally skip a member. Previously this was silently dropped: the
+        // assignment vanished entirely with no diagnostic. Now it's a build error (FKF316).
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string? Name { get; set; } }
+                public class Dest
+                {
+                    [ForgeMap("Name", IgnoreIfNull = ForgePolicy.True)]
+                    public string? Name { get; init; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        // FKF316 is an Error diagnostic: the generator skips emitting an implementation for this
+        // method (same treatment as other fatal per-method diagnostics like FKF200), forcing the
+        // user to fix the attribute rather than silently dropping or misapplying the guard.
+        var result = RunGenerator(source);
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF316");
+    }
+
+    [Fact]
+    public void InitOnlyProperty_WithIgnoreIfDefault_EmitsFKF316()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Id { get; set; } }
+                public class Dest
+                {
+                    [ForgeMap("Id", IgnoreIfDefault = true)]
+                    public int Id { get; init; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF316");
+    }
+
+    [Fact]
+    public void InitOnlyProperty_WithCondition_EmitsFKF316()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Value { get; set; } }
+                public class Dest
+                {
+                    [ForgeMap("Value", Condition = "IsPositive")]
+                    public int Value { get; init; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    public static partial Dest ToDest(Source source);
+
+                    internal static bool IsPositive(Source source) => source.Value > 0;
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        Assert.Contains(result.Diagnostics, d => d.Id == "FKF316");
+    }
 }
