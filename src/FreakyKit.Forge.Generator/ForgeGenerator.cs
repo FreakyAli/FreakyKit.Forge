@@ -696,20 +696,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Validate condition method if specified
             if (conditionMethodName != null)
             {
-                var conditionMethod = ResolveConditionMethod(
-                    forgeClass, conditionMethodName, compilation, includedForgeClasses,
-                    out var qualifiedConditionMethodName, out var shadowedBy);
-
-                if (shadowedBy != null)
-                {
-                    diagnostics.Add(Diagnostic.Create(
-                        ForgeDiagnostics.ShadowedConditionMethod,
-                        GetSafeLocation(method),
-                        destMember.Name,
-                        conditionMethodName,
-                        qualifiedConditionMethodName ?? conditionMethodName,
-                        shadowedBy));
-                }
+                var conditionMethod = forgeClass.GetMembers()
+                    .OfType<IMethodSymbol>()
+                    .FirstOrDefault(m => m.Name == conditionMethodName);
 
                 if (conditionMethod == null)
                 {
@@ -737,10 +726,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         destMember.Name,
                         conditionMethodName));
                     conditionMethodName = null;
-                }
-                else
-                {
-                    conditionMethodName = qualifiedConditionMethodName;
                 }
             }
 
@@ -3061,7 +3046,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 var remainder = remainingKeyLower.Substring(memberNameLower.Length);
                 var nextAccess = string.IsNullOrEmpty(currentAccess)
                     ? $"{sourceParamName}.{prop.Name}"
-                    : currentAccess + (currentType.IsReferenceType ? $"?.{prop.Name}" : $".{prop.Name}");
+                    : currentAccess + (prop.Type.IsReferenceType ? $"?.{prop.Name}" : $".{prop.Name}");
 
                 var nextChain = new List<ITypeSymbol>(intermediateChain) { currentType };
                 var nextPathParts = new List<string>(pathParts) { prop.Name };
@@ -3237,61 +3222,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         methodName = null;
         return false;
-    }
-
-    /// <summary>
-    /// Resolves a [ForgeMap] Condition method by name: searches the current forge class first,
-    /// then falls back to [ForgeUses]-included classes in declaration order. If the name matches
-    /// methods in more than one included class, the first is used and <paramref name="shadowedBy"/>
-    /// is populated so the caller can emit a diagnostic — resolution is never silent.
-    /// </summary>
-    private static IMethodSymbol? ResolveConditionMethod(
-        INamedTypeSymbol forgeClass,
-        string conditionMethodName,
-        Microsoft.CodeAnalysis.Compilation compilation,
-        IReadOnlyList<string>? includedForgeClasses,
-        out string? qualifiedMethodName,
-        out string? shadowedBy)
-    {
-        qualifiedMethodName = null;
-        shadowedBy = null;
-
-        var localMatch = forgeClass.GetMembers()
-            .OfType<IMethodSymbol>()
-            .FirstOrDefault(m => m.Name == conditionMethodName);
-        if (localMatch != null)
-        {
-            qualifiedMethodName = conditionMethodName;
-            return localMatch;
-        }
-
-        if (includedForgeClasses == null || includedForgeClasses.Count == 0)
-            return null;
-
-        IMethodSymbol? firstMatch = null;
-
-        foreach (var includedFqn in includedForgeClasses)
-        {
-            var includedClass = compilation.GetTypeByMetadataName(includedFqn);
-            if (includedClass == null) continue;
-
-            var candidate = includedClass.GetMembers()
-                .OfType<IMethodSymbol>()
-                .FirstOrDefault(m => m.Name == conditionMethodName);
-            if (candidate == null) continue;
-
-            if (firstMatch == null)
-            {
-                firstMatch = candidate;
-                qualifiedMethodName = $"{includedClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{conditionMethodName}";
-            }
-            else
-            {
-                shadowedBy = $"{includedClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{conditionMethodName}";
-            }
-        }
-
-        return firstMatch;
     }
 
     /// <summary>

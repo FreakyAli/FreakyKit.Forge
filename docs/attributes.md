@@ -687,15 +687,13 @@ public string? Name { get; set; }
 
 #### `Condition` (`string?`, default: `null`)
 
-When set, specifies the name of a static method that determines whether this member should be assigned. The method must accept the source type as a parameter and return `bool`. When the method returns `false`, the assignment is skipped.
+When set, specifies the name of a static method on the forge class that determines whether this member should be assigned. The method must accept the source type as a parameter and return `bool`. When the method returns `false`, the assignment is skipped.
 
 Useful for conditional PATCH updates or complex validation logic. The method must be:
 - Static
 - Accessible (public or internal)
 - Accept exactly one parameter of the source type
 - Return `bool`
-
-Resolution first looks on the current forge class, then falls back to classes listed in `[ForgeUses]`, in declaration order — the same lookup used for nested forge and converter methods. If the name matches a method in more than one included class, the first one wins and **FKF513** (warning) reports which class was used and which was shadowed, so the choice is never silent.
 
 ```csharp
 [Forge]
