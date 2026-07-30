@@ -265,6 +265,38 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
     }
 
     [Fact]
+    public void Flattening_ReferenceTypeAfterValueTypeIntermediate_UsesDotNotNullConditional()
+    {
+        // Regression test: the null-propagation operator for an intermediate hop must be
+        // chosen from the receiver type (currentType), not the property being accessed
+        // (prop.Type). Coords is a struct (cannot be null), so "Coords.Point" must use a
+        // plain dot even though Point itself is a reference type.
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class GeoPoint { public string Code { get; set; } = ""; }
+                public struct Coordinates { public GeoPoint Point { get; set; } }
+                public class Address { public Coordinates Coords { get; set; } }
+                public class Source  { public Address Address { get; set; } = new(); }
+                public class Dest    { public string AddressCoordsPointCode { get; set; } = ""; }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod(AllowFlattening = true)]
+                    public static partial Dest ToDest(Source source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("Coords.Point", generated);
+        Assert.DoesNotContain("Coords?.Point", generated);
+    }
+
+    [Fact]
     public void Flattening_NoFlattenMatch_GeneratesStillWorks()
     {
         // When a destination member doesn't match via flattening, generation still completes.

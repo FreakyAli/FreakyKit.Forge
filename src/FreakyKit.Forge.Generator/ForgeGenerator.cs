@@ -696,9 +696,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Validate condition method if specified
             if (conditionMethodName != null)
             {
-                var conditionMethod = forgeClass.GetMembers()
-                    .OfType<IMethodSymbol>()
-                    .FirstOrDefault(m => m.Name == conditionMethodName);
+                var conditionMethod = ResolveConditionMethod(
+                    forgeClass, conditionMethodName, compilation, includedForgeClasses,
+                    out var qualifiedConditionMethodName, out var shadowedBy);
+
+                if (shadowedBy != null)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ShadowedConditionMethod,
+                        GetSafeLocation(method),
+                        destMember.Name,
+                        conditionMethodName,
+                        qualifiedConditionMethodName ?? conditionMethodName,
+                        shadowedBy));
+                }
 
                 if (conditionMethod == null)
                 {
@@ -727,6 +738,48 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         conditionMethodName));
                     conditionMethodName = null;
                 }
+                else
+                {
+                    conditionMethodName = qualifiedConditionMethodName;
+                }
+            }
+
+            // Init-only (and required) members can only be set inside the constructor's object
+            // initializer — there's no way to wrap that in a runtime `if`. Rather than silently
+            // dropping the member (IgnoreIfNull) or silently ignoring the guard (IgnoreIfDefault/
+            // Condition), emit FKF316 and fall back to a plain, unconditional assignment.
+            if (initOnly)
+            {
+                if (memberIgnoreIfNull)
+                {
+                    diagnostics.Add(Diagnostic.Create(ForgeDiagnostics.GuardOnInitOnlyMember, GetSafeLocation(method), destMember.Name, "IgnoreIfNull"));
+                    memberIgnoreIfNull = false;
+                    nullCheckExpr = null;
+                }
+                if (memberIgnoreIfDefault)
+                {
+                    diagnostics.Add(Diagnostic.Create(ForgeDiagnostics.GuardOnInitOnlyMember, GetSafeLocation(method), destMember.Name, "IgnoreIfDefault"));
+                    memberIgnoreIfDefault = false;
+                }
+                if (conditionMethodName != null)
+                {
+                    diagnostics.Add(Diagnostic.Create(ForgeDiagnostics.GuardOnInitOnlyMember, GetSafeLocation(method), destMember.Name, "Condition"));
+                    conditionMethodName = null;
+                }
+            }
+
+            // IgnoreIfDefault and Condition have no expression-tree equivalent (same as IgnoreIfNull):
+            // an EF Core .Select() projection can't express a runtime guard around a member assignment.
+            // Members using either are excluded from the generated expression and FKF506 is emitted so
+            // the divergence between the imperative method and the expression property is never silent.
+            bool excludeFromExpression = memberIgnoreIfNull || memberIgnoreIfDefault || conditionMethodName != null;
+            if (generateExpression && (memberIgnoreIfDefault || conditionMethodName != null))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ExpressionMemberExcluded,
+                    GetSafeLocation(method),
+                    destMember.Name,
+                    conditionMethodName != null ? "Condition has no equivalent in expression trees" : "IgnoreIfDefault has no equivalent in expression trees"));
             }
 
             if (srcMember.Type.ToDisplayString() == destMember.Type.ToDisplayString())
@@ -768,8 +821,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     sourceExpr = sourceIsRefType
                         ? $"{srcAccessor} != null ? {copyExpr} : null"
                         : copyExpr;
-                    // Expression mode: the same expression is translatable
-                    exprAssign = sourceExpr;
+                    // Expression mode: the same expression is translatable, unless excluded (Condition/IgnoreIfDefault)
+                    exprAssign = excludeFromExpression ? null : sourceExpr;
                 }
                 else
                 {
@@ -802,11 +855,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             srcMember.Type.ToDisplayString()));
                     }
 
-                    // IgnoreIfNull has no expression-tree equivalent
-                    if (memberIgnoreIfNull)
+                    if (excludeFromExpression)
                     {
                         exprAssign = null;
-                        if (generateExpression)
+                        // IgnoreIfDefault/Condition already reported above; only IgnoreIfNull needs it here.
+                        if (generateExpression && memberIgnoreIfNull && !memberIgnoreIfDefault && conditionMethodName == null)
                         {
                             diagnostics.Add(Diagnostic.Create(
                                 ForgeDiagnostics.ExpressionMemberExcluded,
@@ -877,7 +930,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly,
-                    expressionAssignment: memberIgnoreIfNull ? null : expressionExpr,
+                    expressionAssignment: excludeFromExpression ? null : expressionExpr,
                     ignoreIfDefault: memberIgnoreIfDefault,
                     conditionMethodName: conditionMethodName,
                     sourceMemberName: srcMember.Name,
@@ -958,7 +1011,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         ignoreIfNull: memberIgnoreIfNull,
                         nullCheckExpression: nullCheckExpr,
                         isInitOnly: initOnly,
-                        expressionAssignment: memberIgnoreIfNull ? null : ternaryExpr,
+                        expressionAssignment: excludeFromExpression ? null : ternaryExpr,
                         ignoreIfDefault: memberIgnoreIfDefault,
                         conditionMethodName: conditionMethodName,
                         sourceMemberName: srcMember.Name,
@@ -982,7 +1035,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         ignoreIfNull: memberIgnoreIfNull,
                         nullCheckExpression: nullCheckExpr,
                         isInitOnly: initOnly,
-                        expressionAssignment: memberIgnoreIfNull ? null : castExpr,
+                        expressionAssignment: excludeFromExpression ? null : castExpr,
                         ignoreIfDefault: memberIgnoreIfDefault,
                         conditionMethodName: conditionMethodName,
                         sourceMemberName: srcMember.Name,
@@ -1004,7 +1057,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly,
-                    expressionAssignment: memberIgnoreIfNull ? null : enumStringExpr,
+                    expressionAssignment: excludeFromExpression ? null : enumStringExpr,
                     ignoreIfDefault: memberIgnoreIfDefault,
                     conditionMethodName: conditionMethodName,
                     sourceMemberName: srcMember.Name,
@@ -1069,7 +1122,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 //  - IgnoreIfNull semantics have no expression-tree equivalent
                 string? exprAssign = null;
                 bool needsInlining = false;
-                if (collectionInfo != null && collectionInfo.ExpressionMaterializer != null && !memberIgnoreIfNull)
+                if (collectionInfo != null && collectionInfo.ExpressionMaterializer != null && !excludeFromExpression)
                 {
                     if (collectionInfo.SameElementType)
                     {
@@ -1082,7 +1135,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         needsInlining = true;
                     }
                 }
-                else if (generateExpression)
+                // IgnoreIfDefault/Condition already reported above; avoid a duplicate FKF506.
+                else if (generateExpression && !memberIgnoreIfDefault && conditionMethodName == null)
                 {
                     var reason = memberIgnoreIfNull
                         ? "IgnoreIfNull has no equivalent in expression trees"
@@ -1164,7 +1218,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     ignoreIfNull: memberIgnoreIfNull,
                     nullCheckExpression: nullCheckExpr,
                     isInitOnly: initOnly,
-                    expressionAssignment: memberIgnoreIfNull ? null : srcAccessor,
+                    expressionAssignment: excludeFromExpression ? null : srcAccessor,
                     ignoreIfDefault: memberIgnoreIfDefault,
                     conditionMethodName: conditionMethodName,
                     sourceMemberName: srcMember.Name,
@@ -1894,8 +1948,27 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 var assignment = method.Assignments[i];
                 var updated = assignment;
 
+                // IgnoreIfNull/IgnoreIfDefault/Condition guard a runtime assignment that has no
+                // expression-tree equivalent — exclude the member instead of silently inlining an
+                // unconditional nested-forge call that diverges from the imperative method.
+                bool excludedByGuard = assignment.IgnoreIfNull || assignment.IgnoreIfDefault || assignment.ConditionMethodName != null;
+
                 // Plain nested-forge member: inline the nested expression body directly.
-                if (assignment.NestedForgeMethodName != null && assignment.NestedForgeSourceAccessor != null)
+                if (excludedByGuard && (assignment.NestedForgeMethodName != null || assignment.CollectionElementForgeMethod != null))
+                {
+                    updated = assignment.WithExpressionAssignment(null);
+                    anyUpdated = true;
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ExpressionMemberExcluded,
+                        location: null,
+                        assignment.DestMemberName,
+                        assignment.ConditionMethodName != null
+                            ? "Condition has no equivalent in expression trees"
+                            : assignment.IgnoreIfDefault
+                                ? "IgnoreIfDefault has no equivalent in expression trees"
+                                : "IgnoreIfNull has no equivalent in expression trees"));
+                }
+                else if (assignment.NestedForgeMethodName != null && assignment.NestedForgeSourceAccessor != null)
                 {
                     var visited = new HashSet<string> { method.MethodName };
                     var inlined = InlineNestedExpression(
@@ -2620,9 +2693,29 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Property assignments — assign to the dest parameter directly
             foreach (var assignment in method.Assignments)
             {
+                string condition = "";
+
                 if (assignment.IgnoreIfNull && assignment.NullCheckExpression != null)
                 {
-                    sb.AppendLine($"{indent}    if ({assignment.NullCheckExpression} != null) {method.DestParameterName}.{assignment.DestMemberName} = {assignment.SourceExpression};");
+                    condition = $"{assignment.NullCheckExpression} != null";
+                }
+
+                if (assignment.IgnoreIfDefault && assignment.SourceMemberType != null)
+                {
+                    var srcAccessor = $"{method.SourceParameterName}.{assignment.SourceMemberName}";
+                    var defaultCheck = $"!EqualityComparer<{assignment.SourceMemberType}>.Default.Equals({srcAccessor}, default)";
+                    condition = condition != "" ? $"{condition} && {defaultCheck}" : defaultCheck;
+                }
+
+                if (assignment.ConditionMethodName != null)
+                {
+                    var methodCall = $"{assignment.ConditionMethodName}({method.SourceParameterName})";
+                    condition = condition != "" ? $"{condition} && {methodCall}" : methodCall;
+                }
+
+                if (condition != "")
+                {
+                    sb.AppendLine($"{indent}    if ({condition}) {method.DestParameterName}.{assignment.DestMemberName} = {assignment.SourceExpression};");
                 }
                 else
                 {
@@ -2651,11 +2744,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (method.BeforeHookName != null)
                 sb.AppendLine($"{indent}    {method.BeforeHookName}({method.SourceParameterName});");
 
-            // Separate init-only assignments (must go in object initializer) from regular assignments
-            var initOnlyAssignments = method.Assignments.Where(a => a.IsInitOnly && !a.IgnoreIfNull).ToList();
+            // Separate init-only assignments (must go in object initializer) from regular assignments.
+            // IgnoreIfNull/IgnoreIfDefault/Condition are rejected on init-only members at extraction
+            // time (FKF316), so no init-only assignment here carries a guard.
+            var initOnlyAssignments = method.Assignments.Where(a => a.IsInitOnly).ToList();
             var regularAssignments = method.Assignments.Where(a => !a.IsInitOnly).ToList();
-            // IgnoreIfNull init-only assignments cannot use object initializer (need if-check), so skip them
-            var skippedInitOnly = method.Assignments.Where(a => a.IsInitOnly && a.IgnoreIfNull).ToList();
 
             // Construction with optional object initializer for init-only properties
             string ctorArgs = "";
@@ -3046,7 +3139,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 var remainder = remainingKeyLower.Substring(memberNameLower.Length);
                 var nextAccess = string.IsNullOrEmpty(currentAccess)
                     ? $"{sourceParamName}.{prop.Name}"
-                    : currentAccess + (prop.Type.IsReferenceType ? $"?.{prop.Name}" : $".{prop.Name}");
+                    : currentAccess + (currentType.IsReferenceType ? $"?.{prop.Name}" : $".{prop.Name}");
 
                 var nextChain = new List<ITypeSymbol>(intermediateChain) { currentType };
                 var nextPathParts = new List<string>(pathParts) { prop.Name };
@@ -3222,6 +3315,61 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         methodName = null;
         return false;
+    }
+
+    /// <summary>
+    /// Resolves a [ForgeMap] Condition method by name: searches the current forge class first,
+    /// then falls back to [ForgeUses]-included classes in declaration order. If the name matches
+    /// methods in more than one included class, the first is used and <paramref name="shadowedBy"/>
+    /// is populated so the caller can emit a diagnostic — resolution is never silent.
+    /// </summary>
+    private static IMethodSymbol? ResolveConditionMethod(
+        INamedTypeSymbol forgeClass,
+        string conditionMethodName,
+        Microsoft.CodeAnalysis.Compilation compilation,
+        IReadOnlyList<string>? includedForgeClasses,
+        out string? qualifiedMethodName,
+        out string? shadowedBy)
+    {
+        qualifiedMethodName = null;
+        shadowedBy = null;
+
+        var localMatch = forgeClass.GetMembers()
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(m => m.Name == conditionMethodName);
+        if (localMatch != null)
+        {
+            qualifiedMethodName = conditionMethodName;
+            return localMatch;
+        }
+
+        if (includedForgeClasses == null || includedForgeClasses.Count == 0)
+            return null;
+
+        IMethodSymbol? firstMatch = null;
+
+        foreach (var includedFqn in includedForgeClasses)
+        {
+            var includedClass = compilation.GetTypeByMetadataName(includedFqn);
+            if (includedClass == null) continue;
+
+            var candidate = includedClass.GetMembers()
+                .OfType<IMethodSymbol>()
+                .FirstOrDefault(m => m.Name == conditionMethodName);
+            if (candidate == null) continue;
+
+            if (firstMatch == null)
+            {
+                firstMatch = candidate;
+                qualifiedMethodName = $"{includedClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{conditionMethodName}";
+            }
+            else
+            {
+                shadowedBy = $"{includedClass.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}.{conditionMethodName}";
+            }
+        }
+
+        return firstMatch;
     }
 
     /// <summary>

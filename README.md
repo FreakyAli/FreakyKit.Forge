@@ -729,10 +729,14 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF221 | Warning | Invalid converter signature |
 | FKF222 | Warning | Duplicate converter for same type pair |
 | FKF300 | Warning | Nested forging disabled |
+| FKF301 | Error | Circular nested forge detected |
 | FKF310 | Info | Collection mapping applied |
 | FKF311 | Info | Same-type collection reference-shared |
 | FKF312 | Info | Same-type reference member shared |
 | FKF313 | Warning | Conflicting ShareReference between source and destination |
+| FKF314 | Warning | NullFallback has no effect on value type |
+| FKF315 | Error | IgnoreIfNull and NullFallback cannot both be set |
+| FKF316 | Error | Conditional guard (IgnoreIfNull/IgnoreIfDefault/Condition) has no effect on init-only member |
 | FKF400 | Warning | Field ignored |
 | FKF401 | Info | Fields enabled |
 | FKF500 | Error | Constructor ambiguity |
@@ -745,6 +749,22 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF507 | Error | Circular nested forge in expression property |
 | FKF508 | Warning | Deep nested-forge inlining (>4 levels) |
 | FKF509 | Error | Expression nesting depth limit exceeded (≥7 levels) |
+| FKF510 | Error | Condition method not found |
+| FKF511 | Error | Condition method has invalid signature |
+| FKF512 | Error | Condition method not accessible |
+| FKF513 | Warning | Condition method shadowed by included class |
+| FKF520 | Error | Included forge class not found |
+| FKF521 | Error | Included class is not a forge class |
+| FKF522 | Error | Circular forge class includes detected |
+| FKF523 | Warning | Nested forge method shadowed by included class |
+| FKF524 | Error | `[ForgeUses]` requires `[Forge]` on the same class |
+| FKF525 | Error | `[ForgeMethod]` used without `[Forge]` class |
+| FKF526 | Error | `[ForgeConverter]` used without `[Forge]` class |
+| FKF527 | Warning | `[ForgeMap]` on source-type member |
+| FKF528 | Warning | `[ForgeIgnore]` on source-type member |
+| FKF530 | Error | Ambiguous flattening auto-resolved |
+| FKF531 | Info | Deep flattening detected |
+| FKF532 | Error | Flattening nesting depth limit exceeded |
 
 ## Project Structure
 
@@ -756,9 +776,9 @@ src/
   FreakyKit.Forge.Diagnostics/  # Shared diagnostic descriptors (NuGet: FreakyKit.Forge.Diagnostics)
   FreakyKit.Forge.Conventions/  # Optional naming conventions (NuGet: FreakyKit.Forge.Conventions)
 tests/
-  FreakyKit.Forge.Analyzers.Tests/   # 148 tests
-  FreakyKit.Forge.Generator.Tests/   # 171 tests
-  FreakyKit.Forge.Integration.Tests/ # 49 tests
+  FreakyKit.Forge.Analyzers.Tests/   # 171 tests
+  FreakyKit.Forge.Generator.Tests/   # 381 tests
+  FreakyKit.Forge.Integration.Tests/ # 47 tests
   FreakyKit.Forge.EFCore.Tests/      # 8 tests — projection expressions verified against real EF Core 8 + Sqlite
 ```
 
