@@ -291,8 +291,9 @@ public sealed class FlatteningGeneratorTests : GeneratorTestBase
             """;
 
         var result = RunGenerator(source);
+        AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("Coords.Point", generated);
+        Assert.Contains("__result.AddressCoordsPointCode = source.Address?.Coords.Point?.Code", generated);
         Assert.DoesNotContain("Coords?.Point", generated);
     }
 

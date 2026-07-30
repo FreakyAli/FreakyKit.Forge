@@ -156,9 +156,9 @@ Medium. Solves EF Core TPH scenarios; eliminates hand-written dispatch logic.
    - Generate pattern for each `[ForgePolymorphic]` mapping (ordered: derived types first)
    - Generate default arm calling `MapBase` or throwing
 5. Emit FKF8xx diagnostics for return type mismatches, unreachable patterns, invalid references
-4. Generate switch expression: order patterns by inheritance depth (derived first)
-5. Default arm calls base mapping or throws `InvalidOperationException`
-6. Add analyzer diagnostics: unreachable patterns, missing methods, type mismatches
+6. Generate switch expression: order patterns by inheritance depth (derived first)
+7. Default arm calls base mapping or throws `InvalidOperationException`
+8. Add analyzer diagnostics: unreachable patterns, missing methods, type mismatches
 
 ---
 
@@ -413,7 +413,7 @@ Low-Medium. Closes a gap where ambiguities go undetected and depth limits are si
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (lines 2962-3020) and TryResolveFlattenedMapping (line 2916)
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (line 3055) and TryResolveFlattenedMapping (line 3009)
 
 **Suggested Approach**
 

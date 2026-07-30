@@ -1958,15 +1958,17 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     updated = assignment.WithExpressionAssignment(null);
                     anyUpdated = true;
-                    diagnostics.Add(Diagnostic.Create(
-                        ForgeDiagnostics.ExpressionMemberExcluded,
-                        location: null,
-                        assignment.DestMemberName,
-                        assignment.ConditionMethodName != null
-                            ? "Condition has no equivalent in expression trees"
-                            : assignment.IgnoreIfDefault
-                                ? "IgnoreIfDefault has no equivalent in expression trees"
-                                : "IgnoreIfNull has no equivalent in expression trees"));
+                    // Only emit FKF506 here for IgnoreIfNull — IgnoreIfDefault and Condition
+                    // are already reported during extraction (line ~776), so emitting again
+                    // would produce duplicates.
+                    if (assignment.IgnoreIfNull && !assignment.IgnoreIfDefault && assignment.ConditionMethodName == null)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.ExpressionMemberExcluded,
+                            location: null,
+                            assignment.DestMemberName,
+                            "IgnoreIfNull has no equivalent in expression trees"));
+                    }
                 }
                 else if (assignment.NestedForgeMethodName != null && assignment.NestedForgeSourceAccessor != null)
                 {

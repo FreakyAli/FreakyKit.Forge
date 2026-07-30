@@ -663,7 +663,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor GuardOnInitOnlyMember = new(
         id: "FKF316",
         title: "Conditional guard has no effect on init-only member",
-        messageFormat: "Member '{0}': '{1}' has no effect because the member is init-only (or required) — it can only be set inside the object initializer, which cannot express a runtime guard.",
+        messageFormat: "Member '{0}': '{1}' has no effect because the member is init-only (or required) — it can only be set inside the object initializer, which cannot express a runtime guard",
         category: Category_MemberMatching,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,

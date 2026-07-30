@@ -138,15 +138,22 @@ public static partial class OrderForges
 public enum SourceStatus { Active, Inactive, Pending }
 public enum DestStatus   { Active, Inactive, Pending }
 
-// Default (Cast) — fastest, works when underlying values match
-[ForgeMethod]
-public static partial Dest ToDto(Source source);
-// Generates: __result.Status = (DestStatus)source.Status;
+public class Source { public SourceStatus Status { get; set; } }
+public class Dest   { public DestStatus Status { get; set; } }
 
-// ByName — safer when values might differ
-[ForgeMethod(MappingStrategy = ForgeMapping.ByName)]
-public static partial Dest ToDtoSafe(Source source);
-// Generates a switch expression mapping each member by name
+[Forge]
+public static partial class StatusForges
+{
+    // Default (Cast) — fastest, works when underlying values match
+    [ForgeMethod]
+    public static partial Dest ToDto(Source source);
+    // Generates: __result.Status = (DestStatus)source.Status;
+
+    // ByName — safer when values might differ
+    [ForgeMethod(MappingStrategy = ForgeMapping.ByName)]
+    public static partial Dest ToDtoSafe(Source source);
+    // Generates a switch expression mapping each member by name
+}
 ```
 
 ---
@@ -301,6 +308,12 @@ public static partial class StrictForges
 Only map a property when a condition is met.
 
 ```csharp
+public class Person
+{
+    public decimal? Salary { get; set; }
+    public bool IsManager { get; set; }
+}
+
 public class Dest
 {
     [ForgeMap("Salary", Condition = nameof(PersonForges.CanUpdateSalary))]

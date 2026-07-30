@@ -639,7 +639,8 @@ public sealed class ExpressionGeneratorTests : GeneratorTestBase
             """;
 
         var result = RunGenerator(source);
-        Assert.Contains(result.Diagnostics, d => d.Id == "FKF506");
+        var fkf506 = result.Diagnostics.Where(d => d.Id == "FKF506").ToList();
+        Assert.Single(fkf506);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("if (HasAddress(source))", generated);
         // Expression must still be generated (Age has no guard) but must omit Home
