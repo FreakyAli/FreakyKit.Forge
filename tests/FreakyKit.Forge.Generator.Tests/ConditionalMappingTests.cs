@@ -443,4 +443,40 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
         var result = RunGenerator(source);
         Assert.Single(result.Diagnostics, d => d.Id == "FKF511");
     }
+
+    [Fact]
+    public void Condition_InvalidOverloadBeforeValidOne_SelectsValidOverload()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Value { get; set; } }
+                public class Dest
+                {
+                    [ForgeMap("Value", Condition = "IsPositive")]
+                    public int Value { get; set; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod]
+                    public static partial Dest ToDto(Source source);
+
+                    // Invalid overload: wrong parameter type (appears first)
+                    internal static bool IsPositive(string notSource) => true;
+
+                    // Valid overload: correct signature
+                    internal static bool IsPositive(Source source) => source.Value > 0;
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("if (IsPositive(source))", generated);
+        Assert.Contains("__result.Value = source.Value", generated);
+    }
 }

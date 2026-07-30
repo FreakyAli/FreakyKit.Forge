@@ -698,7 +698,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             {
                 var conditionMethod = ResolveConditionMethod(
                     forgeClass, conditionMethodName, compilation, includedForgeClasses,
-                    out var qualifiedConditionMethodName, out var shadowedBy);
+                    sourceType, out var qualifiedConditionMethodName, out var shadowedBy);
 
                 if (shadowedBy != null)
                 {
@@ -773,13 +773,18 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Members using either are excluded from the generated expression and FKF506 is emitted so
             // the divergence between the imperative method and the expression property is never silent.
             bool excludeFromExpression = memberIgnoreIfNull || memberIgnoreIfDefault || conditionMethodName != null;
-            if (generateExpression && (memberIgnoreIfDefault || conditionMethodName != null))
+            if (generateExpression && excludeFromExpression)
             {
+                var reason = conditionMethodName != null
+                    ? "Condition has no equivalent in expression trees"
+                    : memberIgnoreIfDefault
+                        ? "IgnoreIfDefault has no equivalent in expression trees"
+                        : "IgnoreIfNull has no equivalent in expression trees";
                 diagnostics.Add(Diagnostic.Create(
                     ForgeDiagnostics.ExpressionMemberExcluded,
                     GetSafeLocation(method),
                     destMember.Name,
-                    conditionMethodName != null ? "Condition has no equivalent in expression trees" : "IgnoreIfDefault has no equivalent in expression trees"));
+                    reason));
             }
 
             if (srcMember.Type.ToDisplayString() == destMember.Type.ToDisplayString())
@@ -855,23 +860,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                             srcMember.Type.ToDisplayString()));
                     }
 
-                    if (excludeFromExpression)
-                    {
-                        exprAssign = null;
-                        // IgnoreIfDefault/Condition already reported above; only IgnoreIfNull needs it here.
-                        if (generateExpression && memberIgnoreIfNull && !memberIgnoreIfDefault && conditionMethodName == null)
-                        {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.ExpressionMemberExcluded,
-                                GetSafeLocation(method),
-                                destMember.Name,
-                                "IgnoreIfNull has no equivalent in expression trees"));
-                        }
-                    }
-                    else
-                    {
-                        exprAssign = srcAccessor;
-                    }
+                    exprAssign = excludeFromExpression ? null : srcAccessor;
                 }
 
                 assignments.Add(new MemberAssignmentModel(
@@ -1135,17 +1124,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         needsInlining = true;
                     }
                 }
-                // IgnoreIfDefault/Condition already reported above; avoid a duplicate FKF506.
-                else if (generateExpression && !memberIgnoreIfDefault && conditionMethodName == null)
+                // IgnoreIfNull/IgnoreIfDefault/Condition already reported centrally above.
+                // Only report the materializer-specific reason here.
+                else if (generateExpression && !excludeFromExpression)
                 {
-                    var reason = memberIgnoreIfNull
-                        ? "IgnoreIfNull has no equivalent in expression trees"
-                        : "non-translatable collection materializer";
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ExpressionMemberExcluded,
                         GetSafeLocation(method),
                         destMember.Name,
-                        reason));
+                        "non-translatable collection materializer"));
                 }
 
                 assignments.Add(new MemberAssignmentModel(
@@ -1177,7 +1164,8 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                 // Custom converter calls are not translatable by EF: user-defined static methods
                 // have no SQL equivalent. Exclude from the expression property and emit FKF506.
-                if (generateExpression)
+                // IgnoreIfNull/IgnoreIfDefault/Condition already reported centrally above.
+                if (generateExpression && !excludeFromExpression)
                 {
                     diagnostics.Add(Diagnostic.Create(
                         ForgeDiagnostics.ExpressionMemberExcluded,
@@ -3325,11 +3313,21 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     /// methods in more than one included class, the first is used and <paramref name="shadowedBy"/>
     /// is populated so the caller can emit a diagnostic — resolution is never silent.
     /// </summary>
+    private static bool IsValidConditionMethodSignature(IMethodSymbol m, ITypeSymbol sourceType)
+    {
+        return m.IsStatic
+            && m.Parameters.Length == 1
+            && m.Parameters[0].Type.ToDisplayString() == sourceType.ToDisplayString()
+            && m.ReturnType.ToDisplayString() == "bool"
+            && (m.DeclaredAccessibility == Accessibility.Public || m.DeclaredAccessibility == Accessibility.Internal);
+    }
+
     private static IMethodSymbol? ResolveConditionMethod(
         INamedTypeSymbol forgeClass,
         string conditionMethodName,
         Microsoft.CodeAnalysis.Compilation compilation,
         IReadOnlyList<string>? includedForgeClasses,
+        ITypeSymbol sourceType,
         out string? qualifiedMethodName,
         out string? shadowedBy)
     {
@@ -3338,15 +3336,24 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         var localMatch = forgeClass.GetMembers()
             .OfType<IMethodSymbol>()
-            .FirstOrDefault(m => m.Name == conditionMethodName);
+            .FirstOrDefault(m => m.Name == conditionMethodName && IsValidConditionMethodSignature(m, sourceType));
         if (localMatch != null)
         {
             qualifiedMethodName = conditionMethodName;
             return localMatch;
         }
 
+        // If there's a name match locally but it didn't pass the signature filter, fall through
+        // to included classes — a valid method there should still be found.
+
         if (includedForgeClasses == null || includedForgeClasses.Count == 0)
-            return null;
+        {
+            // Check if there's a name match with invalid signature to give a better diagnostic
+            var invalidLocal = forgeClass.GetMembers()
+                .OfType<IMethodSymbol>()
+                .FirstOrDefault(m => m.Name == conditionMethodName);
+            return invalidLocal;
+        }
 
         IMethodSymbol? firstMatch = null;
 
@@ -3357,7 +3364,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
             var candidate = includedClass.GetMembers()
                 .OfType<IMethodSymbol>()
-                .FirstOrDefault(m => m.Name == conditionMethodName);
+                .FirstOrDefault(m => m.Name == conditionMethodName && IsValidConditionMethodSignature(m, sourceType));
             if (candidate == null) continue;
 
             if (firstMatch == null)
@@ -3371,7 +3378,29 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             }
         }
 
-        return firstMatch;
+        if (firstMatch != null)
+            return firstMatch;
+
+        // No valid match anywhere — return first name match (from local or included) for diagnostics
+        var fallbackLocal = forgeClass.GetMembers()
+            .OfType<IMethodSymbol>()
+            .FirstOrDefault(m => m.Name == conditionMethodName);
+        if (fallbackLocal != null)
+            return fallbackLocal;
+
+        foreach (var includedFqn in includedForgeClasses)
+        {
+            var includedClass = compilation.GetTypeByMetadataName(includedFqn);
+            if (includedClass == null) continue;
+
+            var fallback = includedClass.GetMembers()
+                .OfType<IMethodSymbol>()
+                .FirstOrDefault(m => m.Name == conditionMethodName);
+            if (fallback != null)
+                return fallback;
+        }
+
+        return null;
     }
 
     /// <summary>
