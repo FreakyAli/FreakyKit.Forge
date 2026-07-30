@@ -729,14 +729,10 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF221 | Warning | Invalid converter signature |
 | FKF222 | Warning | Duplicate converter for same type pair |
 | FKF300 | Warning | Nested forging disabled |
-| FKF301 | Error | Circular nested forge detected |
 | FKF310 | Info | Collection mapping applied |
 | FKF311 | Info | Same-type collection reference-shared |
 | FKF312 | Info | Same-type reference member shared |
 | FKF313 | Warning | Conflicting ShareReference between source and destination |
-| FKF314 | Warning | NullFallback has no effect on value type |
-| FKF315 | Error | IgnoreIfNull and NullFallback cannot both be set |
-| FKF316 | Error | Conditional guard (IgnoreIfNull/IgnoreIfDefault/Condition) has no effect on init-only member |
 | FKF400 | Warning | Field ignored |
 | FKF401 | Info | Fields enabled |
 | FKF500 | Error | Constructor ambiguity |
