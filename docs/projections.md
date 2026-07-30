@@ -103,8 +103,6 @@ in these cases. The imperative method still maps the member normally.
 |---|---|
 | Custom converter | `[ForgeConverter]` methods are user-defined static methods that EF can't translate. Write the conversion inline or skip projection mode for this member. |
 | `IgnoreIfNull` | "Skip assignment when source is null" has no expression-tree equivalent. Expression trees always evaluate every binding. |
-| `IgnoreIfDefault` | Same issue as `IgnoreIfNull` — the default-value guard is a runtime `if`, not expressible in an expression tree. |
-| `Condition` | A `[ForgeMap(Condition = ...)]` guard (whether resolved locally or from a `[ForgeUses]`-included class) has no expression-tree form. |
 | Non-translatable collection materializer | `HashSet`, `ImmutableArray`, `ImmutableList`, `ImmutableHashSet`, `ReadOnlyCollection` — EF translates only `.ToList()` and `.ToArray()`. Map the collection imperatively or change the destination type to `List<T>` / `T[]`. |
 | Before/after hooks | Hooks invoke arbitrary side-effectful methods which don't exist in expression trees. **FKF505** fires once per method when hooks coexist with `GenerateExpression = true`. The hooks still run when the imperative method is called. |
 

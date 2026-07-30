@@ -512,8 +512,7 @@ var dtos = await dbContext.People
 - Members whose conversion has no translatable expression-tree encoding are silently omitted from
   the expression property — emits **FKF506** (Info) per member with the reason. Affected cases:
   - Custom `[ForgeConverter]` calls (user methods can't translate to SQL)
-  - `IgnoreIfNull`, `IgnoreIfDefault`, and `Condition` (runtime guards have no expression-tree
-    equivalent — the imperative method still applies the guard; the expression omits the member)
+  - `IgnoreIfNull` (conditional skipping has no expression-tree equivalent)
   - Collection materializers other than `.ToList()` / `.ToArray()` (HashSet, ImmutableArray, etc.)
 - Nested forge methods are **inlined** into the expression body (EF Core cannot translate
   `Expression.Invoke`). A cycle in the nested chain emits **FKF507** (Error). Inlining depth
@@ -666,8 +665,6 @@ public class Dest   { public string Name { get; set; } = ""; }
 // Generates: if (source.Name != null) __result.Name = source.Name;
 ```
 
-`IgnoreIfNull` (like `IgnoreIfDefault` and `Condition`) requires a runtime `if` around the assignment. It cannot be applied to an `init`-only or `required` destination member — those can only be set inside the constructor's object initializer, which has no way to conditionally skip a member. Doing so emits **FKF316** (Error) and blocks generation for that method.
-
 #### `IgnoreIfDefault` (`bool`, default: `false`)
 
 When true, the assignment for this member is wrapped in a default-value check: the destination member is only assigned when the source value is not equal to its type's default (null for references, 0 for numeric types, false for bool, Guid.Empty for Guid, etc.). Useful for PATCH/partial-update APIs where you want to preserve existing values when the client didn't provide a value.
@@ -688,25 +685,15 @@ public string? Name { get; set; }
 // Generates: if (source.Name != null && !EqualityComparer<string>.Default.Equals(source.Name, default)) __result.Name = source.Name;
 ```
 
-`IgnoreIfDefault` has no expression-tree equivalent: if the method also has `GenerateExpression = true`, the member is omitted from the generated `Expression` property and **FKF506** (Info) is emitted — the imperative method still applies the guard normally.
-
-Like `IgnoreIfNull`, `IgnoreIfDefault` can't be applied to an `init`-only or `required` destination member — emits **FKF316** (Error) and blocks generation.
-
 #### `Condition` (`string?`, default: `null`)
 
-When set, specifies the name of a static method that determines whether this member should be assigned. The method must accept the source type as a parameter and return `bool`. When the method returns `false`, the assignment is skipped.
+When set, specifies the name of a static method on the forge class that determines whether this member should be assigned. The method must accept the source type as a parameter and return `bool`. When the method returns `false`, the assignment is skipped.
 
 Useful for conditional PATCH updates or complex validation logic. The method must be:
 - Static
 - Accessible (public or internal)
 - Accept exactly one parameter of the source type
 - Return `bool`
-
-Resolution first looks on the current forge class, then falls back to classes listed in `[ForgeUses]`, in declaration order — the same lookup used for nested forge and converter methods. If the name matches a method in more than one included class, the first one wins and **FKF513** (warning) reports which class was used and which was shadowed, so the choice is never silent.
-
-`Condition` has no expression-tree equivalent: if the method also has `GenerateExpression = true`, the conditioned member is omitted from the generated `Expression` property and **FKF506** (Info) is emitted — the imperative method still applies the guard normally.
-
-Like `IgnoreIfNull`/`IgnoreIfDefault`, `Condition` can't be applied to an `init`-only or `required` destination member — emits **FKF316** (Error) and blocks generation.
 
 ```csharp
 [Forge]
@@ -1285,15 +1272,13 @@ Quick reference for which `[ForgeMethod]` features work together:
 | `AllowNestedForging` | `GenerateExpression` | ✅ | Nested forge calls are inlined into expressions (FKF507 detects cycles) |
 | `AllowFlattening` | `GenerateExpression` | ✅ | Flattened paths become expression-tree property chains |
 | `IgnoreIfNull` | `GenerateExpression` | ❌ | `IgnoreIfNull` has no expression-tree equivalent; member is silently omitted from expression (FKF506) |
-| `IgnoreIfDefault` | `GenerateExpression` | ❌ | `IgnoreIfDefault` has no expression-tree equivalent; member is silently omitted from expression (FKF506) |
-| `Condition` | `GenerateExpression` | ❌ | The condition guard has no expression-tree equivalent; member is silently omitted from expression (FKF506) |
 | `ShareReference` | `AllowNestedForging` | ✅ | ShareReference applies to collections; nested forging applies to object members |
 | `GenerateExpression` | Update methods (void) | ❌ | Expressions invalid for void returns; emits FKF504 (Error) |
 | `AllowFlattening` | `StrictMapping` | ✅ | Flattened members count as mapped (no FKF100/FKF110) |
 | `AllowNestedForging` | `StrictMapping` | ✅ | Nested mapped members count as matched (no FKF100/FKF110) |
 | `[ForgeConverter]` | `GenerateExpression` | ❌ | Converter calls can't translate to SQL; member is silently omitted from expression (FKF506) |
 
-**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `IgnoreIfDefault`, `Condition`, `[ForgeConverter]` calls, custom materialization).
+**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `[ForgeConverter]` calls, custom materialization).
 
 ---
 
