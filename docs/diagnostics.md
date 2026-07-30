@@ -986,6 +986,42 @@ public AddressDto Home { get; set; }
 
 ---
 
+### FKF316 — Conditional guard has no effect on init-only member
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}': '{1}' has no effect because the member is init-only (or required) — it can only be set inside the object initializer, which cannot express a runtime guard. |
+
+`IgnoreIfNull`, `IgnoreIfDefault`, and `Condition` all require a runtime `if` around the assignment. Init-only (`init;`) and `required` destination members can only be set inside the constructor's object initializer — there's no way to conditionally skip one there. Generation is blocked for that method until the conflict is resolved.
+
+**Fix:** remove the guard attribute, or make the member settable outside the initializer (drop `init` in favor of a regular setter).
+
+```csharp
+// Wrong — FKF316: Id is init-only, IgnoreIfDefault has nowhere to apply
+public class Dest
+{
+    [ForgeMap("Id", IgnoreIfDefault = true)]
+    public int Id { get; init; }
+}
+
+// Correct — drop the guard
+public class Dest
+{
+    public int Id { get; init; }
+}
+
+// OR — keep the guard, make the member settable
+public class Dest
+{
+    [ForgeMap("Id", IgnoreIfDefault = true)]
+    public int Id { get; set; }
+}
+```
+
+---
+
 ## Construction
 
 ### FKF500 — Constructor ambiguity
@@ -1096,6 +1132,8 @@ Some mapping cases have no equivalent encoding inside an expression tree:
 
 - **Custom converter** — user-defined static methods aren't translatable to SQL.
 - **`IgnoreIfNull`** — conditional skipping doesn't exist in expression trees; every binding evaluates.
+- **`IgnoreIfDefault`** — same issue as `IgnoreIfNull`: the guard is a runtime `if`, not expressible in an expression tree.
+- **`Condition`** — a `[ForgeMap(Condition = ...)]` guard (including one resolved from a `[ForgeUses]`-included class) has no expression-tree form.
 - **Non-translatable collection materializer** — EF translates only `.ToList()` and `.ToArray()`. Destinations like `HashSet<T>`, `ImmutableArray<T>`, `ImmutableList<T>`, `ImmutableHashSet<T>`, `ReadOnlyCollection<T>` are excluded.
 
 The imperative method continues to map the member normally. The expression property emits with the

@@ -654,6 +654,21 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "IgnoreIfNull skips assignment when null; NullFallback provides a fallback value when null. Only one can be used per member.");
 
+    /// <summary>
+    /// FKF316 (Error): IgnoreIfNull, IgnoreIfDefault, or Condition is set on an init-only
+    /// (or required) destination member. These require a runtime guard around the assignment,
+    /// but init-only members can only be set inside the object initializer at construction time —
+    /// there is no way to conditionally include a member there.
+    /// </summary>
+    public static readonly DiagnosticDescriptor GuardOnInitOnlyMember = new(
+        id: "FKF316",
+        title: "Conditional guard has no effect on init-only member",
+        messageFormat: "Member '{0}': '{1}' has no effect because the member is init-only (or required) — it can only be set inside the object initializer, which cannot express a runtime guard.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "IgnoreIfNull, IgnoreIfDefault, and Condition all require a runtime `if` around the assignment. Init-only and required members can only be assigned inside the constructor's object initializer, which has no way to skip a member conditionally. Remove the guard attribute, or make the member settable outside the initializer.");
+
     // ─── Construction ─────────────────────────────────────────────────────────
 
     /// <summary>

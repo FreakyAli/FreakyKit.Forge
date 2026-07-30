@@ -148,6 +148,8 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("if (!EqualityComparer<string>.Default.Equals(source.Name, default)) __result.Name = source.Name;", generated);
     }
 
     [Fact]
@@ -177,6 +179,11 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        // IgnoreIfDefault check comes first, combined with Condition via &&
+        Assert.Contains(
+            "if (!EqualityComparer<string>.Default.Equals(source.Name, default) && IsValid(source)) __result.Name = source.Name;",
+            generated);
     }
 
     [Fact]
@@ -204,6 +211,8 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("if (!EqualityComparer<int>.Default.Equals(source.Count, default)) __result.Count = source.Count;", generated);
     }
 
     [Fact]
@@ -231,6 +240,70 @@ public sealed class ConditionalMappingTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("if (!EqualityComparer<int?>.Default.Equals(source.Value, default)) __result.Value = source.Value;", generated);
+    }
+
+    [Fact]
+    public void Condition_OnUpdateMethod_GuardsAssignment()
+    {
+        // Update methods (void return, two params) use the same assignment codegen path as
+        // create methods — verify the Condition guard is applied there too.
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public int Value { get; set; } }
+                public class Dest
+                {
+                    [ForgeMap("Value", Condition = "IsPositive")]
+                    public int Value { get; set; }
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod]
+                    public static partial void UpdateDto(Source source, Dest dest);
+
+                    internal static bool IsPositive(Source source) => source.Value > 0;
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("if (IsPositive(source)) dest.Value = source.Value;", generated);
+    }
+
+    [Fact]
+    public void IgnoreIfDefault_OnUpdateMethod_GuardsAssignment()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Source { public string Name { get; set; } = ""; }
+                public class Dest
+                {
+                    [ForgeMap("Name", IgnoreIfDefault = true)]
+                    public string Name { get; set; } = "";
+                }
+
+                [Forge]
+                public static partial class MyForges
+                {
+                    [ForgeMethod]
+                    public static partial void UpdateDto(Source source, Dest dest);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+        Assert.Contains("if (!EqualityComparer<string>.Default.Equals(source.Name, default)) dest.Name = source.Name;", generated);
     }
 
     [Fact]

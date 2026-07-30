@@ -451,42 +451,6 @@ High. Restructure recursion to accumulate all candidates, post-process for longe
 
 ---
 
-#### Conditional Metadata Refactoring
-
-**Type:** Fix — Code Organization
-
-**Why**
-
-Conditional handling (IgnoreIfNull, IgnoreIfDefault, ConditionMethodName) is built inline in regular assignments only. Update, init-only, and expression assignments lack this logic, causing inconsistent code generation.
-
-**Complexity**
-
-High. Extract conditional wrapping into shared method; apply to all assignment types.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Member assignment generation
-
----
-
-#### Condition Resolution from Included Classes
-
-**Type:** Fix — Feature Completeness
-
-**Why**
-
-Condition method lookup only searches the current forge class. Methods in `[ForgeUses]` included classes are not discoverable, even though nested forge methods from included classes are supported.
-
-**Complexity**
-
-Medium. Extend condition lookup to search included classes; apply accessibility filter.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Condition resolution logic
-
----
-
 #### Orphaned Attributes Validation Redesign
 
 **Type:** Fix — Diagnostic Accuracy
@@ -511,24 +475,6 @@ High. Inspect forge method signatures to determine actual source/destination rol
 
 
 ### Test Coverage Gaps
-
-#### ConditionalMappingTests Coverage Expansion
-
-**Type:** Test — Coverage
-
-**Why**
-
-ConditionalMappingTests only asserts "no errors". Should assert that generated conditions are correct and guard assignments as expected, including update methods and expression output.
-
-**Complexity**
-
-Low. Add assertions verifying conditional guard structure and combined conditions.
-
-**Files to Modify**
-
-- `tests/FreakyKit.Forge.Generator.Tests/ConditionalMappingTests.cs`
-
----
 
 #### FlatteningGeneratorTests Coordinate Mapping Assertion
 
