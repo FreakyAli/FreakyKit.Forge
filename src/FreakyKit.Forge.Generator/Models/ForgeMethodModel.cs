@@ -69,6 +69,12 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
     /// </summary>
     public string? DictValueType { get; }
 
+    /// <summary>
+    /// For PolymorphicDispatch methods: the ordered list of derived-type-to-method mappings.
+    /// Empty for all other method kinds.
+    /// </summary>
+    public IReadOnlyList<PolymorphicMappingModel> PolymorphicMappings { get; }
+
     public ForgeMethodModel(
         string methodName,
         string accessibility,
@@ -93,7 +99,8 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
         int dictKeyCasingPolicy = 0,
         int dictMissingKeyPolicy = 0,
         int dictNullValuePolicy = 0,
-        string? dictValueType = null)
+        string? dictValueType = null,
+        IReadOnlyList<PolymorphicMappingModel>? polymorphicMappings = null)
     {
         MethodName = methodName;
         Accessibility = accessibility;
@@ -119,6 +126,7 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
         DictMissingKeyPolicy = dictMissingKeyPolicy;
         DictNullValuePolicy = dictNullValuePolicy;
         DictValueType = dictValueType;
+        PolymorphicMappings = polymorphicMappings ?? Array.Empty<PolymorphicMappingModel>();
     }
 
     public bool Equals(ForgeMethodModel other)
@@ -147,7 +155,8 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
             && DictKeyCasingPolicy == other.DictKeyCasingPolicy
             && DictMissingKeyPolicy == other.DictMissingKeyPolicy
             && DictNullValuePolicy == other.DictNullValuePolicy
-            && DictValueType == other.DictValueType;
+            && DictValueType == other.DictValueType
+            && PolymorphicMappings.SequenceEqual(other.PolymorphicMappings);
     }
 
     public override bool Equals(object obj) => Equals(obj as ForgeMethodModel);
@@ -179,6 +188,7 @@ internal sealed class ForgeMethodModel : IEquatable<ForgeMethodModel>
             hash = hash * 31 + DictMissingKeyPolicy.GetHashCode();
             hash = hash * 31 + DictNullValuePolicy.GetHashCode();
             hash = hash * 31 + (DictValueType?.GetHashCode() ?? 0);
+            hash = hash * 31 + PolymorphicMappings.Count;
             return hash;
         }
     }

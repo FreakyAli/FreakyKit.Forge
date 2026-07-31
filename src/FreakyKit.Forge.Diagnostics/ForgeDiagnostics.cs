@@ -21,9 +21,11 @@ namespace FreakyKit.Forge.Diagnostics;
 ///   FKF500–532: P2/P3 feature diagnostics (Flattening FKF530-532, Conditional Mapping FKF510-512, Cross-Class Forge FKF520-523, Orphaned Attributes FKF524-528)
 ///   FKF533–599: RESERVED for future P2/P3 feature diagnostics
 ///   FKF600–699: RESERVED for performance warnings (deep nesting, expression complexity, etc.)
+///   FKF800–899: Polymorphic mapping diagnostics (dispatch validation, type compatibility, pattern reachability)
 ///
 /// When adding new features (P2/P3), allocate diagnostic IDs from the remaining FKF533–599 range.
 /// When adding performance diagnostics, allocate from FKF600–699.
+/// When adding polymorphic mapping diagnostics, allocate from FKF800–899.
 /// This prevents ID collisions across versions and enables predictable diagnostic management.
 /// </remarks>
 public static class ForgeDiagnostics
@@ -35,6 +37,7 @@ public static class ForgeDiagnostics
     private const string Category_TypeSafety = "FreakyKit.Forge.TypeSafety";
     private const string Category_Nested = "FreakyKit.Forge.Nested";
     private const string Category_Construction = "FreakyKit.Forge.Construction";
+    private const string Category_Polymorphic = "FreakyKit.Forge.Polymorphic";
 
     // ─── Mode & Visibility ───────────────────────────────────────────────────
 
@@ -1031,6 +1034,104 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "ReturnNull policy cannot be used with non-nullable destination types. Change to UseDefault, Skip, or Throw, or make the type nullable.");
+
+    // ─── Polymorphic Mapping ────────────────────────────────────────────────
+
+    /// <summary>
+    /// FKF800 (Error): A polymorphic mapping references a method that was not found.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PolymorphicMethodNotFound = new(
+        id: "FKF800",
+        title: "Polymorphic mapping method not found",
+        messageFormat: "[ForgePolymorphic] on '{0}': method '{1}' not found in forge class or included [ForgeUses] classes.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The method name specified in [ForgePolymorphic] does not exist in the containing forge class or any classes included via [ForgeUses]. Verify the method name and ensure it is a static partial method.");
+
+    /// <summary>
+    /// FKF801 (Error): A polymorphic mapping method's return type is not assignable to the dispatch method's return type.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PolymorphicReturnTypeMismatch = new(
+        id: "FKF801",
+        title: "Polymorphic mapping return type mismatch",
+        messageFormat: "[ForgePolymorphic] on '{0}': method '{1}' returns '{2}', which is not assignable to dispatch return type '{3}'.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Each polymorphic mapping method's return type must be assignable to the dispatch method's return type — either a derived class or an implementation of the return interface.");
+
+    /// <summary>
+    /// FKF802 (Error): A polymorphic mapping's derived source type is not the same as or a subtype of the method's source parameter type.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PolymorphicSourceTypeMismatch = new(
+        id: "FKF802",
+        title: "Polymorphic mapping source type mismatch",
+        messageFormat: "[ForgePolymorphic] on '{0}': derived source type '{1}' is not assignable to the dispatch method's source parameter type '{2}'.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The derived source type specified in [ForgePolymorphic] must be the same as or a subtype of the dispatch method's source parameter type.");
+
+    /// <summary>
+    /// FKF803 (Error): A polymorphic switch arm is unreachable because a less-derived type appears before it.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PolymorphicUnreachablePattern = new(
+        id: "FKF803",
+        title: "Unreachable polymorphic pattern",
+        messageFormat: "[ForgePolymorphic] on '{0}': pattern for '{1}' is unreachable because '{2}' (a base type) appears earlier in the switch.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Switch expression patterns are evaluated in declaration order. A base type pattern appearing before a derived type pattern will match first, making the derived type pattern unreachable. Reorder the [ForgePolymorphic] attributes so derived types appear before their base types.");
+
+    /// <summary>
+    /// FKF804 (Error): A polymorphic dispatch method has incompatible [ForgeMethod] options set.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PolymorphicIncompatibleOptions = new(
+        id: "FKF804",
+        title: "Incompatible options on polymorphic dispatch method",
+        messageFormat: "[ForgePolymorphic] on '{0}': [ForgeMethod] option '{1}' has no effect on polymorphic dispatch methods and must not be set.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Polymorphic dispatch methods generate a switch expression that delegates to other forge methods. They perform no property mapping of their own, so [ForgeMethod] options like ShouldIncludeFields, AllowFlattening, AllowNestedForging, StrictMapping, IgnoreIfNull, ShareReference, and MappingStrategy have no effect.");
+
+    /// <summary>
+    /// FKF805 (Error): GenerateExpression = true on a polymorphic dispatch method.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PolymorphicExpressionNotSupported = new(
+        id: "FKF805",
+        title: "Expression generation not supported for polymorphic dispatch",
+        messageFormat: "[ForgePolymorphic] on '{0}': GenerateExpression = true is not supported. Switch expressions with type patterns cannot be represented in Expression<Func<>>.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Expression trees do not support C# switch expressions or 'is' type pattern matching. Polymorphic dispatch methods cannot generate an Expression<Func<>> property.");
+
+    /// <summary>
+    /// FKF806 (Error): Duplicate derived source type across [ForgePolymorphic] attributes.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PolymorphicDuplicateSourceType = new(
+        id: "FKF806",
+        title: "Duplicate polymorphic source type",
+        messageFormat: "[ForgePolymorphic] on '{0}': derived source type '{1}' is specified more than once.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Each derived source type can only appear once across all [ForgePolymorphic] attributes on a single method. Remove the duplicate entry.");
+
+    /// <summary>
+    /// FKF807 (Error): A method has [ForgePolymorphic] but is not in a [Forge] class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgePolymorphicWithoutForgeClass = new(
+        id: "FKF807",
+        title: "ForgePolymorphic without Forge class",
+        messageFormat: "Method '{0}' has [ForgePolymorphic] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgePolymorphic] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
 
 }
 

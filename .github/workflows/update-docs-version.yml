@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-docs-version
+  cancel-in-progress: false
+
 jobs:
   update-version:
     runs-on: ubuntu-latest
@@ -17,25 +21,44 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: master
+          fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version from tag
+      - name: Verify tag is on master
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::Tag commit is not on origin/master. Aborting."
+            exit 1
+          fi
+
+      - name: Validate and extract version from tag
         id: version
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match expected semver format."
+            exit 1
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Update version in docs
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
-          VERSION="${{ steps.version.outputs.value }}"
           sed -i -E "s/Version=\"[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?\"/Version=\"${VERSION}\"/g" \
             README.md \
             docs/installation.md \
             llms.txt
 
       - name: Commit and push if changed
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add README.md docs/installation.md llms.txt
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "docs: update version to ${{ steps.version.outputs.value }}"
+          git commit -m "docs: update version to ${VERSION}"
+          git fetch origin master
+          git rebase origin/master
           git push origin master

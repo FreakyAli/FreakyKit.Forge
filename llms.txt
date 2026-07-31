@@ -2,7 +2,7 @@
 
 > Compile-time object mapping for C# powered by Roslyn source generators. Zero runtime reflection, zero allocation overhead, hand-written-code performance.
 
-Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 77 diagnostics (FKF001–FKF702) to catch mistakes at build time.
+Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 85 diagnostics (FKF001–FKF807) to catch mistakes at build time.
 
 ## Installation
 
@@ -64,6 +64,9 @@ Exclude from mapping. Optional `Side` property: `Both` (default), `Source`, `Des
 
 ### `[ForgeConverter]` — method-level
 Marks a static method as a type converter. Must be static, non-void, non-generic, one parameter.
+
+### `[ForgePolymorphic(Type, string)]` — method-level (AllowMultiple)
+Declares a polymorphic dispatch arm. The method generates a switch expression dispatching to other forge methods by runtime type. Pure dispatch — no property mapping. Default arm throws `InvalidOperationException`. Non-default `[ForgeMethod]` options emit FKF804; `GenerateExpression = true` emits FKF805. Diagnostics: FKF800-FKF807.
 
 ### `[ForgeDictionary]` — method-level
 Controls dictionary mapping behavior.
@@ -236,6 +239,14 @@ Error-severity diagnostics block generation for the entire forge class. No parti
 | FKF700 | Error | Dictionary key type not string |
 | FKF701 | Error | Unsupported dictionary value type |
 | FKF702 | Error | ReturnNull on non-nullable type |
+| FKF800 | Error | Polymorphic mapping method not found |
+| FKF801 | Error | Polymorphic return type mismatch |
+| FKF802 | Error | Polymorphic source type mismatch |
+| FKF803 | Error | Unreachable polymorphic pattern |
+| FKF804 | Error | Incompatible options on polymorphic dispatch |
+| FKF805 | Error | Expression generation not supported for polymorphic dispatch |
+| FKF806 | Error | Duplicate polymorphic source type |
+| FKF807 | Error | ForgePolymorphic without Forge class |
 
 ## Common Anti-Patterns
 

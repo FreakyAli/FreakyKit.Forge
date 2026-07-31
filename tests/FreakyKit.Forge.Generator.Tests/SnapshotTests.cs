@@ -512,6 +512,41 @@ public sealed class SnapshotTests : GeneratorTestBase
         Assert.Contains("System.Enum.Parse<Level>(source.Level)", generated);
     }
 
+    [Fact]
+    public void PolymorphicDispatch_SwitchExpression()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class Animal { public string Name { get; set; } = ""; }
+                public class Dog : Animal { public string Breed { get; set; } = ""; }
+                public class Cat : Animal { public bool Indoor { get; set; } }
+
+                public class AnimalDto { public string Name { get; set; } = ""; }
+                public class DogDto : AnimalDto { public string Breed { get; set; } = ""; }
+                public class CatDto : AnimalDto { public bool Indoor { get; set; } }
+
+                [Forge]
+                public static partial class AnimalForges
+                {
+                    public static partial DogDto MapDog(Dog source);
+                    public static partial CatDto MapCat(Cat source);
+
+                    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+                    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
+                    public static partial AnimalDto MapAny(Animal source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+        var generated = AssertSingleGeneratedFile(result);
+
+        AssertSnapshot(generated);
+    }
+
     private static int CountOccurrences(string text, string substring)
     {
         int count = 0;

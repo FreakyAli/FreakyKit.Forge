@@ -456,3 +456,34 @@ public static partial class HotPathForges
     // public List<string> History { get; set; }
 }
 ```
+
+## 21. Polymorphic Mapping (Derived Type Dispatch)
+
+Generate a switch expression that dispatches to the correct forge method based on runtime type. Useful for EF Core TPH inheritance.
+
+```csharp
+public class Animal { public string Name { get; set; } }
+public class Dog : Animal { public string Breed { get; set; } }
+public class Cat : Animal { public bool Indoor { get; set; } }
+
+public class AnimalDto { public string Name { get; set; } }
+public class DogDto : AnimalDto { public string Breed { get; set; } }
+public class CatDto : AnimalDto { public bool Indoor { get; set; } }
+
+[Forge]
+public static partial class AnimalForges
+{
+    public static partial DogDto MapDog(Dog source);
+    public static partial CatDto MapCat(Cat source);
+
+    public static partial AnimalDto MapBase(Animal source);
+
+    // Pure dispatch — no property mapping on this method
+    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
+    public static partial AnimalDto MapAny(Animal source);
+
+    // Optional base fallback — add as explicit arm
+    // [ForgePolymorphic(typeof(Animal), nameof(MapBase))]
+}
+```

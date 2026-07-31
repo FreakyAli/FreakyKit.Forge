@@ -79,3 +79,11 @@ FKF532 | FreakyKit.Forge.MemberMatching | Error
 FKF700 | FreakyKit.Forge.TypeSafety | Error
 FKF701 | FreakyKit.Forge.TypeSafety | Error
 FKF702 | FreakyKit.Forge.TypeSafety | Error
+FKF800 | FreakyKit.Forge.Polymorphic | Error
+FKF801 | FreakyKit.Forge.Polymorphic | Error
+FKF802 | FreakyKit.Forge.Polymorphic | Error
+FKF803 | FreakyKit.Forge.Polymorphic | Error
+FKF804 | FreakyKit.Forge.Polymorphic | Error
+FKF805 | FreakyKit.Forge.Polymorphic | Error
+FKF806 | FreakyKit.Forge.Polymorphic | Error
+FKF807 | FreakyKit.Forge.Polymorphic | Error
