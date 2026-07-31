@@ -410,6 +410,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         if (polymorphicAttrs.Count > 0)
         {
+            if (isUpdate)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.PolymorphicIncompatibleOptions,
+                    GetSafeLocation(method),
+                    method.Name,
+                    "update method shape (void return, two parameters)"));
+                return (null, diagnostics);
+            }
             return ExtractPolymorphicDispatchMethod(method, forgeClass, polymorphicAttrs, srcParamName, diagnostics, compilation, includedForgeClasses);
         }
 

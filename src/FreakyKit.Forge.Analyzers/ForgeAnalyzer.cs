@@ -547,7 +547,16 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
     {
         var loc = method.Locations.FirstOrDefault();
         if (loc == null) return;
-        if (method.Parameters.Length != 1 || method.ReturnsVoid) return;
+
+        if (method.Parameters.Length != 1 || method.ReturnsVoid)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                ForgeDiagnostics.PolymorphicIncompatibleOptions,
+                loc,
+                method.Name,
+                "update method shape (void return, two parameters)"));
+            return;
+        }
 
         var srcType = method.Parameters[0].Type;
         var destType = method.ReturnType;

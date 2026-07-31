@@ -1191,8 +1191,8 @@ public static partial class AnimalForges
 // Generates:
 // return source switch
 // {
-//     Dog dog => MapDog(dog),
-//     Cat cat => MapCat(cat),
+//     TestNs.Dog __p0 => MapDog(__p0),
+//     TestNs.Cat __p1 => MapCat(__p1),
 //     _ => throw new InvalidOperationException(...)
 // };
 ```

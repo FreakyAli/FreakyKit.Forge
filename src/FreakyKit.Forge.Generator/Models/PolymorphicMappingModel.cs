@@ -25,7 +25,7 @@ internal sealed class PolymorphicMappingModel : IEquatable<PolymorphicMappingMod
         MethodReturnTypeFqn = methodReturnTypeFqn;
     }
 
-    public bool Equals(PolymorphicMappingModel other)
+    public bool Equals(PolymorphicMappingModel? other)
     {
         if (other is null) return false;
         return DerivedSourceTypeFqn == other.DerivedSourceTypeFqn
