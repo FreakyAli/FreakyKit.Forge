@@ -476,6 +476,8 @@ public static partial class AnimalForges
     public static partial DogDto MapDog(Dog source);
     public static partial CatDto MapCat(Cat source);
 
+    public static partial AnimalDto MapBase(Animal source);
+
     // Pure dispatch — no property mapping on this method
     [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
     [ForgePolymorphic(typeof(Cat), nameof(MapCat))]

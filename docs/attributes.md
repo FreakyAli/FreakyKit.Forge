@@ -1200,6 +1200,8 @@ public static partial class AnimalForges
 ### Example — With Base Fallback
 
 ```csharp
+public static partial AnimalDto MapBase(Animal source);
+
 [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
 [ForgePolymorphic(typeof(Animal), nameof(MapBase))]
 public static partial AnimalDto MapAny(Animal source);
@@ -1221,7 +1223,7 @@ public static partial IAnimalDto MapAny(Animal source);
 |---|---|---|
 | `FKF800` | Error | Referenced method not found |
 | `FKF801` | Error | Method return type not assignable to dispatch return type |
-| `FKF802` | Error | Derived source type not assignable from method source parameter type |
+| `FKF802` | Error | Derived source type not assignable to method source parameter type |
 | `FKF803` | Error | Unreachable pattern (less-derived type appears before derived type) |
 | `FKF804` | Error | Incompatible `[ForgeMethod]` options set on polymorphic method |
 | `FKF805` | Error | `GenerateExpression = true` on polymorphic method |
@@ -1373,9 +1375,9 @@ Quick reference for which `[ForgeMethod]` features work together:
 | `AllowNestedForging` | `StrictMapping` | ✅ | Nested mapped members count as matched (no FKF100/FKF110) |
 | `[ForgeConverter]` | `GenerateExpression` | ❌ | Converter calls can't translate to SQL; member is silently omitted from expression (FKF506) |
 
-| `[ForgePolymorphic]` | Any `[ForgeMethod]` option | ❌ | Polymorphic dispatch methods are pure switch expressions; all `[ForgeMethod]` options are incompatible (FKF804/FKF805) |
+| `[ForgePolymorphic]` | Non-default `[ForgeMethod]` options | ❌ | Polymorphic dispatch methods are pure switch expressions; non-default `[ForgeMethod]` options emit FKF804 (FKF805 for `GenerateExpression`) |
 
-**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `IgnoreIfDefault`, `Condition`, `[ForgeConverter]` calls, custom materialization). `[ForgePolymorphic]` methods are pure dispatch and incompatible with all `[ForgeMethod]` options.
+**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `IgnoreIfDefault`, `Condition`, `[ForgeConverter]` calls, custom materialization). `[ForgePolymorphic]` methods are pure dispatch and incompatible with non-default `[ForgeMethod]` options.
 
 ---
 

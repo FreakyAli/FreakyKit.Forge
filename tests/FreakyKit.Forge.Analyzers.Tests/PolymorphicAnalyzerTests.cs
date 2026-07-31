@@ -196,6 +196,38 @@ public sealed class PolymorphicAnalyzerTests : AnalyzerTestBase
     }
 
     [Fact]
+    public void FKF800_TargetMethodParamTypeMismatch_FindsMethodByName()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+
+            namespace TestNs
+            {
+                public class Animal { public string Name { get; set; } }
+                public class Dog : Animal { }
+                public class Cat : Animal { }
+                public class AnimalDto { public string Name { get; set; } }
+                public class CatDto : AnimalDto { }
+
+                [Forge]
+                public static partial class Forges
+                {
+                    public static partial CatDto MapCat(Cat source);
+
+                    [ForgePolymorphic(typeof(Dog), nameof(MapCat))]
+                    public static partial AnimalDto MapAny(Animal source);
+                }
+            }
+            """;
+
+        // MapCat accepts Cat, not Dog — but since we match by name only and
+        // the method has 1 param, it matches. The actual parameter type
+        // compatibility is enforced at the C# compilation level.
+        // This test verifies the method IS found (no FKF800).
+        AssertNotContainsDiagnostic(source, "FKF800");
+    }
+
+    [Fact]
     public void ValidPolymorphicMethod_NoDiagnosticErrors()
     {
         const string source = """

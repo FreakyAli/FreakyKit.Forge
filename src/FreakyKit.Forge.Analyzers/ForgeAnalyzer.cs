@@ -621,7 +621,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
         }
 
         var seenDerivedTypes = new HashSet<string>();
-        var derivedTypeOrder = new List<(string Fqn, string ShortName)>();
+        var derivedTypeOrder = new List<(INamedTypeSymbol Type, string ShortName)>();
 
         foreach (var attr in polymorphicAttrs)
         {
@@ -663,8 +663,10 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            // FKF800: Find the target method by name
-            var targetMethod = candidateMethods.FirstOrDefault(m => m.Name == targetMethodName);
+            // FKF800: Find the target method by name, excluding the dispatch method itself
+            var targetMethod = candidateMethods.FirstOrDefault(m => m.Name == targetMethodName
+                && !SymbolEqualityComparer.Default.Equals(m, method)
+                && m.Parameters.Length == 1);
             if (targetMethod == null)
             {
                 context.ReportDiagnostic(Diagnostic.Create(
@@ -693,19 +695,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                 continue;
             }
 
-            derivedTypeOrder.Add((derivedFqn, derivedShort));
+            derivedTypeOrder.Add((derivedSourceType, derivedShort));
         }
 
-        // FKF803: Unreachable pattern detection
+        // FKF803: Unreachable pattern detection — uses resolved symbols directly
         for (int i = 0; i < derivedTypeOrder.Count; i++)
         {
-            var currentType = compilation.GetTypeByMetadataName(derivedTypeOrder[i].Fqn);
-            if (currentType == null) continue;
+            var currentType = derivedTypeOrder[i].Type;
 
             for (int j = 0; j < i; j++)
             {
-                var precedingType = compilation.GetTypeByMetadataName(derivedTypeOrder[j].Fqn);
-                if (precedingType == null) continue;
+                var precedingType = derivedTypeOrder[j].Type;
 
                 var conv = compilation.ClassifyConversion(currentType, precedingType);
                 if (conv.IsIdentity || (conv.IsImplicit && conv.IsReference))

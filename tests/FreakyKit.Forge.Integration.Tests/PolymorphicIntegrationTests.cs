@@ -42,8 +42,8 @@ public sealed class PolymorphicIntegrationTests : IntegrationTestBase
 
         var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
         Assert.Contains("source switch", generated);
-        Assert.Contains("Dog dog => MapDog(dog)", generated);
-        Assert.Contains("Cat cat => MapCat(cat)", generated);
+        Assert.Contains("TestNs.Dog __p0 => MapDog(__p0)", generated);
+        Assert.Contains("TestNs.Cat __p1 => MapCat(__p1)", generated);
         Assert.Contains("throw new InvalidOperationException", generated);
     }
 
@@ -80,8 +80,8 @@ public sealed class PolymorphicIntegrationTests : IntegrationTestBase
         Assert.True(result.HasGeneratedSource);
 
         var generated = result.RunResult.GeneratedTrees[0].GetText().ToString();
-        Assert.Contains("Dog dog => MapDog(dog)", generated);
-        Assert.Contains("Animal animal => MapBase(animal)", generated);
+        Assert.Contains("TestNs.Dog __p0 => MapDog(__p0)", generated);
+        Assert.Contains("TestNs.Animal __p1 => MapBase(__p1)", generated);
     }
 
     [Fact]

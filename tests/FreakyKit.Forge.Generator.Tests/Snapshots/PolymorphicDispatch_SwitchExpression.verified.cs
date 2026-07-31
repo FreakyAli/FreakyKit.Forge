@@ -43,10 +43,11 @@ namespace TestNs
         public static partial AnimalDto MapAny(Animal source)
         #line default
         {
+            if (source is null) throw new ArgumentNullException(nameof(source));
             return source switch
             {
-                Dog dog => MapDog(dog),
-                Cat cat => MapCat(cat),
+                TestNs.Dog __p0 => MapDog(__p0),
+                TestNs.Cat __p1 => MapCat(__p1),
                 _ => throw new InvalidOperationException("No polymorphic mapping for " + source.GetType()),
             };
         }

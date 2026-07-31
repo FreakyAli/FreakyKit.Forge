@@ -1062,12 +1062,12 @@ public static class ForgeDiagnostics
         description: "Each polymorphic mapping method's return type must be assignable to the dispatch method's return type — either a derived class or an implementation of the return interface.");
 
     /// <summary>
-    /// FKF802 (Error): A polymorphic mapping's derived source type is not assignable from the method's source parameter type.
+    /// FKF802 (Error): A polymorphic mapping's derived source type is not the same as or a subtype of the method's source parameter type.
     /// </summary>
     public static readonly DiagnosticDescriptor PolymorphicSourceTypeMismatch = new(
         id: "FKF802",
         title: "Polymorphic mapping source type mismatch",
-        messageFormat: "[ForgePolymorphic] on '{0}': derived source type '{1}' is not assignable from the dispatch method's source parameter type '{2}'.",
+        messageFormat: "[ForgePolymorphic] on '{0}': derived source type '{1}' is not assignable to the dispatch method's source parameter type '{2}'.",
         category: Category_Polymorphic,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
@@ -1110,18 +1110,6 @@ public static class ForgeDiagnostics
         description: "Expression trees do not support C# switch expressions or 'is' type pattern matching. Polymorphic dispatch methods cannot generate an Expression<Func<>> property.");
 
     /// <summary>
-    /// FKF807 (Error): A method has [ForgePolymorphic] but is not in a [Forge] class.
-    /// </summary>
-    public static readonly DiagnosticDescriptor ForgePolymorphicWithoutForgeClass = new(
-        id: "FKF807",
-        title: "ForgePolymorphic without Forge class",
-        messageFormat: "Method '{0}' has [ForgePolymorphic] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality.",
-        category: Category_Polymorphic,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description: "[ForgePolymorphic] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
-
-    /// <summary>
     /// FKF806 (Error): Duplicate derived source type across [ForgePolymorphic] attributes.
     /// </summary>
     public static readonly DiagnosticDescriptor PolymorphicDuplicateSourceType = new(
@@ -1132,6 +1120,18 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Each derived source type can only appear once across all [ForgePolymorphic] attributes on a single method. Remove the duplicate entry.");
+
+    /// <summary>
+    /// FKF807 (Error): A method has [ForgePolymorphic] but is not in a [Forge] class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgePolymorphicWithoutForgeClass = new(
+        id: "FKF807",
+        title: "ForgePolymorphic without Forge class",
+        messageFormat: "Method '{0}' has [ForgePolymorphic] but is not in a [Forge] class. Add [Forge] to the containing class to enable forge functionality.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgePolymorphic] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
 
 }
 

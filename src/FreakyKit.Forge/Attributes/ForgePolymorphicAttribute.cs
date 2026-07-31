@@ -12,7 +12,7 @@ public sealed class ForgePolymorphicAttribute : Attribute
 {
     /// <summary>
     /// The derived source type to match in the switch expression pattern.
-    /// Must be assignable from the method's source parameter type.
+    /// Must be the same as or a subtype of the method's source parameter type.
     /// </summary>
     public Type DerivedSourceType { get; }
 

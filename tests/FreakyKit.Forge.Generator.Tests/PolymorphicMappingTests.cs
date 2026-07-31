@@ -38,8 +38,8 @@ public sealed class PolymorphicMappingTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
         Assert.Contains("source switch", generated);
-        Assert.Contains("Dog dog => MapDog(dog)", generated);
-        Assert.Contains("Cat cat => MapCat(cat)", generated);
+        Assert.Contains("TestNs.Dog __p0 => MapDog(__p0)", generated);
+        Assert.Contains("TestNs.Cat __p1 => MapCat(__p1)", generated);
         Assert.Contains("throw new InvalidOperationException", generated);
     }
 
@@ -73,8 +73,8 @@ public sealed class PolymorphicMappingTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("Dog dog => MapDog(dog)", generated);
-        Assert.Contains("Animal animal => MapBase(animal)", generated);
+        Assert.Contains("TestNs.Dog __p0 => MapDog(__p0)", generated);
+        Assert.Contains("TestNs.Animal __p1 => MapBase(__p1)", generated);
     }
 
     [Fact]
@@ -109,8 +109,8 @@ public sealed class PolymorphicMappingTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        Assert.Contains("Dog dog => MapDog(dog)", generated);
-        Assert.Contains("Cat cat => MapCat(cat)", generated);
+        Assert.Contains("TestNs.Dog __p0 => MapDog(__p0)", generated);
+        Assert.Contains("TestNs.Cat __p1 => MapCat(__p1)", generated);
     }
 
     [Fact]
@@ -350,8 +350,10 @@ public sealed class PolymorphicMappingTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        var catIndex = generated.IndexOf("Cat cat => MapCat(cat)");
-        var dogIndex = generated.IndexOf("Dog dog => MapDog(dog)");
+        var catIndex = generated.IndexOf("TestNs.Cat __p0 => MapCat(__p0)");
+        var dogIndex = generated.IndexOf("TestNs.Dog __p1 => MapDog(__p1)");
+        Assert.True(catIndex >= 0, "Cat arm should be present in generated code");
+        Assert.True(dogIndex >= 0, "Dog arm should be present in generated code");
         Assert.True(catIndex < dogIndex, "Cat arm should appear before Dog arm (user-declared order)");
     }
 
@@ -416,8 +418,10 @@ public sealed class PolymorphicMappingTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
         var generated = AssertSingleGeneratedFile(result);
-        var poodleIndex = generated.IndexOf("Poodle poodle => MapPoodle(poodle)");
-        var dogIndex = generated.IndexOf("Dog dog => MapDog(dog)");
+        var poodleIndex = generated.IndexOf("TestNs.Poodle __p0 => MapPoodle(__p0)");
+        var dogIndex = generated.IndexOf("TestNs.Dog __p1 => MapDog(__p1)");
+        Assert.True(poodleIndex >= 0, "Poodle arm should be present in generated code");
+        Assert.True(dogIndex >= 0, "Dog arm should be present in generated code");
         Assert.True(poodleIndex < dogIndex, "Poodle arm should appear before Dog arm");
     }
 
@@ -453,6 +457,8 @@ public sealed class PolymorphicMappingTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
+        var generated = AssertGeneratedFiles(result, 2);
+        Assert.Contains("global::TestNs.DogForges.MapDog(__p0)", generated);
     }
 
     [Fact]

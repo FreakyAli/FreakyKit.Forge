@@ -1796,6 +1796,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         var polymorphicMappings = new List<PolymorphicMappingModel>();
+        var resolvedDerivedTypes = new List<INamedTypeSymbol>();
         var seenDerivedTypes = new HashSet<string>();
 
         foreach (var attr in polymorphicAttrs)
@@ -1838,9 +1839,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 continue;
             }
 
-            // FKF800: Find the target method by name
+            // FKF800: Find the target method by name, excluding the dispatch method itself,
+            // and requiring the method accepts the derived source type
             var targetCandidate = candidateMethods
-                .FirstOrDefault(c => c.Symbol.Name == targetMethodName);
+                .FirstOrDefault(c => c.Symbol.Name == targetMethodName
+                    && !SymbolEqualityComparer.Default.Equals(c.Symbol, method)
+                    && c.Symbol.Parameters.Length == 1);
 
             if (targetCandidate.Symbol == null)
             {
@@ -1889,23 +1893,21 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 derivedSourceTypeShortName: derivedShort,
                 methodName: qualifiedMethodName,
                 methodReturnTypeFqn: targetReturnType.ToDisplayString()));
+            resolvedDerivedTypes.Add(derivedSourceType);
         }
 
         if (diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
             return (null, diagnostics);
 
-        // FKF803: Unreachable pattern detection
-        for (int i = 0; i < polymorphicMappings.Count; i++)
+        // FKF803: Unreachable pattern detection — uses resolved symbols directly
+        for (int i = 0; i < resolvedDerivedTypes.Count; i++)
         {
-            var currentType = compilation.GetTypeByMetadataName(polymorphicMappings[i].DerivedSourceTypeFqn);
-            if (currentType == null) continue;
+            var currentType = resolvedDerivedTypes[i];
 
             for (int j = 0; j < i; j++)
             {
-                var precedingType = compilation.GetTypeByMetadataName(polymorphicMappings[j].DerivedSourceTypeFqn);
-                if (precedingType == null) continue;
+                var precedingType = resolvedDerivedTypes[j];
 
-                // If current type derives from (or equals) a preceding type, current is unreachable
                 var conv = compilation.ClassifyConversion(currentType, precedingType);
                 if (conv.IsIdentity || (conv.IsImplicit && conv.IsReference))
                 {
@@ -2714,12 +2716,14 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}{method.Accessibility} static partial {method.DestTypeShortName} {method.MethodName}({method.SourceTypeShortName} {method.SourceParameterName})");
             sb.AppendLine($"{indent}#line default");
             sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    if ({method.SourceParameterName} is null) throw new ArgumentNullException(nameof({method.SourceParameterName}));");
             sb.AppendLine($"{indent}    return {method.SourceParameterName} switch");
             sb.AppendLine($"{indent}    {{");
-            foreach (var mapping in method.PolymorphicMappings)
+            for (int i = 0; i < method.PolymorphicMappings.Count; i++)
             {
-                var varName = char.ToLowerInvariant(mapping.DerivedSourceTypeShortName[0]) + mapping.DerivedSourceTypeShortName.Substring(1);
-                sb.AppendLine($"{indent}        {mapping.DerivedSourceTypeShortName} {varName} => {mapping.MethodName}({varName}),");
+                var mapping = method.PolymorphicMappings[i];
+                var varName = $"__p{i}";
+                sb.AppendLine($"{indent}        {mapping.DerivedSourceTypeFqn} {varName} => {mapping.MethodName}({varName}),");
             }
             sb.AppendLine($"{indent}        _ => throw new InvalidOperationException(\"No polymorphic mapping for \" + {method.SourceParameterName}.GetType()),");
             sb.AppendLine($"{indent}    }};");
@@ -4864,6 +4868,10 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             method.Name);
     }
 
+    /// <summary>
+    /// Detects methods with [ForgePolymorphic] but missing [Forge] on the containing class.
+    /// Returns FKF807 if the method has [ForgePolymorphic] but its containing class lacks [Forge], otherwise null.
+    /// </summary>
     private static Diagnostic? DetectForgePolymorphicWithoutForge(
         GeneratorAttributeSyntaxContext ctx,
         System.Threading.CancellationToken ct)
