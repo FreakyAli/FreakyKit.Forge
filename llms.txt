@@ -248,6 +248,17 @@ Error-severity diagnostics block generation for the entire forge class. No parti
 | FKF806 | Error | Duplicate polymorphic source type |
 | FKF807 | Error | ForgePolymorphic without Forge class |
 
+## Code Fix Providers (Lightbulb Suggestions)
+
+Forge ships code fix providers alongside the analyzer. When a diagnostic fires in the IDE, a lightbulb offers an automatic fix:
+
+| Diagnostic | Fix |
+|---|---|
+| FKF003 (class not static) | Add `static` modifier |
+| FKF004 (class not partial) | Add `partial` modifier |
+| FKF002 (method ignored in explicit mode) | Add `[ForgeMethod]` attribute |
+| FKF300 (nested forging disabled) | Add `AllowNestedForging = true` to `[ForgeMethod]` |
+
 ## Common Anti-Patterns
 
 - Putting `[ForgeMap]` or `[ForgeIgnore]` on **source** type members — they only work on destination types (FKF527/FKF528).

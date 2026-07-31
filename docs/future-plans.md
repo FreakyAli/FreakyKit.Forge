@@ -35,8 +35,7 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 |---|---------|----------|--------|--------|-------|
 | 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
-| 14 | Code coverage CI | P2 | High | Medium | Coverlet + codecov badge |
-| 15 | Roslyn code fix providers | P2 | High | High | Lightbulb suggestions for common diagnostics |
+| 15a | Additional code fix providers | P2 | Medium | Low | FKF109, FKF112, FKF524/525/526, more |
 | 16 | Expand samples project | P2 | Medium | Low-Medium | Dictionary, EF Core, conditional mapping, ForgeUses, ShareReference |
 | 17 | AutoMapper migration guide | P2 | High | Medium | Side-by-side migration doc targeting AutoMapper users |
 | 18 | Project config files | P2 | Low | Low | global.json + .editorconfig |
@@ -44,7 +43,7 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
 | 21 | .NET 10 benchmarks | P3 | Low | Medium | Fill TODO placeholders in benchmarks.md |
 
-> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates
+> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300)
 
 ---
 
@@ -308,77 +307,23 @@ Low. Add assertion verifying correct operator usage in generated path.
 
 Items focused on discoverability, trust signals, and developer experience — the things that determine whether a new user evaluates Forge or closes the tab.
 
-### 14. Code Coverage CI — `P2`
-
-**Type:** Infrastructure
-
-**Why**
-
-616 tests exist but there's no visibility into what percentage of the codebase they cover. A 90%+ coverage badge is a strong trust signal for potential adopters. It also catches coverage regressions early.
-
-**Design**
-
-Add Coverlet to test projects, configure CI to collect coverage and upload to codecov (or similar), add badge to README.
-
-**Complexity**
-
-Medium. Coverlet integration is straightforward; the main work is configuring the CI workflow and handling the coverage merge across 4 test projects.
-
-**Impact**
-
-High. Coverage badge is one of the first things experienced developers look for.
-
-**Files to Modify**
-
-- `tests/*/\*.csproj` — Add Coverlet package reference
-- `.github/workflows/test.yml` — Add coverage collection and upload steps
-- `README.md` — Add coverage badge
-
-**Suggested Approach**
-
-1. Add `coverlet.collector` to each test project
-2. Run `dotnet test` with `--collect:"XPlat Code Coverage"` and `--results-directory`
-3. Use `reportgenerator` to merge coverage from all 4 test projects
-4. Upload merged report to codecov via `codecov/codecov-action`
-5. Add `![codecov](https://codecov.io/gh/FreakyAli/FreakyKit.Forge/branch/master/graph/badge.svg)` to README
-
----
-
-### 15. Roslyn Code Fix Providers — `P2`
+### 15a. Additional Code Fix Providers — `P2`
 
 **Type:** Feature — Developer Experience
 
 **Why**
 
-Forge has 77 diagnostics that tell you what's wrong, but none that offer to fix it. Roslyn code fix providers (lightbulb suggestions) are what developers remember and recommend. Even 5-10 code fixes for the most common diagnostics would be a major DX win and a differentiator over Mapperly.
+4 code fix providers shipped (FKF003, FKF004, FKF002, FKF300). More diagnostics can benefit from lightbulb fixes.
 
-**Design**
-
-Create a `CodeFixProvider` class per diagnostic (or grouped by related diagnostics). Register via `[ExportCodeFixProvider]`. Ship alongside the analyzer in the same NuGet package.
-
-**Complexity**
-
-High. Each code fix needs its own `CodeAction` implementation with syntax rewriting. The infrastructure (base class, test helpers) is medium effort; each individual fix is low-medium.
-
-**Impact**
-
-High. This is the kind of feature that generates word-of-mouth. "It not only tells you what's wrong, it fixes it for you."
+**Next candidates:**
+- FKF109 (both [ForgeIgnore] and [ForgeMap]) → Remove [ForgeMap]
+- FKF112 (self-referencing [ForgeMap]) → Remove [ForgeMap]
+- FKF524/525/526 (orphaned attributes) → Add [Forge] to class (requires analyzer changes to emit these for non-[Forge] classes)
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Analyzers/CodeFixes/` — New directory for code fix providers
-- `tests/FreakyKit.Forge.Analyzers.Tests/CodeFixes/` — Tests for each code fix
-
-**Suggested Approach**
-
-Start with the highest-value, lowest-complexity fixes:
-1. **FKF001** (class not static) → Add `static` modifier
-2. **FKF002** (class not partial) → Add `partial` modifier
-3. **FKF020** (method not partial) → Add `partial` modifier
-4. **FKF100** (unmapped member) → Add `[ForgeIgnore]` to the member, or offer to add `[ForgeMap("CorrectName")]`
-5. **FKF300** (nested forging disabled) → Add `AllowNestedForging = true` to `[ForgeMethod]`
-
-Each fix follows the pattern: detect diagnostic → compute syntax edit → register `CodeAction`.
+- `src/FreakyKit.Forge.CodeFixes/` — New code fix providers
+- `tests/FreakyKit.Forge.Analyzers.Tests/CodeFixes/` — Tests
 
 ---
 

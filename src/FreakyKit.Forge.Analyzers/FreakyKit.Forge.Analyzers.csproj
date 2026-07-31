@@ -31,17 +31,25 @@
     <ProjectReference Include="..\FreakyKit.Forge.Diagnostics\FreakyKit.Forge.Diagnostics.csproj"
                       PrivateAssets="all" />
 
+    <!-- Code fixes: bundled physically in analyzers folder, not a NuGet dependency -->
+    <ProjectReference Include="..\FreakyKit.Forge.CodeFixes\FreakyKit.Forge.CodeFixes.csproj"
+                      PrivateAssets="all" />
+
     <!-- Core attributes: creates a NuGet dependency so consumers get the attributes -->
     <ProjectReference Include="..\FreakyKit.Forge\FreakyKit.Forge.csproj" />
   </ItemGroup>
 
-  <!-- Pack analyzer + diagnostics DLLs into analyzers/dotnet/cs/ -->
+  <!-- Pack analyzer + diagnostics + code fixes DLLs into analyzers/dotnet/cs/ -->
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll"
           Pack="true"
           PackagePath="analyzers/dotnet/cs"
           Visible="false" />
     <None Include="$(OutputPath)\FreakyKit.Forge.Diagnostics.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+    <None Include="$(OutputPath)\FreakyKit.Forge.CodeFixes.dll"
           Pack="true"
           PackagePath="analyzers/dotnet/cs"
           Visible="false" />

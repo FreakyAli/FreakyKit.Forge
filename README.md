@@ -11,6 +11,7 @@
 <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/v/FreakyKit.Forge?color=blue&logo=nuget&style=for-the-badge" alt="NuGet"></a>
 <a href="https://www.nuget.org/packages/FreakyKit.Forge"><img src="https://img.shields.io/nuget/dt/FreakyKit.Forge?style=for-the-badge" alt="Downloads"></a>
 <a href="./LICENSE"><img src="https://img.shields.io/github/license/FreakyAli/FreakyKit.Forge?style=for-the-badge" alt="License"></a>
+<a href="https://codecov.io/gh/FreakyAli/FreakyKit.Forge"><img src="https://img.shields.io/codecov/c/github/FreakyAli/FreakyKit.Forge?style=for-the-badge&logo=codecov" alt="Coverage"></a>
 
 <br/>
 
