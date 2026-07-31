@@ -31,6 +31,9 @@ jobs:
             exit 1
           fi
 
+      - name: Pull latest master
+        run: git pull --rebase origin master
+
       - name: Validate and extract version from tag
         id: version
         run: |
@@ -59,6 +62,4 @@ jobs:
           git add README.md docs/installation.md llms.txt
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "docs: update version to ${VERSION}"
-          git fetch origin master
-          git rebase origin/master
           git push origin master
