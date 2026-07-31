@@ -47,14 +47,14 @@ jobs:
         run: dotnet build --configuration Release --no-restore
 
       - name: Run Unit Tests
-        run: dotnet test --configuration Release --no-build -- --report-trx --report-trx-filename TestResults.trx --results-directory ${{ github.workspace }}/TestResults
+        run: dotnet test --configuration Release --no-build -- --report-trx --results-directory ${{ github.workspace }}/TestResults
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: success() || failure()
         with:
           name: test-results-${{ github.run_id }}
-          path: TestResults/**/*.trx
+          path: TestResults/*.trx
           retention-days: 7
 
       - name: Publish Test Results
@@ -62,7 +62,7 @@ jobs:
         if: success() || failure()
         with:
           name: Unit Test Results
-          path: TestResults/**/*.trx
+          path: TestResults/*.trx
           reporter: dotnet-trx
           fail-on-error: false
           token: ${{ secrets.GITHUB_TOKEN }}
