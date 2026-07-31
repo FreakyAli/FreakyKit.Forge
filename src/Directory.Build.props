@@ -11,6 +11,8 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/FreakyAli/FreakyKit.Forge</RepositoryUrl>
     <PackageProjectUrl>https://github.com/FreakyAli/FreakyKit.Forge</PackageProjectUrl>
+    <PackageTags>mapping;source-generator;roslyn;codegen;object-mapper;dto;compile-time;mapper;code-generation</PackageTags>
+    <PackageReleaseNotes>See https://github.com/FreakyAli/FreakyKit.Forge/blob/master/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

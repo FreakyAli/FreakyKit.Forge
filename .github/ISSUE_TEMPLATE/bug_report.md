@@ -1,38 +1,48 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a bug in Forge
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**Forge version**
+<!-- e.g. 1.5.0 -->
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**.NET SDK version**
+<!-- Run `dotnet --version` and paste the output -->
+
+**Target framework**
+<!-- e.g. net8.0, net9.0 -->
+
+**IDE / build tool**
+<!-- e.g. Visual Studio 2022, Rider 2025.1, `dotnet build` -->
+
+**Describe the bug**
+A clear description of what the bug is.
+
+**Minimal reproduction**
+<!-- Paste the smallest source types + forge class that reproduces the issue -->
+
+```csharp
+// Source and destination types
+public class Source { /* ... */ }
+public class Dest { /* ... */ }
+
+// Forge class
+[Forge]
+public static partial class MyForges
+{
+    public static partial Dest ToDto(Source source);
+}
+```
 
 **Expected behavior**
-A clear and concise description of what you expected to happen.
+What you expected to happen.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
-
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
-
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+**Actual behavior**
+What actually happened. Include any diagnostic output or generated code if applicable.
 
 **Additional context**
-Add any other context about the problem here.
+Any other context about the problem.

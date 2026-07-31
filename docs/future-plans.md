@@ -35,9 +35,6 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 |---|---------|----------|--------|--------|-------|
 | 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
-| 11 | CHANGELOG.md | P1 | High | Low | Backfill from git tags v1.0.0–v1.5.0 |
-| 12 | NuGet discoverability | P1 | High | Low | PackageTags on all packages + PackageReleaseNotes |
-| 13 | Customize GitHub issue templates | P1 | Medium | Low | Replace generic browser/smartphone template with .NET-specific fields |
 | 14 | Code coverage CI | P2 | High | Medium | Coverlet + codecov badge |
 | 15 | Roslyn code fix providers | P2 | High | High | Lightbulb suggestions for common diagnostics |
 | 16 | Expand samples project | P2 | Medium | Low-Medium | Dictionary, EF Core, conditional mapping, ForgeUses, ShareReference |
@@ -46,6 +43,8 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | 19 | dotnet new template | P3 | Medium | Medium | `dotnet new forge-mapper` scaffold |
 | 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
 | 21 | .NET 10 benchmarks | P3 | Low | Medium | Fill TODO placeholders in benchmarks.md |
+
+> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates
 
 ---
 
@@ -308,101 +307,6 @@ Low. Add assertion verifying correct operator usage in generated path.
 ## Adoption & Project Health
 
 Items focused on discoverability, trust signals, and developer experience — the things that determine whether a new user evaluates Forge or closes the tab.
-
-### 11. CHANGELOG.md — `P1`
-
-**Type:** Infrastructure
-
-**Why**
-
-Seven stable releases (v1.0.0, v1.0.1, v1.3.0, v1.3.1, v1.4.0, v1.4.1, v1.5.0) and two pre-releases (v1.2.0-pre, v1.3.1-pre) exist with no release notes in the repository. Users evaluating Forge for production use need to know what changed between versions, whether upgrading is safe, and what the release cadence looks like. A missing changelog is a red flag for cautious teams.
-
-**Design**
-
-Use [Keep a Changelog](https://keepachangelog.com/) format. Backfill from git history for all existing tags. Going forward, update the changelog as part of every release.
-
-**Complexity**
-
-Low. Run `git log --oneline v1.0.0..v1.1.0` (etc.) for each tag range and categorize changes into Added/Changed/Fixed/Removed.
-
-**Impact**
-
-High. Table-stakes for any library asking teams to take a production dependency. Also enables `PackageReleaseNotes` in NuGet (item 12).
-
-**Suggested Approach**
-
-1. Create `CHANGELOG.md` at repo root
-2. For each tag pair, extract commits and categorize
-3. Add a link from README.md to the changelog
-4. Update CI release workflow to remind/enforce changelog entry before tagging
-
----
-
-### 12. NuGet Discoverability — `P1`
-
-**Type:** Infrastructure
-
-**Why**
-
-The Generator and Analyzers packages (the ones people actually install) have zero NuGet `PackageTags`, making them hard to find on nuget.org via search. No package has `PackageReleaseNotes`, which leaves the NuGet page's release notes section blank.
-
-**Design**
-
-Add `PackageTags` to `Directory.Build.props` (shared across all packages) and `PackageReleaseNotes` pointing to the changelog.
-
-**Complexity**
-
-Low. A few XML lines in `Directory.Build.props`.
-
-**Impact**
-
-High. NuGet search is the primary discovery channel for .NET libraries.
-
-**Files to Modify**
-
-- `src/Directory.Build.props` — Add `PackageTags` and `PackageReleaseNotes`
-
-**Suggested Approach**
-
-1. Add to `Directory.Build.props`:
-   - `<PackageTags>mapping;source-generator;roslyn;codegen;object-mapper;dto;compile-time</PackageTags>`
-   - `<PackageReleaseNotes>See https://github.com/FreakyAli/FreakyKit.Forge/blob/master/CHANGELOG.md</PackageReleaseNotes>`
-2. Remove the duplicate `PackageTags` from `src/FreakyKit.Forge/FreakyKit.Forge.csproj` (it currently has its own tag set)
-
----
-
-### 13. Customize GitHub Issue Templates — `P1`
-
-**Type:** Infrastructure
-
-**Why**
-
-The current bug report template is the default GitHub template — it asks for "Browser", "Smartphone", "iOS" which are irrelevant for a .NET library. This signals to contributors that the project isn't actively maintained or curated.
-
-**Complexity**
-
-Low. Replace the template YAML/markdown files.
-
-**Impact**
-
-Medium. First-touch experience for bug reporters. Signals project maturity.
-
-**Files to Modify**
-
-- `.github/ISSUE_TEMPLATE/bug_report.md`
-- `.github/ISSUE_TEMPLATE/feature_request.md`
-
-**Suggested Approach**
-
-Replace the bug report template with fields relevant to Forge:
-- Forge version
-- .NET SDK version (`dotnet --version`)
-- Target framework
-- Minimal reproduction code (source types + forge class + expected vs actual behavior)
-- Diagnostic output (if applicable)
-- IDE/build tool (VS, Rider, `dotnet build`)
-
----
 
 ### 14. Code Coverage CI — `P2`
 

@@ -266,3 +266,4 @@ Error-severity diagnostics block generation for the entire forge class. No parti
 - Common patterns & cookbook: docs/patterns.md
 - Benchmarks: docs/benchmarks.md
 - Installation: docs/installation.md
+- Changelog: CHANGELOG.md

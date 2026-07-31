@@ -782,9 +782,13 @@ tests/
   FreakyKit.Forge.EFCore.Tests/      # 8 tests — projection expressions verified against real EF Core 8 + Sqlite
 ```
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a complete history of releases and what changed in each version.
+
 ## Roadmap
 
-Features planned for future versions — production-grade real-world benchmarks, polymorphic/derived type mapping, reverse mapping, computed properties, mapping profiles, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
+Features planned for future versions — production-grade real-world benchmarks, reverse mapping, computed properties, mapping profiles, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
 
 ## Troubleshooting
 
