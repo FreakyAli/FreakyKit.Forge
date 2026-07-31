@@ -6,12 +6,12 @@ Add two packages and you're done:
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="FreakyKit.Forge.Generator" Version="1.0.0" />
-    <PackageReference Include="FreakyKit.Forge.Analyzers" Version="1.0.0" />
+    <PackageReference Include="FreakyKit.Forge.Generator" Version="1.5.0" />
+    <PackageReference Include="FreakyKit.Forge.Analyzers" Version="1.5.0" />
 </ItemGroup>
 ```
 
-`Generator` writes your mapping method bodies at compile time. `Analyzers` gives you 44 build-time diagnostics. Both automatically pull in `FreakyKit.Forge` (core attributes) as a transitive dependency — you never need to add it separately.
+`Generator` writes your mapping method bodies at compile time. `Analyzers` gives you 77 build-time diagnostics. Both automatically pull in `FreakyKit.Forge` (core attributes) as a transitive dependency — you never need to add it separately.
 
 ---
 
@@ -45,7 +45,7 @@ Both `Generator` and `Analyzers` reference `FreakyKit.Forge` and `FreakyKit.Forg
 If you want the mapping implementations but don't need build-time validation:
 
 ```xml
-<PackageReference Include="FreakyKit.Forge.Generator" Version="1.0.0" />
+<PackageReference Include="FreakyKit.Forge.Generator" Version="1.5.0" />
 ```
 
 You'll still get compile errors for invalid C# in the generated output, but you won't see Forge-specific guidance like "destination member has no source match" (FKF100) or "nested forging disabled" (FKF300).
@@ -57,7 +57,7 @@ You'll still get compile errors for invalid C# in the generated output, but you 
 The conventions package provides advisory helpers for naming forge classes and methods:
 
 ```xml
-<PackageReference Include="FreakyKit.Forge.Conventions" Version="1.0.0" />
+<PackageReference Include="FreakyKit.Forge.Conventions" Version="1.5.0" />
 ```
 
 ```csharp
@@ -74,7 +74,7 @@ This package has no dependency on `Generator` or `Analyzers` — it's a standalo
 Install `FreakyKit.Forge.Diagnostics` directly only if you're writing your own Roslyn analyzer or source generator that needs to reference Forge's diagnostic IDs (FKF001–FKF702):
 
 ```xml
-<PackageReference Include="FreakyKit.Forge.Diagnostics" Version="1.0.0" />
+<PackageReference Include="FreakyKit.Forge.Diagnostics" Version="1.5.0" />
 ```
 
 Most users never need this — it's already bundled inside both `Generator` and `Analyzers`.

@@ -1,4 +1,4 @@
-# FreakyKit.Forge — Benchmark Results
+# Forge — Benchmark Results
 
 Full benchmark results comparing Forge against popular mapping libraries. Hand-written code is included as a baseline — it compiles to identical IL as Forge, so any variation between the two is measurement noise.
 Source code: [`benchmarks/FreakyKit.Forge.Benchmarks`](../benchmarks/FreakyKit.Forge.Benchmarks)

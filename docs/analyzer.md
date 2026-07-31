@@ -1,6 +1,6 @@
 # Analyzer
 
-The FreakyKit.Forge analyzer (`FreakyKit.Forge.Analyzers`) is a Roslyn diagnostic analyzer that validates forge declarations and reports warnings and errors at build time. It runs alongside the source generator but produces only diagnostics, not source code.
+The Forge analyzer (`FreakyKit.Forge.Analyzers`) is a Roslyn diagnostic analyzer that validates forge declarations and reports warnings and errors at build time. It runs alongside the source generator but produces only diagnostics, not source code.
 
 ## What It Checks
 

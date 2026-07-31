@@ -1,6 +1,6 @@
 # Source Generator
 
-The FreakyKit.Forge source generator (`FreakyKit.Forge.Generator`) is a Roslyn incremental source generator that produces partial method implementations for forge methods at compile time.
+The Forge source generator (`FreakyKit.Forge.Generator`) is a Roslyn incremental source generator that produces partial method implementations for forge methods at compile time.
 
 ## Pipeline
 

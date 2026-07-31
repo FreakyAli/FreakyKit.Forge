@@ -1,6 +1,6 @@
 # Future Plans
 
-Features and fixes under consideration for future versions of FreakyKit.Forge. Each section includes enough detail to serve as a starting point for implementation.
+Features and fixes under consideration for future versions of Forge. Each section includes enough detail to serve as a starting point for implementation.
 
 ## Type Classification
 
@@ -8,10 +8,11 @@ Every item in this document is classified by **Type** to help new contributors u
 
 | Type | Meaning | Impact | Examples |
 |------|---------|--------|----------|
-| **Feature** | New capability or attribute enhancement that extends Forge's functionality beyond current scope | Additive — users gain new mapping options or workflow capabilities | Polymorphic Mapping, Reverse Mapping, Tri-State ShareReference, Generic Methods |
+| **Feature** | New capability or attribute enhancement that extends Forge's functionality beyond current scope | Additive — users gain new mapping options or workflow capabilities | Polymorphic Mapping, Tri-State ShareReference, Generic Methods |
 | **Fix** | Correctness issue, missing validation, behavior bug, or limit enforcement affecting existing features | Blocking/Correctness — existing code may behave incorrectly; users may hit unvalidated edge cases | Circular ForgeUses Detection, Expression Nesting Depth Enforcement, Per-Member Accessibility Validation |
 | **Documentation** | Gaps in docs, inaccurate examples, or unclear explanations that confuse users or new contributors | Clarity — improves developer experience and onboarding | Flattening Ambiguity Examples, Attribute Feature Interaction Matrix, Diagnostic Code Reference |
 | **Test** | Test coverage gaps, missing edge-case validation, or test infrastructure improvements | Regression Prevention — ensures features stay correct as codebase evolves | ConditionalMappingTests Coverage, Null Handling Edge Cases, Compilation Error Checking |
+| **Infrastructure** | CI/CD, NuGet packaging, project configuration, and tooling improvements that affect discoverability or contributor experience | Adoption — removes friction for new users and contributors | CHANGELOG, Code Coverage CI, PackageTags, global.json |
 
 **How to use this guide:**
 - **Fixes** should be prioritized over Features if they block users or cause incorrect behavior
@@ -34,8 +35,18 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 |---|---------|----------|--------|--------|-------|
 | 6 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
 | 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
-| 9 | Reverse mapping | P3 | Medium | Medium | Auto-generate bidirectional mappings |
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
+| 11 | CHANGELOG.md | P1 | High | Low | Backfill from git tags v1.0.0–v1.5.0 |
+| 12 | NuGet discoverability | P1 | High | Low | PackageTags on all packages + PackageReleaseNotes |
+| 13 | Customize GitHub issue templates | P1 | Medium | Low | Replace generic browser/smartphone template with .NET-specific fields |
+| 14 | Code coverage CI | P2 | High | Medium | Coverlet + codecov badge |
+| 15 | Roslyn code fix providers | P2 | High | High | Lightbulb suggestions for common diagnostics |
+| 16 | Expand samples project | P2 | Medium | Low-Medium | Dictionary, EF Core, conditional mapping, ForgeUses, ShareReference |
+| 17 | AutoMapper migration guide | P2 | High | Medium | Side-by-side migration doc targeting AutoMapper users |
+| 18 | Project config files | P2 | Low | Low | global.json + .editorconfig |
+| 19 | dotnet new template | P3 | Medium | Medium | `dotnet new forge-mapper` scaffold |
+| 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
+| 21 | .NET 10 benchmarks | P3 | Low | Medium | Fill TODO placeholders in benchmarks.md |
 
 ---
 
@@ -220,90 +231,6 @@ Medium. Enables DRY principle for multi-class forge hierarchies.
 6. Validate: included classes exist, have `[Forge]`, no circular includes
 
 ---
-
-### 9. Reverse Mapping — `P3`
-
-**Type:** Feature — Mapping Automation
-
-**Why**
-
-Many applications need bidirectional mapping — e.g., entity→DTO for API responses, DTO→entity for writes. Currently users must write both methods manually, duplicating logic and maintenance burden.
-
-**Design**
-
-Auto-generate a reverse method from an existing forward mapping, with explicit validation of invertibility:
-
-```csharp
-[ForgeMethod(GenerateReverse = true)]
-public static partial PersonDto ToDto(Person source);
-// Also generates: public static partial Person FromDto(PersonDto source);
-// Only if forward mapping is invertible per validation rules below
-```
-
-**Invertibility Validation (Gating):**
-
-Before generating reverse method, validate that the forward mapping contains **only** these safe patterns:
-- Direct 1:1 member assignments (same type or compatible conversion)
-- `[ForgeMap]` name remappings (reversible: `FirstName → FullName` reverses to `FullName → FirstName`)
-- `[ForgeIgnoreReverse]` marked members (explicitly one-way)
-- Simple nested forge calls where reverse method exists (e.g., if forward calls `ToAddressDto`, reverse calls `FromAddressDto`)
-
-**Non-invertible patterns (emit diagnostic, skip reverse generation):**
-- `[ForgeComputed]` members (computed properties have no source to reverse from)
-- `IgnoreIfNull` or `IgnoreIfDefault` on any member (reverse doesn't know original null/default state)
-- `NullFallback` with `DefaultConstruct` (reverse can't distinguish null from constructed default)
-- `Condition` (predicate-based) mappings (reverse can't invert conditional logic)
-- Custom `[ForgeConverter]` converters (not guaranteed to be reversible)
-- Nested forge with `AllowFlattening = true` (multi-level flattening not invertible)
-- Members with `[ForgeIgnore]` on source side (those members unmapped in forward)
-
-**Reverse Method Generation (Separate Code Path):**
-
-1. In `ForgeGenerator`, after validating forward mapping is invertible, emit reverse method **separately**
-2. Reverse method does NOT share code paths with forward generation
-3. Build bidirectional mapping table: track each forward `srcMember → dstMember` and emit reverse `dstMember → srcMember`
-4. For nested forge calls: emit corresponding reverse call (e.g., `ToDto` → `FromDto`)
-5. Constructor handling: may differ from forward (destination's constructor in reverse may not match source's)
-6. Preserve null-safety: reverse method honors the same `ShareReference` and value-type handling as forward
-
-**Complexity**
-
-Medium. Main challenges: exhaustive validation of forward mapping for invertibility, maintaining bidirectional name mapping state, detecting when reverse nested forge methods don't exist, constructor inference on reverse type.
-
-**Impact**
-
-Medium-high. Common pattern in real-world applications; eliminates significant boilerplate for read-write APIs.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeMethodAttribute.cs` — Add `bool GenerateReverse`, optional `string ReverseMethodName`
-- `src/FreakyKit.Forge/Attributes/ForgeIgnoreReverseAttribute.cs` — New attribute for one-way members
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `bool ShouldGenerateReverse`, `string? ReverseMethodName`, `bool IsInvertible` (computed during extraction)
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — 
-  - New private method `ValidateInvertible(ForgeMethodModel)` returns bool + diagnostics list
-  - New private method `GenerateReverseMethod(ForgeMethodModel)` as separate code path from `GenerateMethodBody`
-  - In main extraction, after forward body generation, call `ValidateInvertible` before attempting reverse
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — New diagnostics:
-  - FKF6xx: Non-invertible mapping (computed, conditional, flattened, etc.)
-  - FKF6xx: Reverse forge method not found (for nested reverse calls)
-  - FKF6xx: GenerateReverse requires explicit `ReverseMethodName` when name inference impossible
-
-**Suggested Approach**
-
-1. Add `GenerateReverse` flag to `[ForgeMethod]` (default false)
-2. Add `ReverseMethodName` optional string property (defaults to null; auto-infer `ToX` → `FromX` if possible)
-3. In `ExtractMethod`, after collecting member mappings for forward method:
-   - Call `ValidateInvertible(method)` which checks each member assignment against invertibility rules
-   - If any non-invertible pattern found, return false + emit diagnostic
-   - Store result in `ForgeMethodModel.IsInvertible`
-4. If `GenerateReverse = true` AND `IsInvertible = false`, emit diagnostic and skip reverse generation
-5. If `GenerateReverse = true` AND `IsInvertible = true`:
-   - Call separate `GenerateReverseMethod` with no code sharing with forward path
-   - Build name map: for each forward `src.X → dst.Y`, record reverse `dst.Y → src.X`
-   - For each mapped member, emit reverse assignment
-   - For nested forge members, emit reverse method call (validate reverse method exists)
-6. Infer reverse method name: if forward is `ToDto`, reverse is `FromDto`; if inference fails and `ReverseMethodName` not provided, emit diagnostic
-7. Add `[ForgeIgnoreReverse]` support: members with this attribute are skipped in reverse generation (one-way mapping)
 
 ---
 
@@ -497,4 +424,353 @@ Low. Add assertion verifying correct operator usage in generated path.
 ---
 
 ### Documentation Accuracy
+
+---
+
+## Adoption & Project Health
+
+Items focused on discoverability, trust signals, and developer experience — the things that determine whether a new user evaluates Forge or closes the tab.
+
+### 11. CHANGELOG.md — `P1`
+
+**Type:** Infrastructure
+
+**Why**
+
+Nine releases exist (v1.0.0 through v1.5.0) with no release notes in the repository. Users evaluating Forge for production use need to know what changed between versions, whether upgrading is safe, and what the release cadence looks like. A missing changelog is a red flag for cautious teams.
+
+**Design**
+
+Use [Keep a Changelog](https://keepachangelog.com/) format. Backfill from git history for all existing tags. Going forward, update the changelog as part of every release.
+
+**Complexity**
+
+Low. Run `git log --oneline v1.0.0..v1.1.0` (etc.) for each tag range and categorize changes into Added/Changed/Fixed/Removed.
+
+**Impact**
+
+High. Table-stakes for any library asking teams to take a production dependency. Also enables `PackageReleaseNotes` in NuGet (item 12).
+
+**Suggested Approach**
+
+1. Create `CHANGELOG.md` at repo root
+2. For each tag pair, extract commits and categorize
+3. Add a link from README.md to the changelog
+4. Update CI release workflow to remind/enforce changelog entry before tagging
+
+---
+
+### 12. NuGet Discoverability — `P1`
+
+**Type:** Infrastructure
+
+**Why**
+
+The Generator and Analyzers packages (the ones people actually install) have zero NuGet `PackageTags`, making them hard to find on nuget.org via search. No package has `PackageReleaseNotes`, which leaves the NuGet page's release notes section blank.
+
+**Design**
+
+Add `PackageTags` to `Directory.Build.props` (shared across all packages) and `PackageReleaseNotes` pointing to the changelog.
+
+**Complexity**
+
+Low. A few XML lines in `Directory.Build.props`.
+
+**Impact**
+
+High. NuGet search is the primary discovery channel for .NET libraries.
+
+**Files to Modify**
+
+- `src/Directory.Build.props` — Add `PackageTags` and `PackageReleaseNotes`
+
+**Suggested Approach**
+
+1. Add to `Directory.Build.props`:
+   - `<PackageTags>mapping;source-generator;roslyn;codegen;object-mapper;dto;compile-time</PackageTags>`
+   - `<PackageReleaseNotes>See https://github.com/FreakyAli/FreakyKit.Forge/blob/master/CHANGELOG.md</PackageReleaseNotes>`
+2. Remove the duplicate `PackageTags` from `src/FreakyKit.Forge/FreakyKit.Forge.csproj` (it currently has its own tag set)
+
+---
+
+### 13. Customize GitHub Issue Templates — `P1`
+
+**Type:** Infrastructure
+
+**Why**
+
+The current bug report template is the default GitHub template — it asks for "Browser", "Smartphone", "iOS" which are irrelevant for a .NET library. This signals to contributors that the project isn't actively maintained or curated.
+
+**Complexity**
+
+Low. Replace the template YAML/markdown files.
+
+**Impact**
+
+Medium. First-touch experience for bug reporters. Signals project maturity.
+
+**Files to Modify**
+
+- `.github/ISSUE_TEMPLATE/bug_report.md`
+- `.github/ISSUE_TEMPLATE/feature_request.md`
+
+**Suggested Approach**
+
+Replace the bug report template with fields relevant to Forge:
+- Forge version
+- .NET SDK version (`dotnet --version`)
+- Target framework
+- Minimal reproduction code (source types + forge class + expected vs actual behavior)
+- Diagnostic output (if applicable)
+- IDE/build tool (VS, Rider, `dotnet build`)
+
+---
+
+### 14. Code Coverage CI — `P2`
+
+**Type:** Infrastructure
+
+**Why**
+
+616 tests exist but there's no visibility into what percentage of the codebase they cover. A 90%+ coverage badge is a strong trust signal for potential adopters. It also catches coverage regressions early.
+
+**Design**
+
+Add Coverlet to test projects, configure CI to collect coverage and upload to codecov (or similar), add badge to README.
+
+**Complexity**
+
+Medium. Coverlet integration is straightforward; the main work is configuring the CI workflow and handling the coverage merge across 4 test projects.
+
+**Impact**
+
+High. Coverage badge is one of the first things experienced developers look for.
+
+**Files to Modify**
+
+- `tests/*/\*.csproj` — Add Coverlet package reference
+- `.github/workflows/test.yml` — Add coverage collection and upload steps
+- `README.md` — Add coverage badge
+
+**Suggested Approach**
+
+1. Add `coverlet.collector` to each test project
+2. Run `dotnet test` with `--collect:"XPlat Code Coverage"` and `--results-directory`
+3. Use `reportgenerator` to merge coverage from all 4 test projects
+4. Upload merged report to codecov via `codecov/codecov-action`
+5. Add `![codecov](https://codecov.io/gh/FreakyAli/FreakyKit.Forge/branch/master/graph/badge.svg)` to README
+
+---
+
+### 15. Roslyn Code Fix Providers — `P2`
+
+**Type:** Feature — Developer Experience
+
+**Why**
+
+Forge has 77 diagnostics that tell you what's wrong, but none that offer to fix it. Roslyn code fix providers (lightbulb suggestions) are what developers remember and recommend. Even 5-10 code fixes for the most common diagnostics would be a major DX win and a differentiator over Mapperly.
+
+**Design**
+
+Create a `CodeFixProvider` class per diagnostic (or grouped by related diagnostics). Register via `[ExportCodeFixProvider]`. Ship alongside the analyzer in the same NuGet package.
+
+**Complexity**
+
+High. Each code fix needs its own `CodeAction` implementation with syntax rewriting. The infrastructure (base class, test helpers) is medium effort; each individual fix is low-medium.
+
+**Impact**
+
+High. This is the kind of feature that generates word-of-mouth. "It not only tells you what's wrong, it fixes it for you."
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Analyzers/CodeFixes/` — New directory for code fix providers
+- `tests/FreakyKit.Forge.Analyzers.Tests/CodeFixes/` — Tests for each code fix
+
+**Suggested Approach**
+
+Start with the highest-value, lowest-complexity fixes:
+1. **FKF001** (class not static) → Add `static` modifier
+2. **FKF002** (class not partial) → Add `partial` modifier
+3. **FKF020** (method not partial) → Add `partial` modifier
+4. **FKF100** (unmapped member) → Add `[ForgeIgnore]` to the member, or offer to add `[ForgeMap("CorrectName")]`
+5. **FKF300** (nested forging disabled) → Add `AllowNestedForging = true` to `[ForgeMethod]`
+
+Each fix follows the pattern: detect diagnostic → compute syntax edit → register `CodeAction`.
+
+---
+
+### 16. Expand Samples Project — `P2`
+
+**Type:** Documentation
+
+**Why**
+
+The samples project covers 15 features but is missing examples for several advanced capabilities: dictionary mapping, EF Core projections, strict mapping, ForgeUses cross-class sharing, conditional mapping (Condition/IgnoreIfNull/IgnoreIfDefault), and ShareReference. These are features that have docs coverage but no runnable sample code.
+
+**Complexity**
+
+Low-Medium. Each sample is a self-contained file following the existing pattern.
+
+**Impact**
+
+Medium. Samples are the fastest way for a new user to understand a feature. Copy-paste beats reading docs.
+
+**Files to Modify**
+
+- `samples/FreakyKit.Forge.Samples/Forges/` — New sample files
+- `samples/FreakyKit.Forge.Samples/Models/` — Additional model types as needed
+- `samples/FreakyKit.Forge.Samples/Program.cs` — Wire up new demos
+
+**Suggested Approach**
+
+Add these sample files:
+1. `DictionaryForges.cs` — Dictionary-to-object mapping with key casing policies
+2. `ProjectionForges.cs` — EF Core expression projection demo
+3. `StrictMappingForges.cs` — `StrictMapping = true` with drift detection
+4. `ForgeUsesForges.cs` — Cross-class method sharing via `[ForgeUses]`
+5. `ConditionalForges.cs` — `IgnoreIfNull`, `IgnoreIfDefault`, `Condition`
+6. `ShareReferenceForges.cs` — Reference semantics for same-type collections
+
+---
+
+### 17. AutoMapper Migration Guide — `P2`
+
+**Type:** Documentation
+
+**Why**
+
+AutoMapper is the most widely used .NET mapping library. Many teams are looking to migrate away from reflection-based mappers. A side-by-side migration guide is high-value content that captures developers at the moment they're actively looking for alternatives. This is how Mapperly grew its user base.
+
+**Design**
+
+A standalone doc (`docs/migrate-from-automapper.md`) with before/after code for the 10-15 most common AutoMapper patterns, showing the Forge equivalent. Link from README.
+
+**Complexity**
+
+Medium. Requires understanding AutoMapper's API surface well enough to map patterns accurately.
+
+**Impact**
+
+High. Targets the largest pool of potential adopters at their moment of highest intent.
+
+**Files to Modify**
+
+- `docs/migrate-from-automapper.md` — New file
+- `README.md` — Add link in the "Why Forge?" section
+- `llms.txt` — Add migration reference
+- `docs/patterns.md` — Cross-reference where applicable
+
+**Suggested Approach**
+
+Cover these AutoMapper patterns:
+1. `CreateMap<TSource, TDest>()` → `[Forge]` + method signature
+2. `.ForMember(dest => dest.X, opt => opt.MapFrom(src => src.Y))` → `[ForgeMap("Y")]`
+3. `.Ignore()` → `[ForgeIgnore]`
+4. `.ReverseMap()` → Two separate forge methods (explicit is safer)
+5. `mapper.Map<TDest>(source)` → `ForgeClass.ToDto(source)` or `source.ToDto()`
+6. Nested object mapping → `AllowNestedForging = true`
+7. Collection mapping → Forge handles this automatically
+8. Constructor mapping → Forge selects constructors automatically
+9. Null substitution → `DefaultValue` on `[ForgeMap]`
+10. Conditional mapping → `IgnoreIfNull`, `Condition`
+11. Custom value resolvers → `[ForgeConverter]`
+12. Profile inheritance → `[ForgeUses]`
+
+---
+
+### 18. Project Config Files — `P2`
+
+**Type:** Infrastructure
+
+**Why**
+
+No `global.json` means contributors can build with any SDK version, leading to "works on my machine" issues. CONTRIBUTING.md says ".NET 8.0 SDK" but CI uses .NET 9. No `.editorconfig` means no enforced code style despite the CONTRIBUTING.md mentioning style guidelines.
+
+**Complexity**
+
+Low. Two small config files.
+
+**Impact**
+
+Low. Primarily affects contributors, not end users.
+
+**Files to Modify**
+
+- `global.json` — New file at repo root
+- `.editorconfig` — New file at repo root
+
+**Suggested Approach**
+
+1. `global.json`: Pin to the SDK version CI uses (currently 9.0.x) with `rollForward: latestFeature`
+2. `.editorconfig`: Use the standard .NET/C# conventions (`dotnet_style_*`, `csharp_style_*`), matching the project's existing style (4-space indent, no `this.` qualifier, `var` where type is apparent)
+
+---
+
+### 19. dotnet new Template — `P3`
+
+**Type:** Feature — Tooling
+
+**Why**
+
+`dotnet new forge-mapper` would scaffold a forge class with the right usings and attributes. This is a low-barrier entry point that shows up in `dotnet new list` searches, improving discoverability.
+
+**Complexity**
+
+Medium. Requires a template package with `.template.config/template.json`, testing, and a separate NuGet package.
+
+**Impact**
+
+Medium. Nice to have for discoverability; not a blocker for adoption.
+
+**Files to Modify**
+
+- `templates/FreakyKit.Forge.Templates/` — New template project
+- NuGet packaging for the template
+
+---
+
+### 20. EF Core Integration Sample — `P3`
+
+**Type:** Documentation
+
+**Why**
+
+Expression projections are one of Forge's strongest features but are undersold. A dedicated sample showing a full API controller → EF Core → DTO pipeline with `IQueryable` projections that avoid N+1 queries would demonstrate real-world value that toy examples can't.
+
+**Complexity**
+
+Medium. Requires a small ASP.NET Core project with EF Core, Sqlite, a couple of entities, and API endpoints.
+
+**Impact**
+
+Medium. Could be the basis for a blog post or conference talk demo.
+
+**Files to Modify**
+
+- `samples/FreakyKit.Forge.Samples.EFCore/` — New sample project (ASP.NET Core Minimal API + EF Core + Sqlite)
+
+---
+
+### 21. .NET 10 Benchmarks — `P3`
+
+**Type:** Documentation
+
+**Why**
+
+The benchmarks doc has a ".NET 10" section that is entirely TODO placeholders. Once .NET 10 ships, running and publishing these benchmarks shows the project is actively maintained and keeps the performance claims current.
+
+**Complexity**
+
+Medium. Requires a machine with .NET 10 SDK, running BenchmarkDotNet, and formatting results.
+
+**Impact**
+
+Low. Nice to have for completeness; the .NET 8 benchmarks are still valid.
+
+**Files to Modify**
+
+- `docs/benchmarks.md` — Fill in .NET 10 results
+- `benchmarks/FreakyKit.Forge.Benchmarks/` — May need TFM updates
+- `benchmarks/FreakyKit.Forge.Benchmarks.RealWorld/` — May need TFM updates
 

@@ -10,7 +10,7 @@
 
     <!-- NuGet packaging -->
     <PackageId>FreakyKit.Forge.Diagnostics</PackageId>
-    <Description>Shared diagnostic descriptors for FreakyKit.Forge analyzers and generators. Use this package if you are building custom Roslyn analyzers that reference Forge diagnostic IDs.</Description>
+    <Description>Shared diagnostic descriptors for Forge analyzers and generators. Use this package if you are building custom Roslyn analyzers that reference Forge diagnostic IDs.</Description>
   </PropertyGroup>
 
   <ItemGroup>

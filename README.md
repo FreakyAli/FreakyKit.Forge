@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="forge.png" alt="FreakyKit.Forge" width="600" />
+<img src="forge.png" alt="Forge" width="600" />
 
-# FreakyKit.Forge
+# Forge
 
 **A compile-time object mapping library for C# powered by Roslyn source generators**
 
@@ -81,8 +81,8 @@ For most projects, add two packages:
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="FreakyKit.Forge.Generator" Version="xx.xx.xx" />
-    <PackageReference Include="FreakyKit.Forge.Analyzers" Version="xx.xx.xx" />
+    <PackageReference Include="FreakyKit.Forge.Generator" Version="1.5.0" />
+    <PackageReference Include="FreakyKit.Forge.Analyzers" Version="1.5.0" />
 </ItemGroup>
 ```
 
@@ -880,7 +880,7 @@ Features planned for future versions — production-grade real-world benchmarks,
 
 ## Contributing
 
-Want to contribute to FreakyKit.Forge? We'd love your help! Whether it's bug reports, feature requests, documentation improvements, or code contributions, every contribution helps make Forge better.
+Want to contribute to Forge? We'd love your help! Whether it's bug reports, feature requests, documentation improvements, or code contributions, every contribution helps make Forge better.
 
 **Start here:** [CONTRIBUTING.md](CONTRIBUTING.md) — comprehensive guide covering:
 - Getting started with local development

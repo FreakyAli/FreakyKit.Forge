@@ -1,0 +1,41 @@
+name: Update docs version on release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+      - "v*.*.*-pre"
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Update version in docs
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          sed -i -E "s/Version=\"[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?\"/Version=\"${VERSION}\"/g" \
+            README.md \
+            docs/installation.md \
+            llms.txt
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md docs/installation.md llms.txt
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "docs: update version to ${{ steps.version.outputs.value }}"
+          git push origin master
