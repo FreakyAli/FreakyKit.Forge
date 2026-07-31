@@ -1150,6 +1150,86 @@ public static partial class MyForges
 
 ---
 
+## `[ForgePolymorphic]`
+
+**Namespace:** `FreakyKit.Forge`
+**Targets:** Methods (`AllowMultiple = true`)
+
+Declares a polymorphic dispatch arm on a forge method. The method generates a switch expression that dispatches to other forge methods based on the runtime type of the source parameter. The method itself performs no property mapping — it is pure dispatch.
+
+### Constructor Parameters
+
+#### `DerivedSourceType` (`Type`)
+
+The derived source type to match in the switch expression pattern. Must be the same as or a subtype of the dispatch method's source parameter type.
+
+#### `MappingMethodName` (`string`)
+
+The name of the forge method to call for this derived type. Use `nameof()` for rename safety. Must exist in the same forge class or in a `[ForgeUses]` included class.
+
+### Behavior
+
+- Arms are emitted in **user-declared order** (the order `[ForgePolymorphic]` attributes appear on the method).
+- The default arm always throws `InvalidOperationException`. There is no implicit base-type fallback.
+- To add a base-type fallback, declare it as an explicit `[ForgePolymorphic]` arm (e.g., `[ForgePolymorphic(typeof(Animal), nameof(MapBase))]`).
+- Each referenced method's return type must be assignable to the dispatch method's return type (inheritance or interface implementation).
+- `[ForgeMethod]` options (`GenerateExpression`, `AllowFlattening`, `ShouldIncludeFields`, etc.) are incompatible — emit error if set to non-default values.
+
+### Example — Inheritance Hierarchy
+
+```csharp
+[Forge]
+public static partial class AnimalForges
+{
+    public static partial DogDto MapDog(Dog source);
+    public static partial CatDto MapCat(Cat source);
+
+    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
+    public static partial AnimalDto MapAny(Animal source);
+}
+// Generates:
+// return source switch
+// {
+//     Dog dog => MapDog(dog),
+//     Cat cat => MapCat(cat),
+//     _ => throw new InvalidOperationException(...)
+// };
+```
+
+### Example — With Base Fallback
+
+```csharp
+[ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+[ForgePolymorphic(typeof(Animal), nameof(MapBase))]
+public static partial AnimalDto MapAny(Animal source);
+// Dog arm checked first, then Animal catches everything else
+```
+
+### Example — Interface Return Type
+
+```csharp
+[ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+[ForgePolymorphic(typeof(Cat), nameof(MapCat))]
+public static partial IAnimalDto MapAny(Animal source);
+// DogDto and CatDto must implement IAnimalDto
+```
+
+### Diagnostics
+
+| ID | Severity | Condition |
+|---|---|---|
+| `FKF800` | Error | Referenced method not found |
+| `FKF801` | Error | Method return type not assignable to dispatch return type |
+| `FKF802` | Error | Derived source type not assignable from method source parameter type |
+| `FKF803` | Error | Unreachable pattern (less-derived type appears before derived type) |
+| `FKF804` | Error | Incompatible `[ForgeMethod]` options set on polymorphic method |
+| `FKF805` | Error | `GenerateExpression = true` on polymorphic method |
+| `FKF806` | Error | Duplicate derived source type |
+| `FKF807` | Error | `[ForgePolymorphic]` on a method without `[Forge]` on containing class |
+
+---
+
 ## `ForgeIgnoreSide` (Enum)
 
 **Namespace:** `FreakyKit.Forge`
@@ -1293,7 +1373,9 @@ Quick reference for which `[ForgeMethod]` features work together:
 | `AllowNestedForging` | `StrictMapping` | ✅ | Nested mapped members count as matched (no FKF100/FKF110) |
 | `[ForgeConverter]` | `GenerateExpression` | ❌ | Converter calls can't translate to SQL; member is silently omitted from expression (FKF506) |
 
-**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `IgnoreIfDefault`, `Condition`, `[ForgeConverter]` calls, custom materialization).
+| `[ForgePolymorphic]` | Any `[ForgeMethod]` option | ❌ | Polymorphic dispatch methods are pure switch expressions; all `[ForgeMethod]` options are incompatible (FKF804/FKF805) |
+
+**Rule of thumb:** Features interact smoothly unless one is expression-tree related (`GenerateExpression`) and the other has no SQL translation (`IgnoreIfNull`, `IgnoreIfDefault`, `Condition`, `[ForgeConverter]` calls, custom materialization). `[ForgePolymorphic]` methods are pure dispatch and incompatible with all `[ForgeMethod]` options.
 
 ---
 

@@ -79,7 +79,15 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.ShareReferenceConflict,
             ForgeDiagnostics.AmbiguousFlatteningAutoResolved,
             ForgeDiagnostics.DeepFlatteningDetected,
-            ForgeDiagnostics.FlatteningDepthLimitExceeded
+            ForgeDiagnostics.FlatteningDepthLimitExceeded,
+            ForgeDiagnostics.PolymorphicMethodNotFound,
+            ForgeDiagnostics.PolymorphicReturnTypeMismatch,
+            ForgeDiagnostics.PolymorphicSourceTypeMismatch,
+            ForgeDiagnostics.PolymorphicUnreachablePattern,
+            ForgeDiagnostics.PolymorphicIncompatibleOptions,
+            ForgeDiagnostics.PolymorphicExpressionNotSupported,
+            ForgeDiagnostics.PolymorphicDuplicateSourceType,
+            ForgeDiagnostics.ForgePolymorphicWithoutForgeClass
         );
 
     public override void Initialize(AnalysisContext context)
@@ -385,6 +393,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             return; // Cannot analyze further
         }
 
+        // ── Polymorphic dispatch detection ───────────────────────────────────
+        var polymorphicAttrs = method.GetAttributes()
+            .Where(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgePolymorphicAttribute")
+            .ToList();
+
+        if (polymorphicAttrs.Count > 0)
+        {
+            AnalyzePolymorphicMethod(context, method, forgeClass, polymorphicAttrs);
+            return;
+        }
+
         // Detect update vs create shape
         bool isUpdate = method.ReturnsVoid && method.Parameters.Length == 2 && method.TypeParameters.Length == 0;
 
@@ -518,6 +537,189 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
 
         // Analyze member matching
         AnalyzeMemberMatching(context, method, sourceType, destType, sourceMembers, destMembers, allowNested, allowFlattening, forgeClass, constructorBoundKeys, isUpdate, strictMapping);
+    }
+
+    private static void AnalyzePolymorphicMethod(
+        SymbolAnalysisContext context,
+        IMethodSymbol method,
+        INamedTypeSymbol forgeClass,
+        List<AttributeData> polymorphicAttrs)
+    {
+        var loc = method.Locations.FirstOrDefault();
+        if (loc == null) return;
+        if (method.Parameters.Length != 1 || method.ReturnsVoid) return;
+
+        var srcType = method.Parameters[0].Type;
+        var destType = method.ReturnType;
+        var srcFqn = srcType.ToDisplayString();
+        var destFqn = destType.ToDisplayString();
+        var compilation = context.Compilation;
+
+        // FKF804/FKF805: Validate [ForgeMethod] options are not set
+        var forgeAttr = GetForgeAttribute(method);
+        if (forgeAttr != null)
+        {
+            foreach (var namedArg in forgeAttr.NamedArguments)
+            {
+                if (namedArg.Key == "GenerateExpression" && namedArg.Value.Value is true)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ForgeDiagnostics.PolymorphicExpressionNotSupported,
+                        loc,
+                        method.Name));
+                }
+                else
+                {
+                    var isDefault = namedArg.Key switch
+                    {
+                        "ShouldIncludeFields" => namedArg.Value.Value is false,
+                        "AllowNestedForging" => namedArg.Value.Value is false,
+                        "AllowFlattening" => namedArg.Value.Value is false,
+                        "StrictMapping" => namedArg.Value.Value is false,
+                        "MappingStrategy" => namedArg.Value.Value is int ms && ms == 0,
+                        "IgnoreIfNull" => namedArg.Value.Value is int iin && iin == 0,
+                        "ShareReference" => namedArg.Value.Value is int sr && sr == 0,
+                        _ => true
+                    };
+
+                    if (!isDefault)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            ForgeDiagnostics.PolymorphicIncompatibleOptions,
+                            loc,
+                            method.Name,
+                            namedArg.Key));
+                    }
+                }
+            }
+        }
+
+        // Collect candidate methods from forge class + included classes
+        var candidateMethods = new List<IMethodSymbol>();
+        foreach (var m in forgeClass.GetMembers().OfType<IMethodSymbol>())
+        {
+            if (m.IsStatic && (m.IsPartialDefinition || m.PartialDefinitionPart != null))
+                candidateMethods.Add(m);
+        }
+
+        var forgeUsesAttr = forgeClass.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeUsesAttribute");
+        if (forgeUsesAttr != null && forgeUsesAttr.ConstructorArguments.Length > 0)
+        {
+            var typeConstants = forgeUsesAttr.ConstructorArguments[0].Values;
+            foreach (var tc in typeConstants)
+            {
+                if (tc.Value is INamedTypeSymbol includedClass)
+                {
+                    foreach (var m in includedClass.GetMembers().OfType<IMethodSymbol>())
+                    {
+                        if (m.IsStatic && (m.IsPartialDefinition || m.PartialDefinitionPart != null))
+                            candidateMethods.Add(m);
+                    }
+                }
+            }
+        }
+
+        var seenDerivedTypes = new HashSet<string>();
+        var derivedTypeOrder = new List<(string Fqn, string ShortName)>();
+
+        foreach (var attr in polymorphicAttrs)
+        {
+            if (attr.ConstructorArguments.Length < 2) continue;
+
+            var derivedTypeArg = attr.ConstructorArguments[0];
+            var methodNameArg = attr.ConstructorArguments[1];
+
+            if (derivedTypeArg.Value is not INamedTypeSymbol derivedSourceType) continue;
+            if (methodNameArg.Value is not string targetMethodName) continue;
+
+            var derivedFqn = derivedSourceType.ToDisplayString();
+            var derivedShort = derivedSourceType.Name;
+
+            // FKF806: Duplicate derived source type
+            if (!seenDerivedTypes.Add(derivedFqn))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.PolymorphicDuplicateSourceType,
+                    loc,
+                    method.Name,
+                    derivedShort));
+                continue;
+            }
+
+            // FKF802: Derived source type must be assignable from method's source parameter type
+            var conversion = compilation.ClassifyConversion(derivedSourceType, srcType);
+            bool isDerivedFromSource = derivedFqn == srcFqn
+                || conversion.IsIdentity
+                || (conversion.IsImplicit && conversion.IsReference);
+            if (!isDerivedFromSource)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.PolymorphicSourceTypeMismatch,
+                    loc,
+                    method.Name,
+                    derivedShort,
+                    srcType.Name));
+                continue;
+            }
+
+            // FKF800: Find the target method by name
+            var targetMethod = candidateMethods.FirstOrDefault(m => m.Name == targetMethodName);
+            if (targetMethod == null)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.PolymorphicMethodNotFound,
+                    loc,
+                    method.Name,
+                    targetMethodName));
+                continue;
+            }
+
+            // FKF801: Target method's return type must be assignable to dispatch return type
+            var targetReturnType = targetMethod.ReturnType;
+            var returnConversion = compilation.ClassifyConversion(targetReturnType, destType);
+            bool returnTypeAssignable = targetReturnType.ToDisplayString() == destFqn
+                || returnConversion.IsIdentity
+                || (returnConversion.IsImplicit && returnConversion.IsReference);
+            if (!returnTypeAssignable)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ForgeDiagnostics.PolymorphicReturnTypeMismatch,
+                    loc,
+                    method.Name,
+                    targetMethodName,
+                    targetReturnType.ToDisplayString(),
+                    destType.Name));
+                continue;
+            }
+
+            derivedTypeOrder.Add((derivedFqn, derivedShort));
+        }
+
+        // FKF803: Unreachable pattern detection
+        for (int i = 0; i < derivedTypeOrder.Count; i++)
+        {
+            var currentType = compilation.GetTypeByMetadataName(derivedTypeOrder[i].Fqn);
+            if (currentType == null) continue;
+
+            for (int j = 0; j < i; j++)
+            {
+                var precedingType = compilation.GetTypeByMetadataName(derivedTypeOrder[j].Fqn);
+                if (precedingType == null) continue;
+
+                var conv = compilation.ClassifyConversion(currentType, precedingType);
+                if (conv.IsIdentity || (conv.IsImplicit && conv.IsReference))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ForgeDiagnostics.PolymorphicUnreachablePattern,
+                        loc,
+                        method.Name,
+                        derivedTypeOrder[i].ShortName,
+                        derivedTypeOrder[j].ShortName));
+                    break;
+                }
+            }
+        }
     }
 
     private static HashSet<string> AnalyzeConstruction(

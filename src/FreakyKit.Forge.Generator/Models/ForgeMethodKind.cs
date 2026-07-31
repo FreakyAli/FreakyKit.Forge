@@ -8,6 +8,7 @@ namespace FreakyKit.Forge.Generator.Models;
 /// DictionaryProject: Generate foreach transformation for dictionary entries.
 /// DictionaryToObject: Convert Dictionary<string, T> to a domain object.
 /// ObjectToDictionary: Convert a domain object to Dictionary<string, T>.
+/// PolymorphicDispatch: Generate switch expression dispatching to derived-type forge methods.
 /// </summary>
 internal enum ForgeMethodKind
 {
@@ -16,5 +17,6 @@ internal enum ForgeMethodKind
     CollectionProject,
     DictionaryProject,
     DictionaryToObject,
-    ObjectToDictionary
+    ObjectToDictionary,
+    PolymorphicDispatch
 }

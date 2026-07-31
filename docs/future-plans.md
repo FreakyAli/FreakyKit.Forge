@@ -8,7 +8,7 @@ Every item in this document is classified by **Type** to help new contributors u
 
 | Type | Meaning | Impact | Examples |
 |------|---------|--------|----------|
-| **Feature** | New capability or attribute enhancement that extends Forge's functionality beyond current scope | Additive — users gain new mapping options or workflow capabilities | Polymorphic Mapping, Tri-State ShareReference, Generic Methods |
+| **Feature** | New capability or attribute enhancement that extends Forge's functionality beyond current scope | Additive — users gain new mapping options or workflow capabilities | Tri-State ShareReference, Generic Methods |
 | **Fix** | Correctness issue, missing validation, behavior bug, or limit enforcement affecting existing features | Blocking/Correctness — existing code may behave incorrectly; users may hit unvalidated edge cases | Circular ForgeUses Detection, Expression Nesting Depth Enforcement, Per-Member Accessibility Validation |
 | **Documentation** | Gaps in docs, inaccurate examples, or unclear explanations that confuse users or new contributors | Clarity — improves developer experience and onboarding | Flattening Ambiguity Examples, Attribute Feature Interaction Matrix, Diagnostic Code Reference |
 | **Test** | Test coverage gaps, missing edge-case validation, or test infrastructure improvements | Regression Prevention — ensures features stay correct as codebase evolves | ConditionalMappingTests Coverage, Null Handling Edge Cases, Compilation Error Checking |
@@ -33,7 +33,6 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
-| 6 | Polymorphic mapping | P3 | Medium | Medium | EF Core TPH inheritance |
 | 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
 | 11 | CHANGELOG.md | P1 | High | Low | Backfill from git tags v1.0.0–v1.5.0 |
@@ -51,127 +50,6 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 ---
 
 ## P3 Features — Backlog
-
-### 6. Polymorphic Mapping / Derived Type Support — `P3`
-
-**Type:** Feature — EF Core Integration
-
-**Why**
-
-Applications using Entity Framework with Table-Per-Hierarchy (TPH) inheritance produce query results typed as the base entity. Mapping these to correct derived DTOs requires runtime type checks or discriminator switches that users currently hand-write. Forge should generate this dispatch logic.
-
-**Design**
-
-Add `[ForgePolymorphic]` attribute (repeatable) on a forge method to generate a switch expression with type patterns. The return type contract must be satisfied by all switch arms.
-
-**Return Type Contract:**
-
-The method's declared return type `TReturn` must be satisfied by ALL `[ForgePolymorphic]` method return types. Only two patterns are valid:
-
-1. **Inheritance hierarchy** (recommended): Each `[ForgePolymorphic]` method returns a type derived from `TReturn`
-   - `AnimalDto` is the base class
-   - `DogDto : AnimalDto` and `CatDto : AnimalDto`
-   - Switch arms return derived types; implicit upcast to `AnimalDto`
-   - Validation: Check `ISymbol.IsAssignableTo(TReturn)` for each method's return type
-
-2. **Common interface**: Each `[ForgePolymorphic]` method returns a type implementing `TReturn` (if `TReturn` is an interface)
-   - `IAnimalDto` is the common interface
-   - `DogDto : IAnimalDto` and `CatDto : IAnimalDto`
-   - Switch arms return implementing types; implicit conversion to interface
-   - Validation: Check `ISymbol.AllInterfaces.Contains(TReturn)` for each method's return type
-
-**No explicit casting, no sibling types**: All switch arms must be directly assignable to `TReturn` without cast expressions. Unrelated sibling types (e.g., `DogDto` and `CatDto` both deriving from separate base) are not permitted.
-
-```csharp
-// Pattern 1: Inheritance hierarchy (recommended)
-[Forge]
-public static partial class AnimalForges
-{
-    public static partial AnimalDto MapBase(Animal source);
-    public static partial DogDto MapDog(Dog source);  // returns DogDto : AnimalDto
-    public static partial CatDto MapCat(Cat source);  // returns CatDto : AnimalDto
-
-    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
-    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
-    public static partial AnimalDto MapAny(Animal source);
-}
-// Generates:
-// return source switch
-// {
-//     Dog dog => MapDog(dog),      // Returns DogDto, implicitly upcast to AnimalDto
-//     Cat cat => MapCat(cat),      // Returns CatDto, implicitly upcast to AnimalDto
-//     _ => MapBase(source)         // Returns AnimalDto
-// };
-```
-
-```csharp
-// Pattern 2: Common interface
-[Forge]
-public static partial class AnimalForges
-{
-    public static partial IAnimalDto MapBase(Animal source);
-    public static partial DogDto MapDog(Dog source);      // Returns DogDto : IAnimalDto
-    public static partial CatDto MapCat(Cat source);      // Returns CatDto : IAnimalDto
-
-    [ForgePolymorphic(typeof(Dog), nameof(MapDog))]
-    [ForgePolymorphic(typeof(Cat), nameof(MapCat))]
-    public static partial IAnimalDto MapAny(Animal source);
-}
-// Generates:
-// return source switch
-// {
-//     Dog dog => MapDog(dog),      // Returns DogDto (implicitly implements IAnimalDto)
-//     Cat cat => MapCat(cat),      // Returns CatDto (implicitly implements IAnimalDto)
-//     _ => MapBase(source)         // Returns IAnimalDto
-// };
-```
-
-**Validation & Diagnostics (Strict Assignability Enforcement):**
-
-Before generating switch expression, the generator must validate that **each** `[ForgePolymorphic]` method's return type is directly assignable to `TReturn`:
-
-1. For each `[ForgePolymorphic(derivedType, methodName)]` mapping:
-   - Resolve the method symbol
-   - Get the method's return type `MethodReturnType`
-   - Check: Is `MethodReturnType` assignable to `TReturn`?
-     - If `TReturn` is a class: `MethodReturnType` must be a derived class (inheritance check)
-     - If `TReturn` is an interface: `MethodReturnType` must implement that interface
-     - If unrelated: emit FKF8xx diagnostic and skip polymorphic generation
-2. If any method fails assignability check: emit diagnostic with specific type mismatch details
-3. If all pass: emit switch expression with all arms directly assignable (no casts)
-
-**Complexity**
-
-Medium. Main challenges: return type compatibility validation, switch expression generation with implicit upcasting, pattern ordering (derived before base), unreachable pattern detection.
-
-**Impact**
-
-Medium. Solves EF Core TPH scenarios; eliminates hand-written dispatch logic.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgePolymorphicAttribute.cs` — New attribute with `AllowMultiple = true`
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Detect `[ForgePolymorphic]`, validate return types, generate switch expression
-- `src/FreakyKit.Forge.Generator/Models/ForgeMethodModel.cs` — Add `IReadOnlyList<PolymorphicMapping> PolymorphicMappings`, `bool IsPolymorphicDispatch`
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Diagnostics: return type mismatch, unreachable patterns, invalid method refs
-
-**Suggested Approach**
-
-1. Define `[ForgePolymorphic(Type derivedSourceType, string mappingMethodName)]` attribute
-2. In `ExtractMethod`, collect all `[ForgePolymorphic]` attributes
-3. **Validation phase:**
-   - Verify each derived source type is assignable from method's source parameter type
-   - Verify mapping method exists and has signature `MethodName(derivedSourceType) → ReturnType`
-   - **Verify mapping method's return type is assignable to the main method's return type** (inheritance, interface, or error)
-4. If validation passes, emit switch expression:
-   - Generate pattern for each `[ForgePolymorphic]` mapping (ordered: derived types first)
-   - Generate default arm calling `MapBase` or throwing
-5. Emit FKF8xx diagnostics for return type mismatches, unreachable patterns, invalid references
-6. Generate switch expression: order patterns by inheritance depth (derived first)
-7. Default arm calls base mapping or throws `InvalidOperationException`
-8. Add analyzer diagnostics: unreachable patterns, missing methods, type mismatches
-
----
 
 ### 8. Mapping Profiles / Inheritance — `P3`
 
@@ -437,7 +315,7 @@ Items focused on discoverability, trust signals, and developer experience — th
 
 **Why**
 
-Nine releases exist (v1.0.0 through v1.5.0) with no release notes in the repository. Users evaluating Forge for production use need to know what changed between versions, whether upgrading is safe, and what the release cadence looks like. A missing changelog is a red flag for cautious teams.
+Seven stable releases (v1.0.0, v1.0.1, v1.3.0, v1.3.1, v1.4.0, v1.4.1, v1.5.0) and two pre-releases (v1.2.0-pre, v1.3.1-pre) exist with no release notes in the repository. Users evaluating Forge for production use need to know what changed between versions, whether upgrading is safe, and what the release cadence looks like. A missing changelog is a red flag for cautious teams.
 
 **Design**
 
@@ -758,11 +636,11 @@ Medium. Could be the basis for a blog post or conference talk demo.
 
 **Why**
 
-The benchmarks doc has a ".NET 10" section that is entirely TODO placeholders. Once .NET 10 ships, running and publishing these benchmarks shows the project is actively maintained and keeps the performance claims current.
+The benchmarks doc has a ".NET 10" section that is entirely TODO placeholders. Now that .NET 10 has shipped, running and publishing these benchmarks shows the project is actively maintained and keeps the performance claims current.
 
 **Complexity**
 
-Medium. Requires a machine with .NET 10 SDK, running BenchmarkDotNet, and formatting results.
+Medium. Requires running BenchmarkDotNet on .NET 10 and formatting results.
 
 **Impact**
 
