@@ -1,6 +1,6 @@
-# Contributing to FreakyKit.Forge
+# Contributing to Forge
 
-Thank you for your interest in contributing to FreakyKit.Forge! This document provides guidelines and instructions for contributing code, documentation, tests, and bug reports.
+Thank you for your interest in contributing to Forge! This document provides guidelines and instructions for contributing code, documentation, tests, and bug reports.
 
 ## Table of Contents
 
@@ -424,7 +424,7 @@ Maintain backward compatibility unless there's a strong reason not to:
 | `docs/installation.md` | Installation and setup instructions |
 | `docs/attributes.md` | Attribute reference and options |
 | `docs/diagnostics.md` | Analyzer diagnostic codes and messages |
-| `docs/best-practices.md` | Usage patterns and recommendations |
+| `docs/patterns.md` | Usage patterns and recipes |
 
 ### XML Documentation Comments
 
@@ -503,7 +503,7 @@ When reporting a bug:
 2. **Provide minimal reproduction** — Include a small code example that demonstrates the problem
 3. **Include environment info:**
    - .NET version (`dotnet --version`)
-   - FreakyKit.Forge version
+   - Forge version
    - OS and any relevant IDE versions
 4. **Describe expected vs actual behavior**
 
@@ -518,11 +518,11 @@ When requesting a feature:
 
 ## Additional Resources
 
-- [FreakyKit.Forge README](README.md) — Project overview
+- [Forge README](README.md) — Project overview
 - [Installation Guide](docs/installation.md) — Setup instructions
 - [Attributes Reference](docs/attributes.md) — API documentation
 - [Roslyn Documentation](https://github.com/dotnet/roslyn) — Roslyn APIs reference
 
 ---
 
-Thank you for contributing to FreakyKit.Forge! Your help makes this project better for everyone.
+Thank you for contributing to Forge! Your help makes this project better for everyone.

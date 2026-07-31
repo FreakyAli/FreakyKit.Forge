@@ -1,4 +1,4 @@
-# FreakyKit.Forge
+# Forge
 
 > Compile-time object mapping for C# powered by Roslyn source generators. Zero runtime reflection, zero allocation overhead, hand-written-code performance.
 
@@ -7,8 +7,8 @@ Forge generates partial method bodies at compile time that map properties betwee
 ## Installation
 
 ```xml
-<PackageReference Include="FreakyKit.Forge.Generator" Version="1.0.0" />
-<PackageReference Include="FreakyKit.Forge.Analyzers" Version="1.0.0" />
+<PackageReference Include="FreakyKit.Forge.Generator" Version="1.5.0" />
+<PackageReference Include="FreakyKit.Forge.Analyzers" Version="1.5.0" />
 ```
 
 Both pull in `FreakyKit.Forge` (core attributes) transitively.

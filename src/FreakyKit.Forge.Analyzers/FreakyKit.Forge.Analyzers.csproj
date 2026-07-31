@@ -11,7 +11,7 @@
 
     <!-- NuGet packaging -->
     <PackageId>FreakyKit.Forge.Analyzers</PackageId>
-    <Description>Roslyn diagnostic analyzer for FreakyKit.Forge. Validates forge declarations and reports warnings and errors at build time.</Description>
+    <Description>Roslyn diagnostic analyzer for Forge. Validates forge declarations and reports warnings and errors at build time.</Description>
 
     <!-- Analyzer DLL goes in analyzers/dotnet/cs, not lib/ -->
     <IncludeBuildOutput>false</IncludeBuildOutput>
