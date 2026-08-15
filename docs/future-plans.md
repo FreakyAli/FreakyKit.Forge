@@ -35,15 +35,11 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 |---|---------|----------|--------|--------|-------|
 | 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
-| 15a | Additional code fix providers | P2 | Medium | Low | FKF109, FKF112, FKF524/525/526, more |
-| 16 | Expand samples project | P2 | Medium | Low-Medium | Dictionary, EF Core, conditional mapping, ForgeUses, ShareReference |
-| ~~17~~ | ~~Migration guides~~ | ~~P2~~ | ~~High~~ | ~~Medium~~ | ~~Done — AutoMapper, Mapperly, Mapster, Facet~~ |
-| 18 | Project config files | P2 | Low | Low | global.json + .editorconfig |
 | 19 | dotnet new template | P3 | Medium | Medium | `dotnet new forge-mapper` scaffold |
 | 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
 | 21 | .NET 10 benchmarks | P3 | Low | Medium | Fill TODO placeholders in benchmarks.md |
 
-> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet)
+> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet), #18 Project config files (global.json + .editorconfig), #15a Code fix providers (FKF109, FKF112, FKF525, FKF526), #16 Expand samples project (6 new samples: dictionary, projection, strict, ForgeUses, conditional, ShareReference)
 
 ---
 
@@ -105,8 +101,6 @@ Medium. Enables DRY principle for multi-class forge hierarchies.
 4. Store in `ForgeClassModel.IncludedMethods`
 5. In `GenerateMethodBody`, decide: emit call to included method (v1) or copy its assignments (later)
 6. Validate: included classes exist, have `[Forge]`, no circular includes
-
----
 
 ---
 
@@ -186,18 +180,15 @@ High. Enables generic mapping scenarios with zero boilerplate for wrapper types 
 
 ## Technical Debt & Bug Fixes
 
-Critical correctness bugs and usability improvements identified through code audit. Organized by severity.
+Correctness bugs and usability improvements identified through code audit. Organized by subsystem.
 
-### Medium-Priority Bugs
+### Exhaustive Flattening Candidate Collection
 
-
-### Low-Priority Issues
-
-#### Algorithm Enhancement: Exhaustive Flattening Candidate Collection
+**Type:** Fix — Algorithm Enhancement
 
 **Why**
 
-`TryResolveFlattenedMappingRecursive` uses a greedy algorithm: it returns the first flattened path found, even if multiple equally-valid paths exist at the same depth. This means `Customer.Address.City` matching both `AddressCity` (direct property) and `ContactAddress.City` (flattened) returns whichever is discovered first in the member iteration order, with no ambiguity detection or longest-prefix selection. FKF530 (ambiguous flattening) never triggers because the code returns before evaluating all candidates.
+`TryResolveFlattenedMappingRecursive` detects ambiguity (FKF530 fires when multiple prefix matches exist), but resolution is still greedy first-match: the `foreach` loop returns immediately on the first successful recursive resolution without comparing against other valid paths. If two paths both resolve successfully, only the first (longest prefix) is used and the second is never attempted.
 
 **Design**
 
@@ -216,7 +207,7 @@ Low-Medium. Closes a gap where ambiguities go undetected and depth limits are si
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (line 3055) and TryResolveFlattenedMapping (line 3009)
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive, TryResolveFlattenedMapping
 
 **Suggested Approach**
 
@@ -229,32 +220,7 @@ Low-Medium. Closes a gap where ambiguities go undetected and depth limits are si
 
 ---
 
-
-## Implementation Issues & Code Quality Refinements
-
-Fine-grained fixes, algorithmic improvements, test coverage gaps, and consistency issues identified during code audit. Organized by subsystem.
-
-### Generator Correctness & Behavior
-
-#### Exhaustive Flattening Candidate Collection
-
-**Type:** Fix — Algorithm Enhancement
-
-**Why**
-
-`TryResolveFlattenedMappingRecursive` uses greedy-first-match and returns before evaluating all valid paths. FKF530 (ambiguous flattening) never triggers; depth overflow silently returns "not found" instead of emitting FKF532.
-
-**Complexity**
-
-High. Restructure recursion to accumulate all candidates, post-process for longest-match selection.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive, TryResolveFlattenedMapping
-
----
-
-#### Orphaned Attributes Validation Redesign
+### Orphaned Attributes Validation Redesign
 
 **Type:** Fix — Diagnostic Accuracy
 
@@ -274,120 +240,9 @@ High. Inspect forge method signatures to determine actual source/destination rol
 
 ---
 
-### Generator Expression Trees & Flattening
-
-
-### Test Coverage Gaps
-
-#### FlatteningGeneratorTests Coordinate Mapping Assertion
-
-**Type:** Test — Coverage
-
-**Why**
-
-Test asserts flattened City but not the proper null-propagation for intermediate properties (Address?.Coords should use ?., Latitude should use .).
-
-**Complexity**
-
-Low. Add assertion verifying correct operator usage in generated path.
-
-**Files to Modify**
-
-- `tests/FreakyKit.Forge.Generator.Tests/FlatteningGeneratorTests.cs`
-
----
-
----
-
-### Documentation Accuracy
-
----
-
 ## Adoption & Project Health
 
 Items focused on discoverability, trust signals, and developer experience — the things that determine whether a new user evaluates Forge or closes the tab.
-
-### 15a. Additional Code Fix Providers — `P2`
-
-**Type:** Feature — Developer Experience
-
-**Why**
-
-4 code fix providers shipped (FKF003, FKF004, FKF002, FKF300). More diagnostics can benefit from lightbulb fixes.
-
-**Next candidates:**
-- FKF109 (both [ForgeIgnore] and [ForgeMap]) → Remove [ForgeMap]
-- FKF112 (self-referencing [ForgeMap]) → Remove [ForgeMap]
-- FKF524/525/526 (orphaned attributes) → Add [Forge] to class (requires analyzer changes to emit these for non-[Forge] classes)
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.CodeFixes/` — New code fix providers
-- `tests/FreakyKit.Forge.Analyzers.Tests/CodeFixes/` — Tests
-
----
-
-### 16. Expand Samples Project — `P2`
-
-**Type:** Documentation
-
-**Why**
-
-The samples project covers 15 features but is missing examples for several advanced capabilities: dictionary mapping, EF Core projections, strict mapping, ForgeUses cross-class sharing, conditional mapping (Condition/IgnoreIfNull/IgnoreIfDefault), and ShareReference. These are features that have docs coverage but no runnable sample code.
-
-**Complexity**
-
-Low-Medium. Each sample is a self-contained file following the existing pattern.
-
-**Impact**
-
-Medium. Samples are the fastest way for a new user to understand a feature. Copy-paste beats reading docs.
-
-**Files to Modify**
-
-- `samples/FreakyKit.Forge.Samples/Forges/` — New sample files
-- `samples/FreakyKit.Forge.Samples/Models/` — Additional model types as needed
-- `samples/FreakyKit.Forge.Samples/Program.cs` — Wire up new demos
-
-**Suggested Approach**
-
-Add these sample files:
-1. `DictionaryForges.cs` — Dictionary-to-object mapping with key casing policies
-2. `ProjectionForges.cs` — EF Core expression projection demo
-3. `StrictMappingForges.cs` — `StrictMapping = true` with drift detection
-4. `ForgeUsesForges.cs` — Cross-class method sharing via `[ForgeUses]`
-5. `ConditionalForges.cs` — `IgnoreIfNull`, `IgnoreIfDefault`, `Condition`
-6. `ShareReferenceForges.cs` — Reference semantics for same-type collections
-
----
-
-### 18. Project Config Files — `P2`
-
-**Type:** Infrastructure
-
-**Why**
-
-No `global.json` means contributors can build with any SDK version, leading to "works on my machine" issues. CONTRIBUTING.md says ".NET 8.0 SDK" but CI uses .NET 9. No `.editorconfig` means no enforced code style despite the CONTRIBUTING.md mentioning style guidelines.
-
-**Complexity**
-
-Low. Two small config files.
-
-**Impact**
-
-Low. Primarily affects contributors, not end users.
-
-**Files to Modify**
-
-- `global.json` — New file at repo root
-- `.editorconfig` — New file at repo root
-
-**Suggested Approach**
-
-1. `global.json`: Pin to the SDK version CI uses (currently 9.0.x) with `rollForward: latestFeature`
-2. `.editorconfig`: Use the standard .NET/C# conventions (`dotnet_style_*`, `csharp_style_*`), matching the project's existing style (4-space indent, no `this.` qualifier, `var` where type is apparent)
-
----
 
 ### 19. dotnet new Template — `P3`
 

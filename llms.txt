@@ -2,7 +2,7 @@
 
 > Compile-time object mapping for C# powered by Roslyn source generators. Zero runtime reflection, zero allocation overhead, hand-written-code performance.
 
-Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 85 diagnostics (FKF001–FKF807) to catch mistakes at build time.
+Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 87 diagnostics (FKF001–FKF807) to catch mistakes at build time.
 
 ## Installation
 
@@ -178,8 +178,8 @@ Error-severity diagnostics block generation for the entire forge class. No parti
 | FKF051 | Info | After hook detected |
 | FKF100 | Warn | Destination member missing source |
 | FKF101 | Warn | Source member unused |
-| FKF102 | Info | Member ignored via [ForgeIgnore] (reserved) |
-| FKF103 | Info | Custom mapping applied (reserved) |
+| FKF102 | Info | Member ignored via [ForgeIgnore] |
+| FKF103 | Info | Custom mapping applied |
 | FKF104 | Error | [ForgeMap] target not found |
 | FKF105 | Warn | Duplicate [ForgeMap] target |
 | FKF106 | Info | Flattened mapping applied |
@@ -258,6 +258,10 @@ Forge ships code fix providers alongside the analyzer. When a diagnostic fires i
 | FKF004 (class not partial) | Add `partial` modifier |
 | FKF002 (method ignored in explicit mode) | Add `[ForgeMethod]` attribute |
 | FKF300 (nested forging disabled) | Add `AllowNestedForging = true` to `[ForgeMethod]` |
+| FKF109 (both [ForgeIgnore] and [ForgeMap]) | Remove `[ForgeMap]` |
+| FKF112 (self-referencing [ForgeMap]) | Remove `[ForgeMap]` |
+| FKF525 ([ForgeMethod] without [Forge] class) | Add `[Forge]` attribute to class |
+| FKF526 ([ForgeConverter] without [Forge] class) | Add `[Forge]` attribute to class |
 
 ## Common Anti-Patterns
 

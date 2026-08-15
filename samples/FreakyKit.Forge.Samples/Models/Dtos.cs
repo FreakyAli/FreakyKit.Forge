@@ -145,3 +145,67 @@ public class PersonInternalDto
     public string FirstName { get; set; } = "";
     public int Age { get; set; }
 }
+
+// Strict mapping source — simple type with no extras
+public class StrictSource
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+}
+
+// Strict mapping destination — must match StrictSource exactly
+public class StrictDest
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string Email { get; set; } = "";
+}
+
+// Conditional mapping destination
+public class PersonPatchDto
+{
+    public string? FirstName { get; set; }
+    public string? LastName { get; set; }
+    public string? Email { get; set; }
+    public int? Age { get; set; }
+}
+
+// ShareReference destination
+public class PersonTagsDto
+{
+    public string FirstName { get; set; } = "";
+    public List<string> Tags { get; set; } = [];
+    [ForgeMap("Orders", ShareReference = ForgePolicy.False)]
+    public List<Order> Orders { get; set; } = [];
+}
+
+// Expression projection destination
+public class PersonProjectionDto
+{
+    public int Id { get; set; }
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public string Email { get; set; } = "";
+}
+
+// ForgeUses — separate address mapping class
+public class AddressShortDto
+{
+    public string City { get; set; } = "";
+    public string State { get; set; } = "";
+}
+
+public class PersonWithShortAddressDto
+{
+    public string FirstName { get; set; } = "";
+    public AddressShortDto HomeAddress { get; set; } = new();
+}
+
+// Dictionary mapping destination
+public class AppSettings
+{
+    public string AppName { get; set; } = "";
+    public int MaxRetries { get; set; }
+    public bool DebugMode { get; set; }
+}

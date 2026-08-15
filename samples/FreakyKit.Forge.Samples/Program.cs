@@ -158,6 +158,57 @@ PrintHeader("15. Private Methods (ShouldIncludePrivate = true)");
 var internalDto = PrivateMethodForges.MapInternal(person);
 Console.WriteLine($"  Private forge method result: {internalDto.FirstName}, Age={internalDto.Age}");
 
+// ─── 16. Strict Mapping ──────────────────────────────────────
+
+PrintHeader("16. Strict Mapping (StrictMapping = true)");
+var strictSource = new StrictSource { Id = 42, Name = "Strict Alice", Email = "strict@example.com" };
+var strictDto = StrictMappingForges.ToStrictDto(strictSource);
+Console.WriteLine($"  All members must match: Id={strictDto.Id}, Name={strictDto.Name}, Email={strictDto.Email}");
+Console.WriteLine($"  Try adding a property to StrictSource — the build will fail with FKF110/FKF111");
+
+// ─── 17. Cross-Class Method Sharing ──────────────────────────
+
+PrintHeader("17. Cross-Class Method Sharing ([ForgeUses])");
+var crossDto = PersonCrossClassForges.ToCrossClassDto(person);
+Console.WriteLine($"  Address mapped via [ForgeUses]: City={crossDto.HomeAddress.City}, State={crossDto.HomeAddress.State}");
+
+// ─── 18. Conditional Mapping ─────────────────────────────────
+
+PrintHeader("18. Conditional Mapping (IgnoreIfNull)");
+var patch = new PersonPatchDto { FirstName = "Updated", LastName = null, Email = "new@example.com", Age = null };
+var target = new Person { FirstName = "Original", LastName = "Smith", Email = "old@example.com", Age = 30 };
+ConditionalForges.PatchPerson(patch, target);
+Console.WriteLine($"  Patch applied: FirstName={target.FirstName} (updated), LastName={target.LastName} (kept), Age={target.Age} (kept)");
+
+// ─── 19. ShareReference ──────────────────────────────────────
+
+PrintHeader("19. ShareReference (Reference Semantics)");
+var sharedDto = ShareReferenceForges.ToSharedDto(person);
+Console.WriteLine($"  Tags same instance? {ReferenceEquals(person.Tags, sharedDto.Tags)} (method-level: share)");
+Console.WriteLine($"  Orders same instance? {ReferenceEquals(person.Orders, sharedDto.Orders)} (per-member override: copy)");
+
+// ─── 20. Dictionary Mapping ──────────────────────────────────
+
+PrintHeader("20. Dictionary Mapping ([ForgeDictionary])");
+var settings = new AppSettings { AppName = "Forge Demo", MaxRetries = 3, DebugMode = true };
+var dict = DictionaryForges.ToDict(settings);
+Console.WriteLine($"  Object → Dict: {string.Join(", ", dict.Select(kv => $"{kv.Key}={kv.Value}"))}");
+var roundTripped = DictionaryForges.FromDict(new Dictionary<string, object>
+{
+    ["appName"] = "RoundTrip",
+    ["maxRetries"] = 5,
+    ["debugMode"] = false
+});
+Console.WriteLine($"  Dict → Object: AppName={roundTripped.AppName}, MaxRetries={roundTripped.MaxRetries}, Debug={roundTripped.DebugMode}");
+
+// ─── 21. Expression Projection ───────────────────────────────
+
+PrintHeader("21. Expression Projection (GenerateExpression = true)");
+var projDto = ProjectionForges.ToProjectionDto(person);
+Console.WriteLine($"  Imperative: Id={projDto.Id}, Name={projDto.FirstName}, Email={projDto.Email}");
+Console.WriteLine($"  Expression property also generated: ProjectionForges.ToProjectionDtoExpression");
+Console.WriteLine($"  Use with EF Core: dbContext.People.Select(ProjectionForges.ToProjectionDtoExpression)");
+
 // ─── Conventions ──────────────────────────────────────────────
 
 PrintHeader("Bonus: Naming Conventions");

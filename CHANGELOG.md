@@ -10,7 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `[ForgePolymorphic]` attribute for derived type dispatch via switch expressions
-- FKF800–FKF806 diagnostics for polymorphic mapping validation
+- FKF800–FKF807 diagnostics for polymorphic mapping validation
+- Code fix providers: FKF109 (remove conflicting `[ForgeMap]`), FKF112 (remove self-referencing `[ForgeMap]`), FKF525/FKF526 (add missing `[Forge]` to class)
+- Migration guides: [AutoMapper](docs/migrate-from-automapper.md), [Mapperly](docs/migrate-from-mapperly.md), [Mapster](docs/migrate-from-mapster.md), [Facet](docs/migrate-from-facet.md)
+- 6 new sample demos: dictionary mapping, expression projection, strict mapping, ForgeUses cross-class sharing, conditional mapping, ShareReference
+- Project config: `global.json` (SDK 9.0.x) and `.editorconfig`
 
 ## [1.5.0] - 2026-07-30
 

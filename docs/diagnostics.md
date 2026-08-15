@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-Forge emits 77 diagnostics across 7 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+Forge emits 87 diagnostics across 8 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 
@@ -1541,3 +1541,38 @@ public class PersonDto
     public string InternalId { get; set; }
 }
 ```
+
+---
+
+## Dictionary Mapping
+
+| ID | Severity | Message |
+|----|----------|---------|
+| FKF700 | Error | Dictionary key type is not `string` — only `Dictionary<string, T>` is supported |
+| FKF701 | Error | Unsupported dictionary value type (complex types, collections) |
+| FKF702 | Error | `MissingKeyPolicy.ReturnNull` used on non-nullable destination type |
+
+**FKF700** fires when a forge method has a dictionary parameter or return type with a non-string key type. Only `Dictionary<string, T>` variants are supported.
+
+**FKF701** fires when the dictionary value type is a complex type that cannot be cast or parsed from the dictionary value.
+
+**FKF702** fires when `MissingKeyPolicy.ReturnNull` is used but the destination property type is non-nullable. Use `MissingKeyPolicy.UseDefault` or `MissingKeyPolicy.Skip` instead.
+
+---
+
+## Polymorphic Mapping
+
+| ID | Severity | Message |
+|----|----------|---------|
+| FKF800 | Error | Polymorphic mapping method `{0}` not found in forge class or `[ForgeUses]` classes |
+| FKF801 | Error | Polymorphic method return type `{0}` is not assignable to dispatch return type `{1}` |
+| FKF802 | Error | Polymorphic source type `{0}` is not assignable to dispatch source parameter type `{1}` |
+| FKF803 | Error | Unreachable polymorphic pattern: base type `{0}` appears before derived type `{1}` |
+| FKF804 | Error | Incompatible `[ForgeMethod]` options on polymorphic dispatch method — non-default values not allowed |
+| FKF805 | Error | `GenerateExpression = true` is not supported on polymorphic dispatch methods |
+| FKF806 | Error | Duplicate derived source type `{0}` in `[ForgePolymorphic]` attributes |
+| FKF807 | Error | `[ForgePolymorphic]` used on a method in a class without `[Forge]` |
+
+Polymorphic dispatch methods generate a switch expression that dispatches to other forge methods based on the runtime type of the source parameter. The method itself performs no property mapping — it is pure dispatch. The default arm always throws `InvalidOperationException`.
+
+**Ordering matters:** Arms are emitted in user-declared order. Place more-derived types first; a base type before a derived type makes the derived type unreachable (FKF803).

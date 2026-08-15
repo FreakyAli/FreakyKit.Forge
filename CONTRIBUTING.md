@@ -28,7 +28,7 @@ We are committed to providing a welcoming and inclusive environment. Please be r
 
 ### Prerequisites
 
-- .NET 8.0 SDK or later
+- .NET 9.0 SDK (pinned via `global.json`; 9.0.100 or later feature band)
 - C# knowledge (this is a Roslyn toolchain project)
 - Familiarity with source generators and analyzers is helpful but not required
 
