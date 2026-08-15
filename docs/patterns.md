@@ -2,6 +2,8 @@
 
 Copy-paste recipes for the most frequent Forge use cases. Each pattern is self-contained — paste it into your project and adapt the type names.
 
+> **Migrating from another library?** See the dedicated migration guides: [AutoMapper](migrate-from-automapper.md) · [Mapperly](migrate-from-mapperly.md) · [Mapster](migrate-from-mapster.md) · [Facet](migrate-from-facet.md)
+
 ---
 
 ## 1. Basic Property Mapping

@@ -76,6 +76,15 @@ Both are Roslyn source generators with zero runtime overhead. Mapperly is a matu
 
 If you want more explicit control over which methods get generated and how members are handled on each side, Forge is worth a look.
 
+### Migration Guides
+
+Switching from another mapping library? These guides cover every pattern side by side:
+
+- **[Migrate from AutoMapper](docs/migrate-from-automapper.md)** — the most common migration path
+- **[Migrate from Mapperly](docs/migrate-from-mapperly.md)** — source generator to source generator
+- **[Migrate from Mapster](docs/migrate-from-mapster.md)** — reflection or codegen to compile-time
+- **[Migrate from Facet](docs/migrate-from-facet.md)** — source generator to source generator
+
 ## Installation
 
 For most projects, add two packages:
