@@ -13,6 +13,7 @@ jobs:
   release-nuget:
     runs-on: windows-latest
     permissions:
+      contents: read   # Required for actions/checkout and git fetch
       id-token: write  # Required for OIDC token generation (trusted publishing)
 
     steps:
@@ -53,6 +54,7 @@ jobs:
           dotnet pack src/FreakyKit.Forge.Conventions/FreakyKit.Forge.Conventions.csproj -c Release --no-build -p:Version=${{ steps.get_version.outputs.version_without_v }}
 
       - name: NuGet login (OIDC - trusted publishing)
+        id: login
         uses: NuGet/login@v1
         with:
           user: FreakyAli
@@ -71,5 +73,5 @@ jobs:
 
           foreach ($nupkg in $nupkgs) {
             Write-Host "Pushing: $($nupkg.FullName)"
-            dotnet nuget push $nupkg.FullName -s https://api.nuget.org/v3/index.json
+            dotnet nuget push $nupkg.FullName -s https://api.nuget.org/v3/index.json -k ${{ steps.login.outputs.NUGET_API_KEY }}
           }
