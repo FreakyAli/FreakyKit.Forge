@@ -37,13 +37,13 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
 | 15a | Additional code fix providers | P2 | Medium | Low | FKF109, FKF112, FKF524/525/526, more |
 | 16 | Expand samples project | P2 | Medium | Low-Medium | Dictionary, EF Core, conditional mapping, ForgeUses, ShareReference |
-| 17 | AutoMapper migration guide | P2 | High | Medium | Side-by-side migration doc targeting AutoMapper users |
+| ~~17~~ | ~~Migration guides~~ | ~~P2~~ | ~~High~~ | ~~Medium~~ | ~~Done — AutoMapper, Mapperly, Mapster, Facet~~ |
 | 18 | Project config files | P2 | Low | Low | global.json + .editorconfig |
 | 19 | dotnet new template | P3 | Medium | Medium | `dotnet new forge-mapper` scaffold |
 | 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
 | 21 | .NET 10 benchmarks | P3 | Low | Medium | Fill TODO placeholders in benchmarks.md |
 
-> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300)
+> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet)
 
 ---
 
@@ -358,51 +358,6 @@ Add these sample files:
 4. `ForgeUsesForges.cs` — Cross-class method sharing via `[ForgeUses]`
 5. `ConditionalForges.cs` — `IgnoreIfNull`, `IgnoreIfDefault`, `Condition`
 6. `ShareReferenceForges.cs` — Reference semantics for same-type collections
-
----
-
-### 17. AutoMapper Migration Guide — `P2`
-
-**Type:** Documentation
-
-**Why**
-
-AutoMapper is the most widely used .NET mapping library. Many teams are looking to migrate away from reflection-based mappers. A side-by-side migration guide is high-value content that captures developers at the moment they're actively looking for alternatives. This is how Mapperly grew its user base.
-
-**Design**
-
-A standalone doc (`docs/migrate-from-automapper.md`) with before/after code for the 10-15 most common AutoMapper patterns, showing the Forge equivalent. Link from README.
-
-**Complexity**
-
-Medium. Requires understanding AutoMapper's API surface well enough to map patterns accurately.
-
-**Impact**
-
-High. Targets the largest pool of potential adopters at their moment of highest intent.
-
-**Files to Modify**
-
-- `docs/migrate-from-automapper.md` — New file
-- `README.md` — Add link in the "Why Forge?" section
-- `llms.txt` — Add migration reference
-- `docs/patterns.md` — Cross-reference where applicable
-
-**Suggested Approach**
-
-Cover these AutoMapper patterns:
-1. `CreateMap<TSource, TDest>()` → `[Forge]` + method signature
-2. `.ForMember(dest => dest.X, opt => opt.MapFrom(src => src.Y))` → `[ForgeMap("Y")]`
-3. `.Ignore()` → `[ForgeIgnore]`
-4. `.ReverseMap()` → Two separate forge methods (explicit is safer)
-5. `mapper.Map<TDest>(source)` → `ForgeClass.ToDto(source)` or `source.ToDto()`
-6. Nested object mapping → `AllowNestedForging = true`
-7. Collection mapping → Forge handles this automatically
-8. Constructor mapping → Forge selects constructors automatically
-9. Null substitution → `DefaultValue` on `[ForgeMap]`
-10. Conditional mapping → `IgnoreIfNull`, `Condition`
-11. Custom value resolvers → `[ForgeConverter]`
-12. Profile inheritance → `[ForgeUses]`
 
 ---
 
