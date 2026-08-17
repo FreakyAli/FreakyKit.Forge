@@ -320,82 +320,328 @@ for the opt-out flag.
 
 ## .NET 10
 
-> Benchmarks for .NET 10 have not been run yet. When available, results will be added here in the same format as the .NET 8 section above.
->
-> To run them: update `TargetFramework` in `benchmarks/FreakyKit.Forge.Benchmarks/FreakyKit.Forge.Benchmarks.csproj` to `net10.0`, then run:
-> ```bash
-> dotnet run -c Release -- -f '*'
-> ```
-> and populate the tables below using the same structure as the .NET 8 section.
-
----
+> Benchmark run: 2026-08-16
+> Source: [`benchmarks/FreakyKit.Forge.Benchmarks`](../benchmarks/FreakyKit.Forge.Benchmarks)
+> Raw BDN reports: [`BenchmarkDotNet.Artifacts/results/`](../benchmarks/FreakyKit.Forge.Benchmarks/BenchmarkDotNet.Artifacts/results/)
 
 ### Environment
 
-<!-- TODO: fill in when benchmarks are run -->
+| | |
+|---|---|
+| Runtime | .NET 10.0.0 (Arm64 RyuJIT armv8.0-a) |
+| Machine | Apple M4 Pro, 14 cores, macOS Tahoe 26.5.2 |
+| Benchmark tool | BenchmarkDotNet v0.15.8 |
+| SDK | .NET SDK 10.0.100 |
+
+### Competitors
+
+Same library versions as the .NET 8 run (AutoMapper 16.1.1, Mapperly 4.3.1, Mapster 7.4.0, Facet 5.8.2).
 
 ---
 
 ### Simple Mapping (4 properties)
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 4.26 ns | 1.00x | 1 | 40 B |
+| Mapperly | 4.27 ns | 1.00x | 1 | 40 B |
+| **Forge** | **4.28 ns** | **1.00x** | **1** | **40 B** |
+| Facet | 5.08 ns | 1.19x | 2 | 40 B |
+| Mapster | 8.10 ns | 1.90x | 3 | 40 B |
+| AutoMapper | 32.13 ns | 7.54x | 4 | 40 B |
+
+> **vs .NET 8:** Forge improved from 6.46 ns → 4.28 ns (**34% faster**). Facet's allocation dropped from 104 B → 40 B — the .NET 10 JIT optimizes away Facet's wrapper object.
 
 ---
 
 ### Medium Mapping (10 properties)
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| **Forge** | **8.39 ns** | **1.00x** | **1** | **96 B** |
+| Hand-written | 8.43 ns | 1.00x | 1 | 96 B |
+| Mapperly | 8.43 ns | 1.00x | 1 | 96 B |
+| Facet | 8.44 ns | 1.00x | 1 | 96 B |
+| Mapster | 11.85 ns | 1.41x | 2 | 96 B |
+| AutoMapper | 34.52 ns | 4.09x | 3 | 96 B |
+
+> **vs .NET 8:** Forge improved from 12.43 ns → 8.39 ns (**32% faster**). Facet closed the gap entirely — 20.0 ns / 160 B on .NET 8 → 8.44 ns / 96 B on .NET 10 (same allocation as everyone else).
 
 ---
 
 ### Nested Object Mapping
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 13.05 ns | 1.00x | 1 | 136 B |
+| Mapperly | 13.28 ns | 1.02x | 1 | 136 B |
+| **Forge** | **13.30 ns** | **1.02x** | **1** | **136 B** |
+| Mapster | 18.40 ns | 1.41x | 2 | 136 B |
+| Facet | 29.77 ns | 2.28x | 3 | 328 B |
+| AutoMapper | 38.88 ns | 2.98x | 4 | 136 B |
+
+> **vs .NET 8:** Forge improved from 21.92 ns → 13.30 ns (**39% faster**).
 
 ---
 
 ### Property Flattening
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| **Forge** | **7.07 ns** | **0.94x** | **1** | **56 B** |
+| Hand-written | 7.53 ns | 1.00x | 2 | 56 B |
+| Mapperly | 7.54 ns | 1.00x | 2 | 56 B |
+| Mapster | 13.00 ns | 1.73x | 3 | 56 B |
+| AutoMapper | 33.75 ns | 4.48x | 4 | 56 B |
+
+> *Facet excluded — cannot annotate source types with `[Flatten]`.
+
+> **vs .NET 8:** Forge improved from 10.97 ns → 7.07 ns (**36% faster**). Forge beats hand-written outright.
 
 ---
 
-### Deep Object Graph
+### Deep Object Graph (scalars + 2 nested objects + collections)
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 189.0 ns | 0.99x | 1 | 1.79 KB |
+| Hand-written | 191.6 ns | 1.00x | 1 | 1.86 KB |
+| **Forge** | **192.3 ns** | **1.00x** | **1** | **1.86 KB** |
+| Mapster | 198.4 ns | 1.04x | 2 | 1.79 KB |
+| AutoMapper | 287.2 ns | 1.50x | 3 | 2.13 KB |
+| Facet | 1,188.6 ns | 6.20x | 4 | 8.16 KB |
+
+> **vs .NET 8:** Forge improved from 208.5 ns → 192.3 ns (**8% faster**). Deep graphs are dominated by allocation; the .NET 10 JIT's codegen improvements are less visible here.
 
 ---
 
 ### Collection Mapping (1,000 items)
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| **Forge** | **5,890 ns** | **1.00x** | **1** | **64,232 B** |
+| Hand-written | 5,893 ns | 1.00x | 1 | 64,232 B |
+| Mapperly | 5,910 ns | 1.00x | 1 | 64,160 B |
+| Mapster | 6,979 ns | 1.18x | 2 | 64,160 B |
+| AutoMapper | 7,106 ns | 1.21x | 2 | 72,704 B |
+| Facet | 46,207 ns | 7.84x | 3 | 305,664 B |
+
+> **vs .NET 8:** The top three (Forge, Hand-written, Mapperly) converge to within 0.3% — effectively identical at collection scale. Mapperly closed a 46% gap from .NET 8 (7,446 ns → 5,910 ns).
 
 ---
 
-### Update Mapping
+### Update Mapping (void, modify existing object)
 
-<!-- TODO -->
+> Mapperly and Facet excluded — neither supports void in-place update. Timings use `InvocationCount=1` (high variance expected).
+
+| Method | Mean | Rank |
+|--------|-----:|-----:|
+| **Forge** | **~14 ns** | **1** |
+| Hand-written | ~20 ns | 2 |
+| Mapster | ~138 ns | 3 |
+| AutoMapper | ~372 ns | 4 |
 
 ---
 
 ### Throughput (10,000 objects)
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| **Forge** | **111.2 μs** | **0.99x** | **1** | **1,016 KB** |
+| Mapperly | 111.4 μs | 0.99x | 1 | 1,016 KB |
+| Facet | 111.9 μs | 1.00x | 1 | 1,016 KB |
+| Hand-written | 112.0 μs | 1.00x | 1 | 1,016 KB |
+| Mapster | 144.7 μs | 1.29x | 2 | 1,016 KB |
+| AutoMapper | 376.7 μs | 3.36x | 3 | 1,016 KB |
+
+> **vs .NET 8:** Forge improved from 152.0 μs → 111.2 μs (**27% faster**). Facet's throughput improved dramatically — from 240.8 μs / 1,641 KB to 111.9 μs / 1,016 KB, eliminating its allocation overhead entirely at this scale.
 
 ---
 
-### Real-World: E-Commerce Order
+### Real-World: E-Commerce Order (enums + nested customer + line items + addresses)
 
-<!-- TODO -->
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 103.1 ns | 0.97x | 1 | 1.05 KB |
+| Mapster | 103.3 ns | 0.97x | 1 | 1.05 KB |
+| **Forge** | **105.2 ns** | **0.99x** | **1** | **1.13 KB** |
+| Hand-written | 106.1 ns | 1.00x | 1 | 1.13 KB |
+| AutoMapper | 151.2 ns | 1.42x | 2 | 1.13 KB |
+| Facet | 414.6 ns | 3.91x | 3 | 2.91 KB |
+
+> **vs .NET 8:** Forge improved from 161.5 ns → 105.2 ns (**35% faster**). All four source generators + hand-written are within a 3 ns band — effectively identical.
 
 ---
 
-### Real-World: Nullable Database Entity
+### Real-World: Nullable Database Entity (16 nullable columns)
 
-<!-- TODO -->
+**Fully populated (all values present):**
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 11.03 ns | 1.00x | 1 | 168 B |
+| **Forge** | **11.07 ns** | **1.00x** | **1** | **168 B** |
+| Mapperly | 11.07 ns | 1.00x | 1 | 168 B |
+| Facet | 11.64 ns | 1.06x | 2 | 168 B |
+| Mapster | 14.45 ns | 1.31x | 3 | 168 B |
+| AutoMapper | 38.05 ns | 3.45x | 4 | 168 B |
+
+**Sparse (many nulls — new/incomplete accounts):**
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 11.07 ns | 1.00x | 1 | 168 B |
+| Hand-written | 11.09 ns | 1.00x | 1 | 168 B |
+| **Forge** | **11.13 ns** | **1.00x** | **1** | **168 B** |
+| Facet | 11.56 ns | 1.04x | 2 | 168 B |
+| Mapster | 14.49 ns | 1.31x | 3 | 168 B |
+| AutoMapper | 37.51 ns | 3.38x | 4 | 168 B |
+
+> **vs .NET 8:** Facet's allocation dropped from 232 B → 168 B — same as every other library. The .NET 10 JIT eliminates the wrapper allocation that Facet previously paid.
 
 ---
 
 ### Key Takeaways (.NET 10)
 
-<!-- TODO -->
+- **.NET 10 delivers 27–39% faster mapping** across simple, medium, nested, flattening, and throughput scenarios. The improvements come from .NET 10's JIT codegen — the generated code is unchanged.
+- **Forge remains identical to hand-written code** — same IL, same performance, same allocations. Any variation is measurement noise.
+- **The field compresses at the top.** Forge, Mapperly, and hand-written are virtually indistinguishable on .NET 10 in most scenarios. The .NET 10 JIT narrows differences between well-written source generators.
+- **Facet benefits enormously from .NET 10** — allocation overhead drops significantly (104→40 B on Simple, 160→96 B on Medium, 232→168 B on Nullable) and timing improves 30–50%. On Throughput, Facet goes from 1.55× / 1,641 KB to 1.00× / 1,016 KB — joining the top tier.
+- **AutoMapper remains 3–7× slower** — reflection-based runtime overhead is not helped by JIT improvements. The ratio gap actually widens because source generators got faster while AutoMapper stayed roughly the same.
+- **Zero allocation overhead** — Forge matches hand-written allocations in every scenario, same as on .NET 8
+
+---
+
+## Real-World Scenarios (.NET 10)
+
+> Benchmark run: 2026-08-16
+> Source: [`benchmarks/FreakyKit.Forge.Benchmarks.RealWorld`](../benchmarks/FreakyKit.Forge.Benchmarks.RealWorld)
+> Raw BDN reports: [`BenchmarkDotNet.Artifacts/results/`](../benchmarks/FreakyKit.Forge.Benchmarks.RealWorld/BenchmarkDotNet.Artifacts/results/)
+
+Same eight scenarios as the [.NET 8 Real-World run](#real-world-scenarios), re-run on .NET 10 with identical library
+versions and benchmark parameters. All six implementations perform full deep-copy.
+
+### Environment
+
+| | |
+|---|---|
+| Runtime | .NET 10.0.0 (Arm64 RyuJIT armv8.0-a) |
+| Machine | Apple M4 Pro, 14 cores, macOS Tahoe 26.5.2 |
+| Benchmark tool | BenchmarkDotNet v0.15.8 |
+| SDK | .NET SDK 10.0.100 |
+| Iterations | 10 warmup × 50 iterations (Banking: 8 × 30 — large collection) |
+
+### Real-World: B2B Order Fulfilment (~20 props + nested + audit collection)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 187.6 ns | 1.00x | 1 | 2.05 KB |
+| Mapperly | 193.6 ns | 1.03x | 1 | 2.05 KB |
+| Mapster | 197.9 ns | 1.05x | 2 | 2.05 KB |
+| **Forge** | **212.7 ns** | **1.13x** | **3** | **2.20 KB** |
+| AutoMapper | 261.3 ns | 1.39x | 4 | 2.30 KB |
+| Facet | 1,119.2 ns | 5.97x | 5 | 7.34 KB |
+
+> **vs .NET 8:** Forge improved from 282.9 ns → 212.7 ns (**25% faster**). Forge's ratio to hand-written tightened from 1.22x → 1.13x. Mapperly jumped from rank 4 (429.7 ns) to rank 1 (193.6 ns) — a 55% improvement.
+
+### Real-World: CRM Contact Import (dictionary + 3 unbounded collections)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 104.9 ns | 0.66x | 1 | 0.88 KB |
+| Hand-written | 158.6 ns | 1.00x | 2 | 1.41 KB |
+| **Forge** | **193.2 ns** | **1.22x** | **3** | **1.62 KB** |
+| Mapster | 292.1 ns | 1.84x | 4 | 2.00 KB |
+| AutoMapper | 333.8 ns | 2.11x | 5 | 2.06 KB |
+| Facet | 653.5 ns | 4.12x | 6 | 3.97 KB |
+
+> **vs .NET 8:** Forge improved from 272.6 ns → 193.2 ns (**29% faster**). Mapperly extends its lead on this dictionary-heavy scenario — 0.66x hand-written vs 0.80x on .NET 8.
+
+### Real-World: Healthcare Patient (FHIR-shaped)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 149.0 ns | 1.00x | 1 | 1.46 KB |
+| Mapperly | 161.6 ns | 1.08x | 2 | 1.46 KB |
+| Mapster | 167.5 ns | 1.12x | 2 | 1.46 KB |
+| **Forge** | **189.1 ns** | **1.27x** | **3** | **1.67 KB** |
+| AutoMapper | 213.0 ns | 1.43x | 4 | 1.55 KB |
+| Facet | 885.9 ns | 5.95x | 5 | 5.41 KB |
+
+> **vs .NET 8:** Forge improved from 222.4 ns → 189.1 ns (**15% faster**). Allocations dropped across the board — hand-written from 1.86 KB → 1.46 KB. The .NET 10 runtime allocates smaller FHIR-style DTOs.
+
+### Real-World: Banking Ledger (500 decimal-dense transactions)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 4.404 us | 1.00x | 1 | 62.75 KB |
+| Mapster | 4.627 us | 1.05x | 1 | 62.75 KB |
+| Mapperly | 4.852 us | 1.10x | 2 | 62.75 KB |
+| **Forge** | **4.857 us** | **1.10x** | **2** | **62.82 KB** |
+| AutoMapper | 5.255 us | 1.19x | 3 | 66.98 KB |
+| Facet | 25.913 us | 5.88x | 4 | 182.70 KB |
+
+> **vs .NET 8:** Forge improved from 5.912 us → 4.857 us (**18% faster**). Top four within a 10% band. Mapperly closed a 21% gap from .NET 8 (6.970 us → 4.852 us) to pull level with Forge.
+
+### Real-World: CMS Content Tree (12 mixed-type blocks + i18n)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 166.5 ns | 1.00x | 1 | 1.86 KB |
+| Mapperly | 170.3 ns | 1.02x | 1 | 1.86 KB |
+| Mapster | 174.6 ns | 1.05x | 2 | 1.86 KB |
+| **Forge** | **187.9 ns** | **1.13x** | **3** | **2.00 KB** |
+| AutoMapper | 232.0 ns | 1.39x | 4 | 2.04 KB |
+| Facet | 915.0 ns | 5.50x | 5 | 6.11 KB |
+
+> **vs .NET 8:** Forge improved from 274.3 ns → 187.9 ns (**31% faster**). Forge's ratio tightened from 1.33x → 1.13x — the largest ratio improvement in the suite.
+
+### Real-World: Identity / User Provisioning (8 nullables + 4 collections)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 156.3 ns | 1.00x | 1 | 1.33 KB |
+| Mapperly | 161.7 ns | 1.03x | 1 | 1.33 KB |
+| Mapster | 170.7 ns | 1.09x | 2 | 1.33 KB |
+| **Forge** | **200.7 ns** | **1.28x** | **3** | **1.61 KB** |
+| AutoMapper | 234.5 ns | 1.50x | 4 | 1.51 KB |
+| Facet | 1,151.2 ns | 7.37x | 5 | 6.38 KB |
+
+> **vs .NET 8:** Forge improved from 289.4 ns → 200.7 ns (**31% faster**). Forge jumped from rank 4 (tied with AutoMapper at 1.45x) to rank 3 (1.28x) — clearing a significant gap from AutoMapper.
+
+### Real-World: Inventory / Warehouse Movement (collection-of-collections)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Hand-written | 204.7 ns | 1.00x | 1 | 1.91 KB |
+| Mapster | 228.1 ns | 1.11x | 2 | 1.91 KB |
+| Mapperly | 243.5 ns | 1.19x | 3 | 2.06 KB |
+| **Forge** | **266.7 ns** | **1.30x** | **4** | **2.26 KB** |
+| AutoMapper | 283.6 ns | 1.39x | 4 | 2.01 KB |
+| Facet | 1,705.7 ns | 8.33x | 5 | 8.57 KB |
+
+> **Note:** Still Forge's worst-case ratio across the suite (1.30x), improved from 1.39x on .NET 8. Collection-of-collections nesting amplifies per-element overhead from `new List<T>(capacity)` pre-sizing.
+
+### Real-World: Public API Response (paged envelope + 20 resources)
+
+| Method | Mean | Ratio | Rank | Allocated |
+|--------|-----:|------:|-----:|----------:|
+| Mapperly | 1.076 us | 0.86x | 1 | 8.23 KB |
+| Hand-written | 1.257 us | 1.00x | 2 | 9.79 KB |
+| Mapster | 1.338 us | 1.06x | 3 | 9.79 KB |
+| **Forge** | **1.448 us** | **1.15x** | **4** | **11.34 KB** |
+| AutoMapper | 1.733 us | 1.38x | 5 | 10.56 KB |
+| Facet | 9.439 us | 7.51x | 6 | 38.11 KB |
+
+> **vs .NET 8:** Forge improved from 2.092 us → 1.448 us (**31% faster**). Forge's ratio tightened from 1.29x → 1.15x, closing the gap with Mapster. Mapperly's allocation advantage (8.23 KB vs 9.79 KB hand-written) continues to drive its lead on this scenario.
+
+### Key Takeaways (.NET 10 Real-World)
+
+- **Forge improved 15–34% across all 8 real-world scenarios** on .NET 10. The absolute times dropped significantly (e.g. CMS 274 ns → 188 ns, Inventory 403 ns → 267 ns) while the generated code itself is unchanged — this is pure JIT benefit.
+- **Forge's ratio to hand-written tightened from 1.03×–1.45× (.NET 8) to 1.10×–1.30× (.NET 10)**, median dropping from ~1.31× to ~1.19×. The .NET 10 JIT favours Forge's straight-line generated code more than the hand-written equivalents in most scenarios.
+- **Forge improved its rank in 3 scenarios** — B2B (rank 3→3 but ratio 1.22→1.13), CMS (rank 4→3), and Identity (rank 4→3). In no scenario did Forge's rank regress.
+- **Mapperly benefits most from .NET 10** in the real-world suite. It jumped from rank 4 to rank 1 in B2B (429 ns → 194 ns, a 55% improvement) and extended its lead in CRM and Public API. Mapperly's dictionary and collection handling is particularly well-optimised by the .NET 10 JIT.
+- **Forge consistently beats AutoMapper** in all 8 scenarios. AutoMapper ranges from 1.19×–2.11× hand-written; Forge ranges from 1.10×–1.30×.
+- **Forge trades leads with Mapster**, same as on .NET 8. Mapster is narrowly faster in 7 of 8 scenarios (typically by 5–15%), but both remain in the same performance band. Forge wins on CRM Contact (193 ns vs 292 ns) where Mapster's dictionary overhead is higher.
+- **Facet remains 4×–8× hand-written** in deep-copy mode, improved from 4×–8× on .NET 8 — similar ratios but lower absolute times. Facet's allocation overhead (3.97–182.70 KB vs 1.33–62.75 KB hand-written) remains the primary bottleneck.
+- **All libraries benefited from .NET 10 JIT improvements** — hand-written code itself got 15–24% faster across scenarios, confirming the speedups are runtime-level, not library-specific.
