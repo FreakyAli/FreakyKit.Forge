@@ -19,7 +19,8 @@ namespace FreakyKit.Forge.Diagnostics;
 ///   FKF300–399: Nested forging & circularity (circular reference detection, nested method discovery)
 ///   FKF400–401: Member discovery (fields included/excluded, ShouldIncludeFields flag)
 ///   FKF500–532: P2/P3 feature diagnostics (Flattening FKF530-532, Conditional Mapping FKF510-512, Cross-Class Forge FKF520-523, Orphaned Attributes FKF524-528)
-///   FKF533–599: RESERVED for future P2/P3 feature diagnostics
+///   FKF533–542: Mapping profiles / inheritance ([ForgeIncludes] validation and merge info)
+///   FKF543–599: RESERVED for future P2/P3 feature diagnostics
 ///   FKF600–699: RESERVED for performance warnings (deep nesting, expression complexity, etc.)
 ///   FKF800–899: Polymorphic mapping diagnostics (dispatch validation, type compatibility, pattern reachability)
 ///
@@ -38,6 +39,7 @@ public static class ForgeDiagnostics
     private const string Category_Nested = "FreakyKit.Forge.Nested";
     private const string Category_Construction = "FreakyKit.Forge.Construction";
     private const string Category_Polymorphic = "FreakyKit.Forge.Polymorphic";
+    private const string Category_Includes = "FreakyKit.Forge.Includes";
 
     // ─── Mode & Visibility ───────────────────────────────────────────────────
 
@@ -1034,6 +1036,134 @@ public static class ForgeDiagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "ReturnNull policy cannot be used with non-nullable destination types. Change to UseDefault, Skip, or Throw, or make the type nullable.");
+
+    // ─── Mapping Profiles / Inheritance ([ForgeIncludes]) ──────────────────
+
+    /// <summary>
+    /// FKF533 (Error): An included forge class in [ForgeIncludes] was not found.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesForgeClassNotFound = new(
+        id: "FKF533",
+        title: "Included profile forge class not found",
+        messageFormat: "Included profile forge class '{0}' in [ForgeIncludes] not found. Verify the type name and assembly.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The type specified in [ForgeIncludes] could not be resolved.");
+
+    /// <summary>
+    /// FKF534 (Error): An included class in [ForgeIncludes] is not decorated with [Forge].
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesClassNotForge = new(
+        id: "FKF534",
+        title: "Included profile class is not a forge class",
+        messageFormat: "Included profile class '{0}' in [ForgeIncludes] is not decorated with [Forge]. Only forge classes can be included.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeIncludes] can only include classes decorated with [Forge].");
+
+    /// <summary>
+    /// FKF535 (Error): Circular [ForgeIncludes] detected.
+    /// </summary>
+    public static readonly DiagnosticDescriptor CircularForgeIncludesProfile = new(
+        id: "FKF535",
+        title: "Circular forge profile includes detected",
+        messageFormat: "Circular [ForgeIncludes] detected: {0}. Each forge class can only be included once in the chain.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeIncludes] creates a circular dependency. Restructure the includes to avoid cycles.");
+
+    /// <summary>
+    /// FKF536 (Warning): No compatible method found in the included profile class.
+    /// An included class has no method whose source/dest types are base types of any method
+    /// in the consuming class.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesNoCompatibleMethod = new(
+        id: "FKF536",
+        title: "No compatible method in included profile class",
+        messageFormat: "Included profile class '{0}' has no method with compatible source/destination types for any method in '{1}'. Base types must match the consuming method's type hierarchy.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "For [ForgeIncludes] to merge assignments, the included class must have at least one method whose source type is a base of the consuming method's source type and whose dest type is a base of the consuming method's dest type.");
+
+    /// <summary>
+    /// FKF537 (Info): A local assignment shadows an inherited assignment from [ForgeIncludes].
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesAssignmentShadowed = new(
+        id: "FKF537",
+        title: "Included assignment shadowed by local assignment",
+        messageFormat: "Member '{0}': local assignment shadows inherited assignment from included profile class '{1}'. Local mapping takes precedence.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Both the consuming method and an included profile method map the same destination member. The local assignment takes precedence.");
+
+    /// <summary>
+    /// FKF539 (Info): An inherited assignment from [ForgeIncludes] was skipped because the
+    /// destination member does not exist on the consuming method's destination type.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesDestMemberNotFound = new(
+        id: "FKF539",
+        title: "Included assignment skipped — destination member not found",
+        messageFormat: "Member '{0}' from included profile '{1}' was skipped because it does not exist on destination type '{2}'.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "The included profile class maps a destination member that does not exist on the consuming method's destination type. The assignment is skipped. This is expected when the derived destination type does not declare all base members.");
+
+    /// <summary>
+    /// FKF540 (Info): An inherited assignment from [ForgeIncludes] was skipped because the
+    /// consuming method's constructor already provides that member.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesConstructorHandlesMember = new(
+        id: "FKF540",
+        title: "Included assignment skipped — constructor provides member",
+        messageFormat: "Member '{0}' from included profile '{1}' was skipped because the constructor of '{2}' already provides it.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "The consuming method's destination type has a constructor parameter that matches this member. The constructor takes precedence over the inherited assignment.");
+
+    /// <summary>
+    /// FKF541 (Info): An inherited assignment from [ForgeIncludes] was skipped because it targets
+    /// an init-only property and the consuming method is an update method.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesInitOnlyInUpdateSkipped = new(
+        id: "FKF541",
+        title: "Included init-only assignment skipped in update method",
+        messageFormat: "Member '{0}' from included profile '{1}' was skipped because it is init-only and cannot be assigned in an update method.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Init-only properties can only be set during object construction. Update methods modify existing instances, so init-only assignments from included profiles are skipped.");
+
+    /// <summary>
+    /// FKF542 (Info): An inherited assignment from [ForgeIncludes] was deduplicated because
+    /// a prior included profile class already provides the same member.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludesDiamondDedup = new(
+        id: "FKF542",
+        title: "Included assignment deduplicated (diamond include)",
+        messageFormat: "Member '{0}' from included profile '{1}' was skipped because it was already inherited from a prior included profile. First occurrence wins.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "When multiple included profile classes provide assignments for the same destination member, the first included class in the [ForgeIncludes] list takes precedence. This is expected in diamond-shaped include hierarchies.");
+
+    /// <summary>
+    /// FKF538 (Error): A class has [ForgeIncludes] but is missing [Forge] attribute.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeIncludesMissingForgeAttribute = new(
+        id: "FKF538",
+        title: "ForgeIncludes requires Forge attribute",
+        messageFormat: "Class '{0}' has [ForgeIncludes] attribute but is missing the [Forge] attribute. Add [Forge] to enable forge functionality.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "[ForgeIncludes] can only be used on classes decorated with [Forge]. The class must be a static partial class with the [Forge] attribute to use [ForgeIncludes].");
 
     // ─── Polymorphic Mapping ────────────────────────────────────────────────
 

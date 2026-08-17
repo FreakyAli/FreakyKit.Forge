@@ -547,6 +547,46 @@ public sealed class SnapshotTests : GeneratorTestBase
         AssertSnapshot(generated);
     }
 
+    [Fact]
+    public void ForgeIncludes_BasePropertyInheritance()
+    {
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class BaseEntity { public int Id { get; set; } public string CreatedAt { get; set; } }
+                public class BaseDto { public int Id { get; set; } public string CreatedAt { get; set; } }
+
+                public class Person : BaseEntity { public string Name { get; set; } }
+                public class PersonDto : BaseDto { public string Name { get; set; } }
+
+                [Forge]
+                public static partial class BaseForges
+                {
+                    public static partial BaseDto ToBaseDto(BaseEntity source);
+                }
+
+                [Forge]
+                [ForgeIncludes(typeof(BaseForges))]
+                public static partial class PersonForges
+                {
+                    public static partial PersonDto ToDto(Person source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+
+        // Get PersonForges output specifically for snapshot
+        var personOutput = result.RunResult.GeneratedTrees
+            .Select(t => t.GetText().ToString())
+            .FirstOrDefault(t => t.Contains("PersonForges"));
+        Assert.NotNull(personOutput);
+
+        AssertSnapshot(personOutput);
+    }
+
     private static int CountOccurrences(string text, string substring)
     {
         int count = 0;

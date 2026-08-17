@@ -30,6 +30,13 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
     /// </summary>
     public IReadOnlyList<string> IncludedForgeClasses { get; }
 
+    /// <summary>
+    /// Fully-qualified names of forge classes included via [ForgeIncludes] attribute.
+    /// Empty if no [ForgeIncludes] is present. These classes supply base-type property
+    /// assignments that are inlined into compatible consuming methods.
+    /// </summary>
+    public IReadOnlyList<string> IncludedProfileClasses { get; }
+
     public ForgeClassModel(
         string @namespace,
         string className,
@@ -39,7 +46,8 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
         IReadOnlyList<ForgeMethodModel> methods,
         IReadOnlyList<ContainingTypeInfo>? containingTypes = null,
         bool generateExtensionMethods = true,
-        IReadOnlyList<string>? includedForgeClasses = null)
+        IReadOnlyList<string>? includedForgeClasses = null,
+        IReadOnlyList<string>? includedProfileClasses = null)
     {
         Namespace = @namespace;
         ClassName = className;
@@ -50,6 +58,7 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
         Methods = methods;
         ContainingTypes = containingTypes ?? Array.Empty<ContainingTypeInfo>();
         IncludedForgeClasses = includedForgeClasses ?? Array.Empty<string>();
+        IncludedProfileClasses = includedProfileClasses ?? Array.Empty<string>();
     }
 
     public bool Equals(ForgeClassModel other)
@@ -63,7 +72,8 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
             && GenerateExtensionMethods == other.GenerateExtensionMethods
             && Methods.SequenceEqual(other.Methods)
             && ContainingTypes.SequenceEqual(other.ContainingTypes)
-            && IncludedForgeClasses.SequenceEqual(other.IncludedForgeClasses);
+            && IncludedForgeClasses.SequenceEqual(other.IncludedForgeClasses)
+            && IncludedProfileClasses.SequenceEqual(other.IncludedProfileClasses);
     }
 
     public override bool Equals(object obj) => Equals(obj as ForgeClassModel);
@@ -81,6 +91,8 @@ internal sealed class ForgeClassModel : IEquatable<ForgeClassModel>
             hash = hash * 31 + GenerateExtensionMethods.GetHashCode();
             foreach (var included in IncludedForgeClasses)
                 hash = hash * 31 + (included?.GetHashCode() ?? 0);
+            foreach (var profile in IncludedProfileClasses)
+                hash = hash * 31 + (profile?.GetHashCode() ?? 0);
             return hash;
         }
     }

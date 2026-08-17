@@ -87,7 +87,17 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.PolymorphicIncompatibleOptions,
             ForgeDiagnostics.PolymorphicExpressionNotSupported,
             ForgeDiagnostics.PolymorphicDuplicateSourceType,
-            ForgeDiagnostics.ForgePolymorphicWithoutForgeClass
+            ForgeDiagnostics.ForgePolymorphicWithoutForgeClass,
+            ForgeDiagnostics.IncludesForgeClassNotFound,
+            ForgeDiagnostics.IncludesClassNotForge,
+            ForgeDiagnostics.CircularForgeIncludesProfile,
+            ForgeDiagnostics.IncludesNoCompatibleMethod,
+            ForgeDiagnostics.IncludesAssignmentShadowed,
+            ForgeDiagnostics.ForgeIncludesMissingForgeAttribute,
+            ForgeDiagnostics.IncludesDestMemberNotFound,
+            ForgeDiagnostics.IncludesConstructorHandlesMember,
+            ForgeDiagnostics.IncludesInitOnlyInUpdateSkipped,
+            ForgeDiagnostics.IncludesDiamondDedup
         );
 
     public override void Initialize(AnalysisContext context)

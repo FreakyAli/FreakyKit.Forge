@@ -120,7 +120,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 87 diagnostics across 8 categories guide you at build time
+- **Rich diagnostics** — 97 diagnostics across 9 categories guide you at build time
 - **Circular forge detection** — detects and reports circular dependencies in nested forge methods at compile time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
 - **Top-level dictionary projection** — declare a `Dictionary<string, Dest> ToDict(Dictionary<string, Source> source)` method and the generator produces an efficient `foreach`-based conversion
@@ -129,6 +129,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
 - **Conditional mapping** — skip assignments when source is null with `IgnoreIfNull`
+- **Mapping profiles / inheritance** — reuse base-type mappings with `[ForgeIncludes]` — include another forge class and its assignments are inlined into compatible derived methods
 - **Debugging friendly** — generated code includes `[GeneratedCode]`, `[DebuggerStepThrough]`, `#line` directives, `#pragma warning disable`, and XML doc comments
 
 ## Comparison
@@ -778,6 +779,16 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF530 | Error | Ambiguous flattening auto-resolved |
 | FKF531 | Info | Deep flattening detected |
 | FKF532 | Error | Flattening nesting depth limit exceeded |
+| FKF533 | Error | Included profile forge class not found |
+| FKF534 | Error | Included profile class not a forge class |
+| FKF535 | Error | Circular `[ForgeIncludes]` detected |
+| FKF536 | Warning | No compatible method in included profile class |
+| FKF537 | Info | Local assignment shadows included assignment |
+| FKF538 | Error | `[ForgeIncludes]` requires `[Forge]` on the same class |
+| FKF539 | Info | Inherited assignment skipped — destination member not found |
+| FKF540 | Info | Inherited assignment skipped — constructor provides member |
+| FKF541 | Info | Inherited init-only assignment skipped in update method |
+| FKF542 | Info | Inherited assignment deduplicated (diamond include) |
 | FKF700 | Error | Dictionary key type not string |
 | FKF701 | Error | Unsupported dictionary value type |
 | FKF702 | Error | `ReturnNull` policy on non-nullable type |
@@ -813,7 +824,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a complete history of releases and what cha
 
 ## Roadmap
 
-Features planned for future versions — production-grade real-world benchmarks, reverse mapping, computed properties, mapping profiles, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
+Features planned for future versions — production-grade real-world benchmarks, reverse mapping, computed properties, generic forge methods, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
 
 ## Troubleshooting
 

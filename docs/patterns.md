@@ -489,3 +489,43 @@ public static partial class AnimalForges
     // [ForgePolymorphic(typeof(Animal), nameof(MapBase))]
 }
 ```
+
+## 22. Mapping Profiles / Inheritance with `[ForgeIncludes]`
+
+Reuse base-type mappings across forge classes without redeclaring them. When `DerivedSource : BaseSource` and `DerivedDto : BaseDto`, the base method's property assignments are inlined into the derived method.
+
+```csharp
+public class BaseEntity { public int Id { get; set; } public DateTime CreatedAt { get; set; } }
+public class BaseDto { public int Id { get; set; } public DateTime CreatedAt { get; set; } }
+
+public class Person : BaseEntity { public string Name { get; set; } }
+public class PersonDto : BaseDto { public string Name { get; set; } }
+
+[Forge]
+public static partial class BaseForges
+{
+    public static partial BaseDto ToBaseDto(BaseEntity source);
+}
+
+[Forge]
+[ForgeIncludes(typeof(BaseForges))]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+    // Inherits Id and CreatedAt mappings from BaseForges
+    // Adds Name mapping locally
+}
+```
+
+Combine with `[ForgeUses]` for both inheritance and cross-class nested forging:
+
+```csharp
+[Forge]
+[ForgeIncludes(typeof(BaseForges))]   // Inherit base assignments
+[ForgeUses(typeof(AddressForges))]     // Discover nested forge methods
+public static partial class PersonForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToDto(Person source);
+}
+```
