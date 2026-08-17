@@ -52,7 +52,7 @@ public sealed class RemoveForgeMapCodeFix : CodeFixProvider
             diagnostic);
     }
 
-    private static AttributeSyntax FindForgeMapAttribute(MemberDeclarationSyntax memberDecl)
+    private static AttributeSyntax? FindForgeMapAttribute(MemberDeclarationSyntax memberDecl)
     {
         return memberDecl.AttributeLists
             .SelectMany(al => al.Attributes)

@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-Forge emits 87 diagnostics across 8 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+Forge emits 97 diagnostics across 9 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 ## Mode & Visibility
 

@@ -1108,7 +1108,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor IncludesDestMemberNotFound = new(
         id: "FKF539",
         title: "Included assignment skipped — destination member not found",
-        messageFormat: "Member '{0}' from included profile '{1}' was skipped because it does not exist on destination type '{2}'.",
+        messageFormat: "Member '{0}' from included profile '{1}' was skipped because it does not exist on destination type '{2}'",
         category: Category_Includes,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -1121,7 +1121,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor IncludesConstructorHandlesMember = new(
         id: "FKF540",
         title: "Included assignment skipped — constructor provides member",
-        messageFormat: "Member '{0}' from included profile '{1}' was skipped because the constructor of '{2}' already provides it.",
+        messageFormat: "Member '{0}' from included profile '{1}' was skipped because the constructor of '{2}' already provides it",
         category: Category_Includes,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,
@@ -1134,7 +1134,7 @@ public static class ForgeDiagnostics
     public static readonly DiagnosticDescriptor IncludesInitOnlyInUpdateSkipped = new(
         id: "FKF541",
         title: "Included init-only assignment skipped in update method",
-        messageFormat: "Member '{0}' from included profile '{1}' was skipped because it is init-only and cannot be assigned in an update method.",
+        messageFormat: "Member '{0}' from included profile '{1}' was skipped because it is init-only and cannot be assigned in an update method",
         category: Category_Includes,
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true,

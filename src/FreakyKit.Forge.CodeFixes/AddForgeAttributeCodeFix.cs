@@ -14,14 +14,15 @@ namespace FreakyKit.Forge.CodeFixes;
 /// <summary>
 /// Code fix for FKF524 ([ForgeUses] without [Forge]),
 /// FKF525 ([ForgeMethod] without [Forge] class),
-/// and FKF526 ([ForgeConverter] without [Forge] class).
+/// FKF526 ([ForgeConverter] without [Forge] class),
+/// and FKF538 ([ForgeIncludes] without [Forge]).
 /// Fix: add [Forge] attribute to the containing class.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(AddForgeAttributeCodeFix)), Shared]
 public sealed class AddForgeAttributeCodeFix : CodeFixProvider
 {
     public override ImmutableArray<string> FixableDiagnosticIds =>
-        ImmutableArray.Create("FKF524", "FKF525", "FKF526");
+        ImmutableArray.Create("FKF524", "FKF525", "FKF526", "FKF538");
 
     public override FixAllProvider GetFixAllProvider() =>
         WellKnownFixAllProviders.BatchFixer;
@@ -56,7 +57,14 @@ public sealed class AddForgeAttributeCodeFix : CodeFixProvider
             .SelectMany(al => al.Attributes)
             .Any(a =>
             {
-                var name = a.Name.ToString();
+                // Handle qualified names (FreakyKit.Forge.Forge, global::FreakyKit.Forge.ForgeAttribute)
+                // by extracting the final name segment
+                var name = a.Name switch
+                {
+                    QualifiedNameSyntax qns => qns.Right.Identifier.Text,
+                    AliasQualifiedNameSyntax aqs => aqs.Name.Identifier.Text,
+                    _ => a.Name.ToString()
+                };
                 return name == "Forge" || name == "ForgeAttribute";
             });
     }

@@ -520,12 +520,27 @@ public static partial class PersonForges
 Combine with `[ForgeUses]` for both inheritance and cross-class nested forging:
 
 ```csharp
+public class Address { public string City { get; set; } }
+public class AddressDto { public string City { get; set; } }
+
+public class Person : BaseEntity { public string Name { get; set; } public Address Home { get; set; } }
+public class PersonDto : BaseDto { public string Name { get; set; } public AddressDto Home { get; set; } }
+
 [Forge]
-[ForgeIncludes(typeof(BaseForges))]   // Inherit base assignments
-[ForgeUses(typeof(AddressForges))]     // Discover nested forge methods
+public static partial class AddressForges
+{
+    public static partial AddressDto ToAddressDto(Address source);
+}
+
+[Forge]
+[ForgeIncludes(typeof(BaseForges))]   // Inherit base assignments (Id, CreatedAt)
+[ForgeUses(typeof(AddressForges))]     // Discover Address → AddressDto for nested forging
 public static partial class PersonForges
 {
     [ForgeMethod(AllowNestedForging = true)]
     public static partial PersonDto ToDto(Person source);
+    // Id, CreatedAt inherited from BaseForges
+    // Name mapped locally
+    // Home mapped via AddressForges.ToAddressDto (nested forge)
 }
 ```

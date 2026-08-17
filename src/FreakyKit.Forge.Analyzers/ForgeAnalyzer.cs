@@ -88,6 +88,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.PolymorphicExpressionNotSupported,
             ForgeDiagnostics.PolymorphicDuplicateSourceType,
             ForgeDiagnostics.ForgePolymorphicWithoutForgeClass,
+            ForgeDiagnostics.LossyImplicitConversion,
             ForgeDiagnostics.IncludesForgeClassNotFound,
             ForgeDiagnostics.IncludesClassNotForge,
             ForgeDiagnostics.CircularForgeIncludesProfile,
@@ -1168,7 +1169,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     // FKF109: member has both [ForgeIgnore] and [ForgeMap] (only for directly declared members)
                     if (isDeclaredType && HasIgnoreAttribute(prop) && GetForgeMapName(prop) != null)
                     {
-                        var loc = prop.Locations.FirstOrDefault() ?? forgeMethod.Locations.FirstOrDefault();
+                        var loc = prop.Locations.FirstOrDefault(l => l.IsInSource) ?? forgeMethod.Locations.FirstOrDefault();
                         if (loc != null)
                             context.ReportDiagnostic(Diagnostic.Create(
                                 ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, prop.Name, type.Name));
@@ -1214,7 +1215,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     // FKF112: [ForgeMap] target is the member's own name — no-op
                     if (isDeclaredType && mapName != null && string.Equals(mapName, prop.Name, System.StringComparison.OrdinalIgnoreCase))
                     {
-                        var loc112 = prop.Locations.FirstOrDefault() ?? forgeMethod.Locations.FirstOrDefault();
+                        var loc112 = prop.Locations.FirstOrDefault(l => l.IsInSource) ?? forgeMethod.Locations.FirstOrDefault();
                         if (loc112 != null)
                             context.ReportDiagnostic(Diagnostic.Create(
                                 ForgeDiagnostics.ForgeMapSelfReference, loc112, prop.Name, type.Name, mapName));

@@ -345,8 +345,9 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         if (forgeIncludesErrors)
             return new ForgeClassResult(null, diagnostics, hasErrors: true);
 
-        // Extract each forge method model
+        // Extract each forge method model, keeping paired with its IMethodSymbol
         var methodModels = new List<ForgeMethodModel>();
+        var methodSymbols = new List<IMethodSymbol>();
         foreach (var method in forgeMethods)
         {
             var (methodModel, methodDiags) = ExtractForgeMethod(method, type, ctx.SemanticModel.Compilation, ct, includedForgeClasses);
@@ -360,6 +361,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             else if (methodModel != null)
             {
                 methodModels.Add(methodModel);
+                methodSymbols.Add(method);
             }
         }
 
@@ -373,7 +375,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             for (int i = 0; i < methodModels.Count; i++)
             {
                 var mm = methodModels[i];
-                var originalMethod = forgeMethods[i];
+                var originalMethod = methodSymbols[i];
 
                 // Only merge for Create/Update methods (not collection/dictionary projections or polymorphic dispatch)
                 if (mm.MethodKind == ForgeMethodKind.Create || mm.MethodKind == ForgeMethodKind.Update)
@@ -423,7 +425,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         // Detect circular nested forge before expression inlining
-        DetectCircularNestedForge(methodModels, forgeMethods, diagnostics);
+        DetectCircularNestedForge(methodModels, methodSymbols, diagnostics);
         var circularErrors = diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Id == "FKF301");
         if (circularErrors)
             return new ForgeClassResult(null, diagnostics, hasErrors: true);
@@ -5471,7 +5473,28 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     var profileParamName = profileMethod.Parameters[0].Name;
                     if (profileParamName != srcParamName)
                     {
-                        adjustedExpr = SubstituteParameterName(adjustedExpr, profileParamName, srcParamName);
+                        adjustedExpr = SubstituteParam(adjustedExpr, profileParamName, srcParamName);
+                    }
+
+                    // Qualify nested forge method names from the profile class.
+                    // When the profile method calls a local method (e.g., "ToAddressDto(source.Home)"),
+                    // that name won't resolve in the consuming class. Qualify it with the profile
+                    // class's fully qualified name so the generated code compiles.
+                    var adjustedNestedMethodName = assignment.NestedForgeMethodName;
+                    var adjustedCollectionElementMethod = assignment.CollectionElementForgeMethod;
+                    var profileFqnQualified = profileSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+                    if (adjustedNestedMethodName != null && !adjustedNestedMethodName.Contains("."))
+                    {
+                        adjustedNestedMethodName = $"{profileFqnQualified}.{adjustedNestedMethodName}";
+                        // Also qualify the method call in the source expression
+                        adjustedExpr = SubstituteParam(adjustedExpr, assignment.NestedForgeMethodName, adjustedNestedMethodName);
+                    }
+                    if (adjustedCollectionElementMethod != null && !adjustedCollectionElementMethod.Contains("."))
+                    {
+                        adjustedCollectionElementMethod = $"{profileFqnQualified}.{adjustedCollectionElementMethod}";
+                        // Also qualify in the source expression
+                        adjustedExpr = SubstituteParam(adjustedExpr, assignment.CollectionElementForgeMethod, adjustedCollectionElementMethod);
                     }
 
                     // Create adjusted assignment with substituted parameter name
@@ -5480,20 +5503,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         sourceExpression: adjustedExpr,
                         ignoreIfNull: assignment.IgnoreIfNull,
                         nullCheckExpression: assignment.NullCheckExpression != null
-                            ? SubstituteParameterName(assignment.NullCheckExpression, profileMethod.Parameters[0].Name, srcParamName)
+                            ? SubstituteParam(assignment.NullCheckExpression, profileMethod.Parameters[0].Name, srcParamName)
                             : null,
                         isInitOnly: adjustedInitOnly,
                         expressionAssignment: assignment.ExpressionAssignment != null
-                            ? SubstituteParameterName(assignment.ExpressionAssignment, profileMethod.Parameters[0].Name, srcParamName)
+                            ? SubstituteParam(assignment.ExpressionAssignment, profileMethod.Parameters[0].Name, srcParamName)
                             : null,
-                        nestedForgeMethodName: assignment.NestedForgeMethodName,
+                        nestedForgeMethodName: adjustedNestedMethodName,
                         nestedForgeSourceAccessor: assignment.NestedForgeSourceAccessor != null
-                            ? SubstituteParameterName(assignment.NestedForgeSourceAccessor, profileMethod.Parameters[0].Name, srcParamName)
+                            ? SubstituteParam(assignment.NestedForgeSourceAccessor, profileMethod.Parameters[0].Name, srcParamName)
                             : null,
                         nestedForgeSourceIsRefType: assignment.NestedForgeSourceIsRefType,
-                        collectionElementForgeMethod: assignment.CollectionElementForgeMethod,
+                        collectionElementForgeMethod: adjustedCollectionElementMethod,
                         collectionSourceAccessor: assignment.CollectionSourceAccessor != null
-                            ? SubstituteParameterName(assignment.CollectionSourceAccessor, profileMethod.Parameters[0].Name, srcParamName)
+                            ? SubstituteParam(assignment.CollectionSourceAccessor, profileMethod.Parameters[0].Name, srcParamName)
                             : null,
                         collectionMaterializer: assignment.CollectionMaterializer,
                         collectionSourceIsRefType: assignment.CollectionSourceIsRefType,
@@ -5521,17 +5544,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         merged.AddRange(localAssignments);
 
         return (merged, diagnostics);
-    }
-
-    /// <summary>
-    /// Substitutes a source parameter name in an expression string.
-    /// Replaces whole-word occurrences of oldName with newName.
-    /// </summary>
-    private static string SubstituteParameterName(string expression, string oldName, string newName)
-    {
-        if (oldName == newName) return expression;
-        // Use regex for whole-word replacement to avoid partial matches
-        return Regex.Replace(expression, @"\b" + Regex.Escape(oldName) + @"\b", newName);
     }
 
     /// <summary>

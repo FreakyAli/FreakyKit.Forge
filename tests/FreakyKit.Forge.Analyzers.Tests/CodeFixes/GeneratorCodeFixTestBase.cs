@@ -20,27 +20,7 @@ namespace FreakyKit.Forge.Analyzers.Tests.CodeFixes;
 /// </summary>
 public abstract class GeneratorCodeFixTestBase
 {
-    private static readonly IReadOnlyList<MetadataReference> References = BuildReferences();
-
-    private static IReadOnlyList<MetadataReference> BuildReferences()
-    {
-        var refs = new List<MetadataReference>();
-        var runtimePath = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
-
-        refs.Add(MetadataReference.CreateFromFile(typeof(object).Assembly.Location));
-
-        var runtimeDll = Path.Combine(runtimePath, "System.Runtime.dll");
-        if (File.Exists(runtimeDll))
-            refs.Add(MetadataReference.CreateFromFile(runtimeDll));
-
-        var netstandard = Path.Combine(runtimePath, "netstandard.dll");
-        if (File.Exists(netstandard))
-            refs.Add(MetadataReference.CreateFromFile(netstandard));
-
-        refs.Add(MetadataReference.CreateFromFile(typeof(ForgeAttribute).Assembly.Location));
-
-        return refs;
-    }
+    private static readonly IReadOnlyList<MetadataReference> References = SharedTestReferences.References;
 
     protected abstract CodeFixProvider CreateCodeFixProvider();
 

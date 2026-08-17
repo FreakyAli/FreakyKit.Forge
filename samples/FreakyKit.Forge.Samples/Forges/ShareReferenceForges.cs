@@ -7,7 +7,8 @@ namespace FreakyKit.Forge.Samples;
 /// mutations leak across source and destination).
 ///
 /// Per-member override: even when the method says "share all", individual members
-/// can opt back into deep-copying via [ForgeMap(ShareReference = ForgePolicy.False)].
+/// can opt back into creating a separate collection (same element references, new list instance)
+/// via [ForgeMap(ShareReference = ForgePolicy.False)].
 /// </summary>
 [Forge]
 public static partial class ShareReferenceForges
@@ -17,5 +18,5 @@ public static partial class ShareReferenceForges
     public static partial PersonTagsDto ToSharedDto(Person source);
     // Generates:
     //   __result.Tags = source.Tags;                                        // shared (method-level)
-    //   __result.Orders = source.Orders != null ? new List<Order>(source.Orders) : null;  // copied (per-member override)
+    //   __result.Orders = source.Orders != null ? new List<Order>(source.Orders) : null;  // separate list, same Order refs (per-member override)
 }

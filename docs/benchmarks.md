@@ -394,8 +394,8 @@ Same library versions as the .NET 8 run (AutoMapper 16.1.1, Mapperly 4.3.1, Maps
 | Mapster | 13.00 ns | 1.73x | 3 | 56 B |
 | AutoMapper | 33.75 ns | 4.48x | 4 | 56 B |
 
-> *Facet excluded — cannot annotate source types with `[Flatten]`.
-
+> *Facet excluded — cannot annotate source types with `[Flatten]`.*
+>
 > **vs .NET 8:** Forge improved from 10.97 ns → 7.07 ns (**36% faster**). Forge beats hand-written outright.
 
 ---
@@ -507,7 +507,7 @@ Same library versions as the .NET 8 run (AutoMapper 16.1.1, Mapperly 4.3.1, Maps
 - **Forge remains identical to hand-written code** — same IL, same performance, same allocations. Any variation is measurement noise.
 - **The field compresses at the top.** Forge, Mapperly, and hand-written are virtually indistinguishable on .NET 10 in most scenarios. The .NET 10 JIT narrows differences between well-written source generators.
 - **Facet benefits enormously from .NET 10** — allocation overhead drops significantly (104→40 B on Simple, 160→96 B on Medium, 232→168 B on Nullable) and timing improves 30–50%. On Throughput, Facet goes from 1.55× / 1,641 KB to 1.00× / 1,016 KB — joining the top tier.
-- **AutoMapper remains 3–7× slower** — reflection-based runtime overhead is not helped by JIT improvements. The ratio gap actually widens because source generators got faster while AutoMapper stayed roughly the same.
+- **AutoMapper remains 1.2–4.5× slower on core scenarios** — reflection-based runtime overhead is not helped by JIT improvements. In real-world scenarios, AutoMapper ranges 1.19×–2.11× hand-written. The ratio gap widens on core scenarios because source generators got faster while AutoMapper stayed roughly the same.
 - **Zero allocation overhead** — Forge matches hand-written allocations in every scenario, same as on .NET 8
 
 ---
@@ -581,7 +581,7 @@ versions and benchmark parameters. All six implementations perform full deep-cop
 | AutoMapper | 5.255 us | 1.19x | 3 | 66.98 KB |
 | Facet | 25.913 us | 5.88x | 4 | 182.70 KB |
 
-> **vs .NET 8:** Forge improved from 5.912 us → 4.857 us (**18% faster**). Top four within a 10% band. Mapperly closed a 21% gap from .NET 8 (6.970 us → 4.852 us) to pull level with Forge.
+> **vs .NET 8:** Forge improved from 5.912 us → 4.857 us (**18% faster**). Top four within a 10% band. Mapperly improved from 6.970 us → 4.852 us (**~30% faster**), narrowing its gap from ~1.21× to ~1.10× hand-written and pulling level with Forge.
 
 ### Real-World: CMS Content Tree (12 mixed-type blocks + i18n)
 
@@ -639,9 +639,9 @@ versions and benchmark parameters. All six implementations perform full deep-cop
 
 - **Forge improved 15–34% across all 8 real-world scenarios** on .NET 10. The absolute times dropped significantly (e.g. CMS 274 ns → 188 ns, Inventory 403 ns → 267 ns) while the generated code itself is unchanged — this is pure JIT benefit.
 - **Forge's ratio to hand-written tightened from 1.03×–1.45× (.NET 8) to 1.10×–1.30× (.NET 10)**, median dropping from ~1.31× to ~1.19×. The .NET 10 JIT favours Forge's straight-line generated code more than the hand-written equivalents in most scenarios.
-- **Forge improved its rank in 3 scenarios** — B2B (rank 3→3 but ratio 1.22→1.13), CMS (rank 4→3), and Identity (rank 4→3). In no scenario did Forge's rank regress.
+- **Forge improved its rank in 3 scenarios** — CMS (rank 4→3), Identity (rank 4→3), and Inventory (rank 5→4). Banking regressed from rank 1→2 as Hand-written and Mapster overtook Forge on .NET 10. B2B held at rank 3 with an improved ratio (1.22→1.13).
 - **Mapperly benefits most from .NET 10** in the real-world suite. It jumped from rank 4 to rank 1 in B2B (429 ns → 194 ns, a 55% improvement) and extended its lead in CRM and Public API. Mapperly's dictionary and collection handling is particularly well-optimised by the .NET 10 JIT.
 - **Forge consistently beats AutoMapper** in all 8 scenarios. AutoMapper ranges from 1.19×–2.11× hand-written; Forge ranges from 1.10×–1.30×.
 - **Forge trades leads with Mapster**, same as on .NET 8. Mapster is narrowly faster in 7 of 8 scenarios (typically by 5–15%), but both remain in the same performance band. Forge wins on CRM Contact (193 ns vs 292 ns) where Mapster's dictionary overhead is higher.
 - **Facet remains 4×–8× hand-written** in deep-copy mode, improved from 4×–8× on .NET 8 — similar ratios but lower absolute times. Facet's allocation overhead (3.97–182.70 KB vs 1.33–62.75 KB hand-written) remains the primary bottleneck.
-- **All libraries benefited from .NET 10 JIT improvements** — hand-written code itself got 15–24% faster across scenarios, confirming the speedups are runtime-level, not library-specific.
+- **All libraries benefited from .NET 10 JIT improvements** — hand-written code itself got 15–29% faster across scenarios (including Inventory's ~29%), confirming the speedups are runtime-level, not library-specific.
