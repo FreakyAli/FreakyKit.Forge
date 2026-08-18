@@ -96,9 +96,28 @@ For most projects, add two packages:
 </ItemGroup>
 ```
 
-`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 87 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
+`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 97 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
 
 See the [full installation guide](docs/installation.md) for lightweight setups, the optional conventions package, local development without NuGet, and custom Roslyn tooling.
+
+## Terminology
+
+```
+Source (input)  ──────►  Destination (output)
+   Person                   PersonDto
+```
+
+| Term | Meaning |
+|------|---------|
+| **Source** | The type you map **from** — the method's first parameter (`Person source`) |
+| **Destination** | The type you map **to** — the return type (`PersonDto`) or second parameter in update methods |
+| **Source member** | A property/field on the source type the generator reads from |
+| **Destination member** | A property/field on the destination type the generator writes to |
+| **Flattening** | Mapping nested source properties into flat destination members by name convention (`AddressCity` matches `Address.City`) |
+| **Nested forging** | Calling another forge method to convert a type-mismatched member (requires `AllowNestedForging = true`) |
+| **Drift detection** | `StrictMapping = true` — unmapped members become errors instead of warnings |
+
+For the complete Forge glossary with examples, see the [Key Terms section in attributes.md](docs/attributes.md#key-terms).
 
 ## Features
 

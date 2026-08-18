@@ -348,8 +348,18 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
         AssertNoErrors(result);
         var generated = AssertGeneratedFiles(result, 3);
 
-        // Should have inherited Id from BaseForges + local Name + nested Inner
-        Assert.Contains("__result.Name = source.Name", generated);
+        var personOutput = result.RunResult.GeneratedTrees
+            .Where(t => t.FilePath.EndsWith("TestNs_PersonForges.Forge.g.cs"))
+            .Select(t => t.GetText().ToString())
+            .FirstOrDefault();
+        Assert.NotNull(personOutput);
+
+        // Local Name assignment
+        Assert.Contains("__result.Name = source.Name", personOutput);
+        // Inherited Id from BaseForges (shadowed by local, but present)
+        Assert.Contains("__result.Id = source.Id", personOutput);
+        // Nested Inner via InnerForges (discovered through [ForgeUses])
+        Assert.Contains("InnerForges", personOutput);
     }
 
     [Fact]
@@ -433,7 +443,7 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
     }
 
     [Fact]
-    public void ForgeIncludes_DiamondIncludes_EmitsFKF542()
+    public void ForgeIncludes_DiamondIncludes_DeduplicatesAssignments()
     {
         const string source = """
             using FreakyKit.Forge;
@@ -483,22 +493,15 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
 
-        // Bottom should have Id (from Left or Right via Root), L, R, B
-        // Id should only appear once despite diamond
         var bottomOutput = result.RunResult.GeneratedTrees
             .Select(t => t.GetText().ToString())
             .FirstOrDefault(t => t.Contains("BottomForges"));
         Assert.NotNull(bottomOutput);
         Assert.Contains("__result.B = source.B", bottomOutput);
 
-        // FKF542 emitted for diamond dedup (RightForges' Id already covered by LeftForges)
-        // Note: with local shadowing, most members emit FKF537 instead. FKF542 fires
-        // when a second included profile provides a member already inherited from a prior profile.
-        var fkf542 = result.Diagnostics.Where(d => d.Id == "FKF542").ToList();
-        // Diamond dedup occurs because LeftForges and RightForges both contribute Id from RootForges
-        // but local also maps Id, so it's actually FKF537 for all. The FKF542 fires only for
-        // non-local duplicates — in this case both get shadowed by local.
-        // This test verifies no crash and correct generation.
+        // Id should appear exactly once despite diamond inheritance
+        var idCount = bottomOutput.Split("__result.Id = source.Id").Length - 1;
+        Assert.Equal(1, idCount);
     }
 
     [Fact]
@@ -697,6 +700,7 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
 
         // Should have Age (local) and inherited DisplayName mapping from FullName
         Assert.Contains("__result.Age = source.Age", personOutput);
+        Assert.Contains("__result.DisplayName = source.FullName", personOutput);
     }
 
     [Fact]
@@ -778,10 +782,10 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
     }
 
     [Fact]
-    public void ForgeIncludes_DestMemberNotOnDerivedType_EmitsFKF539()
+    public void ForgeIncludes_InheritedBaseMembers_EmitsFKF537Shadowed()
     {
-        // Base maps ExtraField, but PersonDto (which inherits BaseDto) doesn't have ExtraField.
-        // Types are compatible but the specific member doesn't exist on the derived dest type.
+        // PersonDto inherits BaseDto so it HAS all base members.
+        // All base members are locally discoverable, so FKF537 (shadowed) fires.
         const string source = """
             using FreakyKit.Forge;
             namespace TestNs
@@ -790,21 +794,11 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
                 public class BaseDto { public int Id { get; set; } public string ExtraField { get; set; } }
 
                 public class Person : BaseEntity { public string Name { get; set; } }
-                // PersonDto inherits from BaseDto (so types are compatible)
-                // but hides ExtraField by not redeclaring — wait, it inherits it.
-                // To truly not have ExtraField, PersonDto must NOT inherit from BaseDto
-                // but that breaks type compatibility. So this scenario requires
-                // BaseDto to have a [ForgeMap] member that maps to a name PersonDto doesn't have.
                 public class PersonDto : BaseDto { public string Name { get; set; } }
-
-                public class AuditEntity : BaseEntity { public string AuditNote { get; set; } }
-                public class AuditDto { public int Id { get; set; } public string AuditNote { get; set; } }
-                // AuditDto does NOT have ExtraField but PersonDto does (inherited)
 
                 [Forge]
                 public static partial class BaseForges
                 {
-                    // Maps BaseEntity -> BaseDto, which includes ExtraField
                     public static partial BaseDto ToBaseDto(BaseEntity source);
                 }
 
@@ -819,9 +813,6 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
-        // In this case PersonDto inherits BaseDto so it HAS all base members.
-        // FKF539 only fires when a dest member genuinely doesn't exist.
-        // All base members are inherited, so FKF537 (shadowed) fires instead.
         var fkf537 = result.Diagnostics.Where(d => d.Id == "FKF537").ToList();
         Assert.True(fkf537.Count >= 1);
     }
@@ -917,8 +908,9 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
             .FirstOrDefault(t => t.Contains("PersonForges"));
         Assert.NotNull(personOutput);
 
-        // Name should be in object initializer (init-only), not separate assignment
+        // Name should be in object initializer (init-only), not separate __result.Name assignment
         Assert.Contains("Name = source.Name", personOutput);
+        Assert.DoesNotContain("__result.Name = source.Name", personOutput);
     }
 
     [Fact]
@@ -1079,6 +1071,14 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
 
         var result = RunGenerator(source);
         AssertNoErrors(result);
-        // Should not crash — polymorphic dispatch methods are skipped during profile merging
+
+        // Polymorphic dispatch methods are skipped during profile merging
+        var dogOutput = result.RunResult.GeneratedTrees
+            .Where(t => t.FilePath.EndsWith("TestNs_DogForges.Forge.g.cs"))
+            .Select(t => t.GetText().ToString())
+            .FirstOrDefault();
+        Assert.NotNull(dogOutput);
+        Assert.Contains("__result.Breed = source.Breed", dogOutput);
+        Assert.Contains("__result.Id = source.Id", dogOutput);
     }
 }

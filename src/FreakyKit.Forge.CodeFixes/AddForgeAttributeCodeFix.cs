@@ -8,6 +8,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
+using Microsoft.CodeAnalysis.Simplification;
 
 namespace FreakyKit.Forge.CodeFixes;
 
@@ -73,8 +74,12 @@ public sealed class AddForgeAttributeCodeFix : CodeFixProvider
         Document document, ClassDeclarationSyntax classDecl, CancellationToken ct)
     {
         var editor = await DocumentEditor.CreateAsync(document, ct);
-        var attribute = editor.Generator.Attribute(
-            editor.Generator.IdentifierName("Forge"));
+        // Use fully qualified name with Simplifier annotation so it resolves
+        // to "Forge" when the using directive is present, and stays fully
+        // qualified when it isn't.
+        var qualifiedName = editor.Generator.DottedName("FreakyKit.Forge.Forge");
+        var attribute = editor.Generator.Attribute(qualifiedName)
+            .WithAdditionalAnnotations(Simplifier.Annotation);
         editor.AddAttribute(classDecl, attribute);
         return editor.GetChangedDocument();
     }

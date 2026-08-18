@@ -1,5 +1,56 @@
 # Attributes Reference
 
+## Key Terms
+
+Throughout Forge's documentation, these terms appear frequently:
+
+```
+Source ──────────────► Destination
+(input data)          (output data)
+```
+
+| Term | Meaning | Example |
+|------|---------|---------|
+| **Source** (or **source type**) | The type you are mapping **from** — the input data. This is the first parameter of a forge method. | `Person` in `ToDto(Person source)` |
+| **Destination** (or **dest type**) | The type you are mapping **to** — the output data. This is the return type (create methods) or second parameter (update methods). | `PersonDto` in `partial PersonDto ToDto(...)` |
+| **Source member** | A property or field on the source type that provides a value. The generator reads from source members. | `Person.Name` |
+| **Destination member** | A property or field on the destination type that receives a value. The generator writes to destination members. | `PersonDto.Name` |
+| **Assignment** | A single generated line that copies a value from a source member to a destination member. | `__result.Name = source.Name;` |
+| **Forge method** | A `static partial` method in a `[Forge]` class. The generator provides the implementation body. | `public static partial PersonDto ToDto(Person source);` |
+| **Forge class** | A `static partial` class decorated with `[Forge]` that contains forge methods. | `public static partial class PersonForges` |
+| **Create method** | A forge method that returns a new destination object. | `PersonDto ToDto(Person source)` |
+| **Update method** | A forge method that modifies an existing destination object in place (void return, two parameters). | `void Update(Person source, PersonDto dest)` |
+| **Nested forging** | When a source member and destination member have different types, and another forge method converts between them. Requires `AllowNestedForging = true`. | `source.Address` (type `Address`) mapped to `__result.Address` (type `AddressDto`) via `ToAddressDto()` |
+| **Flattening** | Mapping nested source properties into flat destination members by name convention. `AddressCity` on the destination matches `Address.City` on the source. Requires `AllowFlattening = true`. | `source.Address.City` mapped to `__result.AddressCity` |
+| **Member discovery** | The process by which the generator scans source and destination types to find matchable properties and fields. By default only public properties are discovered; use `ShouldIncludeFields = true` to add fields. | — |
+| **Mapping profile** | A reusable set of base-type property mappings that can be inherited by other forge classes via `[ForgeIncludes]`. | `BaseForges` mapping `Id` and `CreatedAt`, inherited by `PersonForges` |
+| **Deep copy** | Creating a completely independent copy of an object or collection. Changes to the copy do not affect the original. This is Forge's default behavior for same-type collections. | `new List<Order>(source.Orders)` |
+| **Reference sharing** | Assigning the same object/collection reference to the destination. Faster, but changes to one affect the other. Enabled with `ShareReference = true`. | `__result.Tags = source.Tags` |
+| **Hooks** | User-defined partial methods (`OnBeforeMethodName` / `OnAfterMethodName`) that the generator calls before or after the mapping assignments. | `static partial void OnBeforeToDto(Person source, PersonDto __result);` |
+| **Drift detection** | Compile-time enforcement that every member is mapped. When `StrictMapping = true`, unmapped members become errors instead of warnings, catching type changes early. | Adding a property to `PersonDto` without a matching source member triggers FKF110 |
+
+**Visual example:**
+
+```csharp
+// Source type — where data comes FROM         Destination type — where data goes TO
+public class Person                            public class PersonDto
+{                                              {
+    public string Name { get; set; }    ──►        public string Name { get; set; }
+    public int Age { get; set; }        ──►        public int Age { get; set; }
+    public Address Home { get; set; }   ──►        public AddressDto Home { get; set; }
+}                                              }                  ▲
+                                                                  │ nested forging
+// Forge method: Source is input, Destination is output
+[Forge]
+public static partial class PersonForges
+{
+    //              return = destination    parameter = source
+    public static partial PersonDto ToDto(Person source);
+}
+```
+
+---
+
 ## Quick Start
 
 Forge uses 7 attributes across 3 layers:

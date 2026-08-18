@@ -109,6 +109,32 @@ public static partial class MyForges
     }
 
     [Fact]
+    public async Task FKF524_NoFixWhenForgeAlreadyExists()
+    {
+        // Class has both [Forge] and [ForgeUses] — no FKF524 emitted, no code fix needed
+        const string source = @"
+using FreakyKit.Forge;
+
+public class Source { public string Name { get; set; } }
+public class Dest { public string Name { get; set; } }
+
+[Forge]
+public static partial class OtherForges
+{
+    public static partial Dest ToDto(Source source);
+}
+
+[Forge]
+[ForgeUses(typeof(OtherForges))]
+public static partial class MyForges
+{
+    public static partial Dest ToDto(Source source);
+}";
+
+        await VerifyNoCodeFixAsync(source, "FKF524");
+    }
+
+    [Fact]
     public async Task FKF538_AddsForgeToClassWithForgeIncludes()
     {
         const string source = @"

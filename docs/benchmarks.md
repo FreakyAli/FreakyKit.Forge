@@ -507,7 +507,7 @@ Same library versions as the .NET 8 run (AutoMapper 16.1.1, Mapperly 4.3.1, Maps
 - **Forge remains identical to hand-written code** — same IL, same performance, same allocations. Any variation is measurement noise.
 - **The field compresses at the top.** Forge, Mapperly, and hand-written are virtually indistinguishable on .NET 10 in most scenarios. The .NET 10 JIT narrows differences between well-written source generators.
 - **Facet benefits enormously from .NET 10** — allocation overhead drops significantly (104→40 B on Simple, 160→96 B on Medium, 232→168 B on Nullable) and timing improves 30–50%. On Throughput, Facet goes from 1.55× / 1,641 KB to 1.00× / 1,016 KB — joining the top tier.
-- **AutoMapper remains 1.2–4.5× slower on core scenarios** — reflection-based runtime overhead is not helped by JIT improvements. In real-world scenarios, AutoMapper ranges 1.19×–2.11× hand-written. The ratio gap widens on core scenarios because source generators got faster while AutoMapper stayed roughly the same.
+- **AutoMapper remains 1.3–7.5× slower on core scenarios** (Simple Mapping peaks at 7.54×; medium/deep scenarios 1.3–4.7×) — reflection-based runtime overhead is not helped by JIT improvements. In real-world scenarios, AutoMapper ranges 1.19×–2.11× hand-written. The ratio gap widens on core scenarios because source generators got faster while AutoMapper stayed roughly the same.
 - **Zero allocation overhead** — Forge matches hand-written allocations in every scenario, same as on .NET 8
 
 ---

@@ -578,10 +578,11 @@ public sealed class SnapshotTests : GeneratorTestBase
         var result = RunGenerator(source);
         AssertNoErrors(result);
 
-        // Get PersonForges output specifically for snapshot
+        // Get PersonForges output by generator hint name in file path
         var personOutput = result.RunResult.GeneratedTrees
+            .Where(t => t.FilePath.EndsWith("TestNs_PersonForges.Forge.g.cs"))
             .Select(t => t.GetText().ToString())
-            .FirstOrDefault(t => t.Contains("PersonForges"));
+            .FirstOrDefault();
         Assert.NotNull(personOutput);
 
         AssertSnapshot(personOutput);

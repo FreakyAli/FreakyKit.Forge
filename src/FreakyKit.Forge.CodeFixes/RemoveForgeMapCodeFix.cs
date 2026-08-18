@@ -58,7 +58,12 @@ public sealed class RemoveForgeMapCodeFix : CodeFixProvider
             .SelectMany(al => al.Attributes)
             .FirstOrDefault(a =>
             {
-                var name = a.Name.ToString();
+                var name = a.Name switch
+                {
+                    QualifiedNameSyntax qns => qns.Right.Identifier.Text,
+                    AliasQualifiedNameSyntax aqs => aqs.Name.Identifier.Text,
+                    _ => a.Name.ToString()
+                };
                 return name == "ForgeMap" || name == "ForgeMapAttribute";
             });
     }
@@ -72,16 +77,18 @@ public sealed class RemoveForgeMapCodeFix : CodeFixProvider
         var attributeList = attribute.FirstAncestorOrSelf<AttributeListSyntax>();
         if (attributeList is null) return document;
 
-        SyntaxNode newRoot;
+        SyntaxNode? newRoot;
         if (attributeList.Attributes.Count == 1)
         {
             // Only attribute in the list — remove the entire [ForgeMap] list
             newRoot = root.RemoveNode(attributeList, SyntaxRemoveOptions.KeepNoTrivia);
+            if (newRoot is null) return document;
         }
         else
         {
             // Multiple attributes in the list — remove just [ForgeMap]
             var newList = attributeList.RemoveNode(attribute, SyntaxRemoveOptions.KeepNoTrivia);
+            if (newList is null) return document;
             newRoot = root.ReplaceNode(attributeList, newList);
         }
 

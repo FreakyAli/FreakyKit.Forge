@@ -1246,7 +1246,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     // FKF109: field has both [ForgeIgnore] and [ForgeMap] (only for directly declared members)
                     if (isDeclaredType && HasIgnoreAttribute(field) && GetForgeMapName(field) != null)
                     {
-                        var loc = field.Locations.FirstOrDefault() ?? forgeMethod.Locations.FirstOrDefault();
+                        var loc = field.Locations.FirstOrDefault(l => l.IsInSource) ?? forgeMethod.Locations.FirstOrDefault();
                         if (loc != null)
                             context.ReportDiagnostic(Diagnostic.Create(
                                 ForgeDiagnostics.MemberBothIgnoredAndMapped, loc, field.Name, type.Name));
@@ -1295,7 +1295,7 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
                     // FKF112: [ForgeMap] target is the field's own name — no-op
                     if (isDeclaredType && mapName != null && string.Equals(mapName, field.Name, System.StringComparison.OrdinalIgnoreCase))
                     {
-                        var loc112 = field.Locations.FirstOrDefault() ?? forgeMethod.Locations.FirstOrDefault();
+                        var loc112 = field.Locations.FirstOrDefault(l => l.IsInSource) ?? forgeMethod.Locations.FirstOrDefault();
                         if (loc112 != null)
                             context.ReportDiagnostic(Diagnostic.Create(
                                 ForgeDiagnostics.ForgeMapSelfReference, loc112, field.Name, type.Name, mapName));

@@ -2,6 +2,8 @@
 
 Forge emits 97 diagnostics across 9 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
+**Quick terminology:** In diagnostic messages, **source** = the type you map FROM (the method parameter), **destination** = the type you map TO (the return type). A "source member" is a property on the input type; a "destination member" is a property on the output type.
+
 ## Mode & Visibility
 
 ### FKF001 — Explicit mode activated

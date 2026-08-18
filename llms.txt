@@ -2,7 +2,7 @@
 
 > Compile-time object mapping for C# powered by Roslyn source generators. Zero runtime reflection, zero allocation overhead, hand-written-code performance.
 
-Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 87 diagnostics (FKF001–FKF807) to catch mistakes at build time.
+Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 97 diagnostics (FKF001–FKF807) to catch mistakes at build time.
 
 ## Installation
 
@@ -15,10 +15,15 @@ Both pull in `FreakyKit.Forge` (core attributes) transitively.
 
 ## Core Concepts
 
+**Source** = the type you map FROM (input). First parameter of a forge method.
+**Destination** = the type you map TO (output). Return type (create) or second parameter (update).
+**Source member** = property/field on source type the generator reads from.
+**Destination member** = property/field on destination type the generator writes to.
+
 **Forge class** — a `static partial class` decorated with `[Forge]`. Contains forge method declarations.
 **Forge method** — a `static partial` method whose body the generator writes. Two shapes:
-- **Create**: one parameter (source), returns destination type.
-- **Update**: two parameters (source, existing destination), returns void.
+- **Create**: one parameter (source), returns destination type. Example: `PersonDto ToDto(Person source)`
+- **Update**: two parameters (source, existing destination), returns void. Example: `void Update(Person source, PersonDto dest)`
 
 **Member matching** — properties matched by name (case-insensitive). Fields included only with `ShouldIncludeFields = true`.
 
@@ -275,6 +280,7 @@ Forge ships code fix providers alongside the analyzer. When a diagnostic fires i
 | FKF112 (self-referencing [ForgeMap]) | Remove `[ForgeMap]` |
 | FKF525 ([ForgeMethod] without [Forge] class) | Add `[Forge]` attribute to class |
 | FKF526 ([ForgeConverter] without [Forge] class) | Add `[Forge]` attribute to class |
+| FKF538 ([ForgeIncludes] without [Forge] class) | Add `[Forge]` attribute to class |
 
 ## Common Anti-Patterns
 

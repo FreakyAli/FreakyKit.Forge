@@ -52,7 +52,7 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 
 The generator silently skips members and methods in several places without emitting diagnostics. When a user's mapping doesn't produce the output they expect, the absence of any diagnostic makes debugging extremely difficult. Every observable decision the generator makes should be communicated to the user via a diagnostic at the appropriate level (Error, Warning, or Info).
 
-**Rule:** The generator must NEVER silently skip anything that affects user-observable output. Every skip needs a diagnostic.
+**Rule:** The generator must NEVER silently skip anything that affects user-observable output. Every skip needs a diagnostic. This applies to the **generator** specifically — some diagnostics (FKF002, FKF010, FKF100, FKF300) are intentionally deferred to the **analyzer**, which is co-deployed in the same NuGet package. The guarantee is: between the generator and the analyzer combined, the user always sees feedback for every skipped member or method. No silent drops across the full toolchain.
 
 **Audit Results**
 

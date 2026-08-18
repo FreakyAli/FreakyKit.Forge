@@ -371,6 +371,11 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         // Merge included profile assignments into each method (ForgeIncludes)
         if (includedProfileClasses.Count > 0)
         {
+            // Cache profile method extraction results across consuming methods to avoid re-extraction
+            var profileMethodCache = new Dictionary<string, ForgeMethodModel?>();
+            // Track which profiles had at least one compatible method across ALL consuming methods
+            var allCompatibleProfiles = new HashSet<string>();
+
             var mergedMethodModels = new List<ForgeMethodModel>();
             for (int i = 0; i < methodModels.Count; i++)
             {
@@ -380,12 +385,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 // Only merge for Create/Update methods (not collection/dictionary projections or polymorphic dispatch)
                 if (mm.MethodKind == ForgeMethodKind.Create || mm.MethodKind == ForgeMethodKind.Update)
                 {
-                    var (mergedAssignments, mergeDiags) = MergeIncludedProfileAssignments(
+                    var (mergedAssignments, mergeDiags, compatibleProfiles) = MergeIncludedProfileAssignments(
                         originalMethod, type, includedProfileClasses,
                         new List<MemberAssignmentModel>(mm.Assignments),
                         ctx.SemanticModel.Compilation, ct,
-                        mm.Construction);
+                        mm.Construction,
+                        profileMethodCache);
                     diagnostics.AddRange(mergeDiags);
+                    foreach (var p in compatibleProfiles)
+                        allCompatibleProfiles.Add(p);
 
                     if (mergedAssignments.Count != mm.Assignments.Count ||
                         !mergedAssignments.SequenceEqual(mm.Assignments))
@@ -422,6 +430,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 mergedMethodModels.Add(mm);
             }
             methodModels = mergedMethodModels;
+
+            // FKF536: emit once per included profile class that had no compatible method
+            // across ANY consuming method in this forge class
+            foreach (var profileFqn in includedProfileClasses)
+            {
+                if (!allCompatibleProfiles.Contains(profileFqn))
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.IncludesNoCompatibleMethod,
+                        type.Locations.FirstOrDefault(),
+                        profileFqn,
+                        type.Name));
+                }
+            }
         }
 
         // Detect circular nested forge before expression inlining
@@ -2318,6 +2340,16 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
                     updated = assignment.WithExpressionAssignment(inlined);
                     anyUpdated = true;
+
+                    // FKF506: nested forge method not resolvable in expression tree
+                    if (inlined == null)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.ExpressionMemberExcluded,
+                            location: null,
+                            assignment.DestMemberName,
+                            $"Nested forge method '{assignment.NestedForgeMethodName}' could not be inlined into the expression tree"));
+                    }
                 }
                 // Collection with nested-forge element conversion: inline the per-element body
                 // into a .Select(x => ...) lambda, then apply the materializer.
@@ -2344,6 +2376,12 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         updated = assignment.WithExpressionAssignment(null);
                         anyUpdated = true;
+
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.ExpressionMemberExcluded,
+                            location: null,
+                            assignment.DestMemberName,
+                            $"Collection element forge method '{assignment.CollectionElementForgeMethod}' could not be inlined into the expression tree"));
                     }
                     else
                     {
@@ -4739,79 +4777,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         Microsoft.CodeAnalysis.Compilation compilation,
         List<Diagnostic> parentDiagnostics)
     {
-        var diagnostics = new List<Diagnostic>();
-        var includedFqns = new List<string>();
-
-        var forgeUsesAttr = forgeClass.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeUsesAttribute");
-
-        if (forgeUsesAttr == null)
-            return (includedFqns, diagnostics);
-
-        // Extract the Type[] from the constructor argument (params)
-        if (forgeUsesAttr.ConstructorArguments.Length > 0)
-        {
-            var arg = forgeUsesAttr.ConstructorArguments[0];
-            // The argument is an array of TypedConstants
-            if (arg.Kind == TypedConstantKind.Array)
-            {
-                foreach (var typeValue in arg.Values)
-                {
-                    if (typeValue.Value is INamedTypeSymbol includedType)
-                    {
-                        var includedFqn = includedType.ToDisplayString();
-                        var forgeClassFqn = forgeClass.ToDisplayString();
-
-                        // Check if included class exists and is a forge
-                        var includedSymbol = compilation.GetTypeByMetadataName(includedFqn);
-                        if (includedSymbol == null)
-                        {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.IncludedForgeClassNotFound,
-                                forgeClass.Locations[0],
-                                includedFqn));
-                            continue;
-                        }
-
-                        // Check if included class has [Forge]
-                        var hasForgeAttr = includedSymbol.GetAttributes()
-                            .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
-                        if (!hasForgeAttr)
-                        {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.IncludedClassNotForge,
-                                forgeClass.Locations[0],
-                                includedFqn));
-                            continue;
-                        }
-
-                        // Check for direct self-include
-                        if (includedFqn == forgeClassFqn)
-                        {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.CircularForgeIncludes,
-                                forgeClass.Locations[0],
-                                $"{forgeClass.Name} → {forgeClass.Name}"));
-                            continue;
-                        }
-
-                        // Check for transitive cycles (A uses B uses A, etc.)
-                        if (DetectCircularForgeUses(forgeClassFqn, includedFqn, compilation, new HashSet<string>(), out var cycle))
-                        {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.CircularForgeIncludes,
-                                forgeClass.Locations[0],
-                                string.Join(" → ", cycle)));
-                            continue;
-                        }
-
-                        includedFqns.Add(includedFqn);
-                    }
-                }
-            }
-        }
-
-        return (includedFqns, diagnostics);
+        return ExtractAndValidateForgeClassReferences(
+            forgeClass, compilation,
+            attributeDisplayName: "FreakyKit.Forge.ForgeUsesAttribute",
+            notFoundDiagnostic: ForgeDiagnostics.IncludedForgeClassNotFound,
+            notForgeDiagnostic: ForgeDiagnostics.IncludedClassNotForge,
+            circularDiagnostic: ForgeDiagnostics.CircularForgeIncludes,
+            circularDetector: DetectCircularForgeUses);
     }
 
     /// <summary>
@@ -5127,31 +5099,36 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         return false;
     }
 
-    // ─── ForgeIncludes: Extraction & Validation ──────────────────────────────
+    // ─── Shared Forge Class Reference Validation ─────────────────────────────
 
     /// <summary>
-    /// Extracts and validates [ForgeIncludes] attribute on a forge class.
-    /// Mirrors ExtractAndValidateForgeUses but uses ForgeIncludes-specific diagnostics (FKF533-538).
-    /// Returns the list of validated included profile class FQNs.
+    /// Shared helper for extracting and validating forge class references from an attribute
+    /// (ForgeUses or ForgeIncludes). Both attributes have identical structure (params Type[])
+    /// and identical validation flow — only the attribute name and diagnostic descriptors differ.
     /// </summary>
-    private static (IReadOnlyList<string> IncludedFqns, List<Diagnostic> Diagnostics) ExtractAndValidateForgeIncludes(
+    private delegate bool CircularDetector(string origin, string target, Microsoft.CodeAnalysis.Compilation compilation, HashSet<string> visited, out List<string> cycle);
+
+    private static (IReadOnlyList<string> IncludedFqns, List<Diagnostic> Diagnostics) ExtractAndValidateForgeClassReferences(
         INamedTypeSymbol forgeClass,
         Microsoft.CodeAnalysis.Compilation compilation,
-        List<Diagnostic> parentDiagnostics)
+        string attributeDisplayName,
+        DiagnosticDescriptor notFoundDiagnostic,
+        DiagnosticDescriptor notForgeDiagnostic,
+        DiagnosticDescriptor circularDiagnostic,
+        CircularDetector circularDetector)
     {
         var diagnostics = new List<Diagnostic>();
         var includedFqns = new List<string>();
 
-        var forgeIncludesAttr = forgeClass.GetAttributes()
-            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeIncludesAttribute");
+        var attr = forgeClass.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == attributeDisplayName);
 
-        if (forgeIncludesAttr == null)
+        if (attr == null)
             return (includedFqns, diagnostics);
 
-        // Extract the Type[] from the constructor argument (params)
-        if (forgeIncludesAttr.ConstructorArguments.Length > 0)
+        if (attr.ConstructorArguments.Length > 0)
         {
-            var arg = forgeIncludesAttr.ConstructorArguments[0];
+            var arg = attr.ConstructorArguments[0];
             if (arg.Kind == TypedConstantKind.Array)
             {
                 foreach (var typeValue in arg.Values)
@@ -5161,45 +5138,31 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         var includedFqn = includedType.ToDisplayString();
                         var forgeClassFqn = forgeClass.ToDisplayString();
 
-                        // Check if included class exists
                         var includedSymbol = compilation.GetTypeByMetadataName(includedFqn);
                         if (includedSymbol == null)
                         {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.IncludesForgeClassNotFound,
-                                forgeClass.Locations[0],
-                                includedFqn));
+                            diagnostics.Add(Diagnostic.Create(notFoundDiagnostic, forgeClass.Locations[0], includedFqn));
                             continue;
                         }
 
-                        // Check if included class has [Forge]
                         var hasForgeAttr = includedSymbol.GetAttributes()
                             .Any(a => a.AttributeClass?.ToDisplayString() == "FreakyKit.Forge.ForgeAttribute");
                         if (!hasForgeAttr)
                         {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.IncludesClassNotForge,
-                                forgeClass.Locations[0],
-                                includedFqn));
+                            diagnostics.Add(Diagnostic.Create(notForgeDiagnostic, forgeClass.Locations[0], includedFqn));
                             continue;
                         }
 
-                        // Check for direct self-include
                         if (includedFqn == forgeClassFqn)
                         {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.CircularForgeIncludesProfile,
-                                forgeClass.Locations[0],
+                            diagnostics.Add(Diagnostic.Create(circularDiagnostic, forgeClass.Locations[0],
                                 $"{forgeClass.Name} → {forgeClass.Name}"));
                             continue;
                         }
 
-                        // Check for transitive cycles
-                        if (DetectCircularForgeIncludes(forgeClassFqn, includedFqn, compilation, new HashSet<string>(), out var cycle))
+                        if (circularDetector(forgeClassFqn, includedFqn, compilation, new HashSet<string>(), out var cycle))
                         {
-                            diagnostics.Add(Diagnostic.Create(
-                                ForgeDiagnostics.CircularForgeIncludesProfile,
-                                forgeClass.Locations[0],
+                            diagnostics.Add(Diagnostic.Create(circularDiagnostic, forgeClass.Locations[0],
                                 string.Join(" → ", cycle)));
                             continue;
                         }
@@ -5211,6 +5174,26 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         return (includedFqns, diagnostics);
+    }
+
+    // ─── ForgeIncludes: Extraction & Validation ──────────────────────────────
+
+    /// <summary>
+    /// Extracts and validates [ForgeIncludes] attribute on a forge class.
+    /// Delegates to shared helper with ForgeIncludes-specific diagnostics (FKF533-538).
+    /// </summary>
+    private static (IReadOnlyList<string> IncludedFqns, List<Diagnostic> Diagnostics) ExtractAndValidateForgeIncludes(
+        INamedTypeSymbol forgeClass,
+        Microsoft.CodeAnalysis.Compilation compilation,
+        List<Diagnostic> parentDiagnostics)
+    {
+        return ExtractAndValidateForgeClassReferences(
+            forgeClass, compilation,
+            attributeDisplayName: "FreakyKit.Forge.ForgeIncludesAttribute",
+            notFoundDiagnostic: ForgeDiagnostics.IncludesForgeClassNotFound,
+            notForgeDiagnostic: ForgeDiagnostics.IncludesClassNotForge,
+            circularDiagnostic: ForgeDiagnostics.CircularForgeIncludesProfile,
+            circularDetector: DetectCircularForgeIncludes);
     }
 
     /// <summary>
@@ -5285,20 +5268,24 @@ public sealed class ForgeGenerator : IIncrementalGenerator
     /// - Skips assignments whose destination member doesn't exist on the consuming dest type
     /// - Rechecks init-only status against the consuming dest type
     /// - Skips assignments that overlap with the consuming method's constructor parameters
+    /// - Returns the set of profile FQNs that had at least one compatible method (for FKF536 aggregation)
     /// </summary>
-    private static (List<MemberAssignmentModel> MergedAssignments, List<Diagnostic> Diagnostics) MergeIncludedProfileAssignments(
+    private static (List<MemberAssignmentModel> MergedAssignments, List<Diagnostic> Diagnostics, HashSet<string> CompatibleProfiles) MergeIncludedProfileAssignments(
         IMethodSymbol method,
         INamedTypeSymbol forgeClass,
         IReadOnlyList<string> includedProfileFqns,
         List<MemberAssignmentModel> localAssignments,
         Microsoft.CodeAnalysis.Compilation compilation,
         System.Threading.CancellationToken ct,
-        ConstructionModel? construction = null)
+        ConstructionModel? construction = null,
+        Dictionary<string, ForgeMethodModel?>? profileMethodCache = null)
     {
         var diagnostics = new List<Diagnostic>();
 
+        var compatibleProfiles = new HashSet<string>();
+
         if (includedProfileFqns.Count == 0)
-            return (localAssignments, diagnostics);
+            return (localAssignments, diagnostics, compatibleProfiles);
 
         var srcType = method.Parameters[0].Type;
         var destType = method.ReturnType;
@@ -5391,13 +5378,26 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 if (!srcCompatible || !destCompatible) continue;
 
                 classHasCompatible = true;
+                compatibleProfiles.Add(profileFqn);
+                ct.ThrowIfCancellationRequested();
 
-                // Extract this profile method's assignments by running it through ExtractForgeMethod
-                var includedForgeClasses = ExtractIncludedForgeClassesForProfile(profileSymbol, compilation);
-                var (profileMethodModel, profileDiags) = ExtractForgeMethod(profileMethod, profileSymbol, compilation, ct, includedForgeClasses);
+                // Extract profile method (cached across consuming methods)
+                var cacheKey = profileMethod.ToDisplayString();
+                ForgeMethodModel? profileMethodModel;
+                if (profileMethodCache != null && profileMethodCache.TryGetValue(cacheKey, out var cached))
+                {
+                    profileMethodModel = cached;
+                }
+                else
+                {
+                    var includedForgeClasses = ExtractIncludedForgeClassesForProfile(profileSymbol, compilation);
+                    var (extracted, profileDiags) = ExtractForgeMethod(profileMethod, profileSymbol, compilation, ct, includedForgeClasses);
+                    profileMethodModel = profileDiags.Any(d => d.Severity == DiagnosticSeverity.Error) ? null : extracted;
+                    if (profileMethodCache != null)
+                        profileMethodCache[cacheKey] = profileMethodModel;
+                }
 
-                // Skip if profile method extraction had errors
-                if (profileMethodModel == null || profileDiags.Any(d => d.Severity == DiagnosticSeverity.Error))
+                if (profileMethodModel == null)
                     continue;
 
                 // Merge assignments, adjusting source parameter name
@@ -5494,7 +5494,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                     {
                         adjustedCollectionElementMethod = $"{profileFqnQualified}.{adjustedCollectionElementMethod}";
                         // Also qualify in the source expression
-                        adjustedExpr = SubstituteParam(adjustedExpr, assignment.CollectionElementForgeMethod, adjustedCollectionElementMethod);
+                        adjustedExpr = SubstituteParam(adjustedExpr, assignment.CollectionElementForgeMethod!, adjustedCollectionElementMethod);
                     }
 
                     // Create adjusted assignment with substituted parameter name
@@ -5528,14 +5528,6 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 }
             }
 
-            if (!classHasCompatible)
-            {
-                diagnostics.Add(Diagnostic.Create(
-                    ForgeDiagnostics.IncludesNoCompatibleMethod,
-                    GetSafeLocation(method),
-                    profileFqn,
-                    forgeClass.Name));
-            }
         }
 
         // Prepend inherited assignments before local ones (base first, derived second)
@@ -5543,7 +5535,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         merged.AddRange(inheritedAssignments);
         merged.AddRange(localAssignments);
 
-        return (merged, diagnostics);
+        return (merged, diagnostics, compatibleProfiles);
     }
 
     /// <summary>

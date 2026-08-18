@@ -164,7 +164,7 @@ PrintHeader("16. Strict Mapping (StrictMapping = true)");
 var strictSource = new StrictSource { Id = 42, Name = "Strict Alice", Email = "strict@example.com" };
 var strictDto = StrictMappingForges.ToStrictDto(strictSource);
 Console.WriteLine($"  All members must match: Id={strictDto.Id}, Name={strictDto.Name}, Email={strictDto.Email}");
-Console.WriteLine($"  Try adding a property to StrictSource — the build will fail with FKF110/FKF111");
+Console.WriteLine($"  Try adding a property to StrictSource (FKF111) or StrictDto (FKF110) — the build will fail");
 
 // ─── 17. Cross-Class Method Sharing ──────────────────────────
 
@@ -206,7 +206,8 @@ Console.WriteLine($"  Dict → Object: AppName={roundTripped.AppName}, MaxRetrie
 PrintHeader("21. Expression Projection (GenerateExpression = true)");
 var projDto = ProjectionForges.ToProjectionDto(person);
 Console.WriteLine($"  Imperative: Id={projDto.Id}, Name={projDto.FirstName}, Email={projDto.Email}");
-Console.WriteLine($"  Expression property also generated: ProjectionForges.ToProjectionDtoExpression");
+var exprResult = ProjectionForges.ToProjectionDtoExpression.Compile()(person);
+Console.WriteLine($"  Expression: Id={exprResult.Id}, Name={exprResult.FirstName}, Email={exprResult.Email}");
 Console.WriteLine($"  Use with EF Core: dbContext.People.Select(ProjectionForges.ToProjectionDtoExpression)");
 
 // ─── Conventions ──────────────────────────────────────────────
