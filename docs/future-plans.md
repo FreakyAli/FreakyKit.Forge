@@ -33,82 +33,78 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 
 | # | Feature | Priority | Impact | Effort | Notes |
 |---|---------|----------|--------|--------|-------|
-| 8 | Mapping profiles/inheritance | P3 | Medium | Medium-High | Cross-class reuse via `[ForgeIncludes]` |
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
-| 15a | Additional code fix providers | P2 | Medium | Low | FKF109, FKF112, FKF524/525/526, more |
-| 16 | Expand samples project | P2 | Medium | Low-Medium | Dictionary, EF Core, conditional mapping, ForgeUses, ShareReference |
-| ~~17~~ | ~~Migration guides~~ | ~~P2~~ | ~~High~~ | ~~Medium~~ | ~~Done — AutoMapper, Mapperly, Mapster, Facet~~ |
-| 18 | Project config files | P2 | Low | Low | global.json + .editorconfig |
 | 19 | dotnet new template | P3 | Medium | Medium | `dotnet new forge-mapper` scaffold |
 | 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
-| 21 | .NET 10 benchmarks | P3 | Low | Medium | Fill TODO placeholders in benchmarks.md |
+| 22 | Eliminate silent skips | P2 | High | Medium | Add diagnostics for every silent skip in the generator |
 
-> **Completed (removed from backlog):** #6 Polymorphic mapping, #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet)
+> **Completed (removed from backlog):** #6 Polymorphic mapping, #8 Mapping profiles/inheritance (`[ForgeIncludes]`, FKF533–542), #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet), #18 Project config files (global.json + .editorconfig), #15a Code fix providers (FKF109, FKF112, FKF525, FKF526), #16 Expand samples project (6 new samples: dictionary, projection, strict, ForgeUses, conditional, ShareReference), Orphaned attributes validation (FKF527/FKF528 now inspect forge method signatures), #21 .NET 10 benchmarks (core + 8 real-world scenarios, multi-TFM)
+
+---
+
+## P2 Fixes — Eliminate Silent Skips
+
+### 22. Eliminate Silent Skips — `P2`
+
+**Type:** Fix — Diagnostic Coverage
+
+**Why**
+
+The generator silently skips members and methods in several places without emitting diagnostics. When a user's mapping doesn't produce the output they expect, the absence of any diagnostic makes debugging extremely difficult. Every observable decision the generator makes should be communicated to the user via a diagnostic at the appropriate level (Error, Warning, or Info).
+
+**Rule:** The generator must NEVER silently skip anything that affects user-observable output. Every skip needs a diagnostic. This applies to the **generator** specifically — some diagnostics (FKF002, FKF010, FKF100, FKF300) are intentionally deferred to the **analyzer**, which is co-deployed in the same NuGet package. The guarantee is: between the generator and the analyzer combined, the user always sees feedback for every skipped member or method. No silent drops across the full toolchain.
+
+**Audit Results**
+
+Full audit of ForgeGenerator.cs (5589 lines) identified the following silent skips, grouped by priority:
+
+**HIGH PRIORITY (user-surprising, should fix first):**
+
+| Location | Issue | Level |
+|----------|-------|-------|
+| Line ~289 | `[ForgeMethod]` on wrong-shape method silently ignored | Warning |
+| Line ~593 | Non-`INamedTypeSymbol` source/dest type silently drops entire method | Error |
+| Line ~1891 | Malformed `[ForgePolymorphic]` attributes silently skipped | Error |
+| Line ~3490 | Flattening name match with type mismatch silently skipped | Warning |
+| Line ~3205 | Expression property silently suppressed due to non-translatable ctor arg | Warning |
+| Line ~5398 | Profile method extraction errors silently suppress inheritance | Warning |
+
+**MEDIUM PRIORITY (less common, but user-observable):**
+
+| Location | Issue | Level |
+|----------|-------|-------|
+| Line ~687 | Read-only destination members silently skipped (no FKF107 from generator) | Info |
+| Line ~693 | Init-only members silently skipped in update methods (no diagnostic) | Info |
+| Line ~3293 | Inaccessible members silently excluded from member collection | Info |
+| Line ~3299 | Dest properties with inaccessible setter silently excluded | Info |
+| Line ~2425 | Nested method not in lookup silently drops expression member | Info |
+| Line ~2428 | Non-create nested method silently drops expression member | Info |
+| Line ~2444 | Nested ctor arg not translatable silently drops expression member | Info |
+
+**LOW PRIORITY (defensive guards, edge cases):**
+
+| Location | Issue | Level |
+|----------|-------|-------|
+| Line ~5347 | Profile class resolution failure (defensive, unlikely) | Warning |
+| Line ~1876 | Included class resolution failure during polymorphic collection | Warning |
+| Line ~3230 | All expression members excluded, property suppressed entirely | Info |
+| Line ~683 | Constructor-consumed members not reported | Info |
+
+**Notes:**
+- Some skips are intentionally deferred to the analyzer (FKF002, FKF010, FKF100, FKF300). These are acceptable IF the analyzer is always co-deployed with the generator. Consider whether the generator should also emit these for standalone usage.
+- Line numbers are approximate — they shift as the file is edited. Search for the code patterns instead.
+- Medium-priority items on read-only (FKF107) and init-only in update context may already be partially covered by the analyzer but not by the generator.
+
+**Files to Modify**
+
+- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Add ~13 new diagnostic descriptors
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Replace each `continue`/`return` with diagnostic + skip
+- `src/FreakyKit.Forge.Analyzers/ForgeAnalyzer.cs` — Register new diagnostics in `SupportedDiagnostics`
+- Tests for every new diagnostic (positive + negative cases)
 
 ---
 
 ## P3 Features — Backlog
-
-### 8. Mapping Profiles / Inheritance — `P3`
-
-**Type:** Feature — Code Reuse
-
-**Why**
-
-Large projects have shared base types (e.g., `BaseEntity` with `Id`, `CreatedAt`, `UpdatedAt`) that must be mapped consistently across many forge classes. Currently each class redeclares the mapping or relies on independent member-name matching, leading to duplication and inconsistency.
-
-**Design**
-
-Add `[ForgeIncludes]` attribute to include mappings from another forge class:
-
-```csharp
-[Forge]
-public static partial class BaseForges
-{
-    public static partial BaseDto ToBaseDto(BaseEntity source);
-}
-
-[Forge]
-[ForgeIncludes(typeof(BaseForges))]
-public static partial class PersonForges
-{
-    public static partial PersonDto ToDto(Person source);
-    // PersonDto : BaseDto, Person : BaseEntity
-    // Base mappings inherited/inlined
-}
-```
-
-**Two implementation options:**
-- **Delegate**: Call included forge method for base members (simple, creates runtime dependency)
-- **Inline**: Copy base assignments into derived forge method (no dependency, more generated code)
-
-**Complexity**
-
-Medium-high. Requires cross-class symbol resolution during incremental generation. Pipeline currently processes each forge class independently; may need aggregation step. Must handle circular/diamond includes.
-
-**Impact**
-
-Medium. Enables DRY principle for multi-class forge hierarchies.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge/Attributes/ForgeIncludesAttribute.cs` — New attribute
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Cross-class method lookup, delegation/inlining logic
-- `src/FreakyKit.Forge.Generator/Models/ForgeClassModel.cs` — Add `IReadOnlyList<ForgeMethodModel> IncludedMethods`
-- Incremental pipeline may need `Collect()` + `Combine()` steps for multi-class aggregation
-
-**Suggested Approach**
-
-1. Define `[ForgeIncludes(params Type[] forgeClasses)]` attribute
-2. In `ExtractForgeClass`, parse attribute and resolve included forge class symbols
-3. Extract forge methods from included classes (same process as primary class)
-4. Store in `ForgeClassModel.IncludedMethods`
-5. In `GenerateMethodBody`, decide: emit call to included method (v1) or copy its assignments (later)
-6. Validate: included classes exist, have `[Forge]`, no circular includes
-
----
-
----
 
 ### 10. Generic Forge Methods — `P3`
 
@@ -186,18 +182,15 @@ High. Enables generic mapping scenarios with zero boilerplate for wrapper types 
 
 ## Technical Debt & Bug Fixes
 
-Critical correctness bugs and usability improvements identified through code audit. Organized by severity.
+Correctness bugs and usability improvements identified through code audit. Organized by subsystem.
 
-### Medium-Priority Bugs
+### Exhaustive Flattening Candidate Collection
 
-
-### Low-Priority Issues
-
-#### Algorithm Enhancement: Exhaustive Flattening Candidate Collection
+**Type:** Fix — Algorithm Enhancement
 
 **Why**
 
-`TryResolveFlattenedMappingRecursive` uses a greedy algorithm: it returns the first flattened path found, even if multiple equally-valid paths exist at the same depth. This means `Customer.Address.City` matching both `AddressCity` (direct property) and `ContactAddress.City` (flattened) returns whichever is discovered first in the member iteration order, with no ambiguity detection or longest-prefix selection. FKF530 (ambiguous flattening) never triggers because the code returns before evaluating all candidates.
+`TryResolveFlattenedMappingRecursive` detects ambiguity (FKF530 fires when multiple prefix matches exist), but resolution is still greedy first-match: the `foreach` loop returns immediately on the first successful recursive resolution without comparing against other valid paths. If two paths both resolve successfully, only the first (longest prefix) is used and the second is never attempted.
 
 **Design**
 
@@ -216,7 +209,7 @@ Low-Medium. Closes a gap where ambiguities go undetected and depth limits are si
 
 **Files to Modify**
 
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive (line 3055) and TryResolveFlattenedMapping (line 3009)
+- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive, TryResolveFlattenedMapping
 
 **Suggested Approach**
 
@@ -229,165 +222,9 @@ Low-Medium. Closes a gap where ambiguities go undetected and depth limits are si
 
 ---
 
-
-## Implementation Issues & Code Quality Refinements
-
-Fine-grained fixes, algorithmic improvements, test coverage gaps, and consistency issues identified during code audit. Organized by subsystem.
-
-### Generator Correctness & Behavior
-
-#### Exhaustive Flattening Candidate Collection
-
-**Type:** Fix — Algorithm Enhancement
-
-**Why**
-
-`TryResolveFlattenedMappingRecursive` uses greedy-first-match and returns before evaluating all valid paths. FKF530 (ambiguous flattening) never triggers; depth overflow silently returns "not found" instead of emitting FKF532.
-
-**Complexity**
-
-High. Restructure recursion to accumulate all candidates, post-process for longest-match selection.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — TryResolveFlattenedMappingRecursive, TryResolveFlattenedMapping
-
----
-
-#### Orphaned Attributes Validation Redesign
-
-**Type:** Fix — Diagnostic Accuracy
-
-**Why**
-
-FKF527 (ForgeMap on source) and FKF528 (ForgeIgnore on source) fire based on member type alone, not actual role. They should only emit when the attribute is truly ineffective for that context.
-
-**Complexity**
-
-High. Inspect forge method signatures to determine actual source/destination roles; emit diagnostics only when ineffective.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — DetectForgeMapOnSourceMember, DetectForgeIgnoreOnSourceMember
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — FKF527/FKF528 descriptors
-- `docs/attributes.md` — Update validation documentation
-
----
-
-### Generator Expression Trees & Flattening
-
-
-### Test Coverage Gaps
-
-#### FlatteningGeneratorTests Coordinate Mapping Assertion
-
-**Type:** Test — Coverage
-
-**Why**
-
-Test asserts flattened City but not the proper null-propagation for intermediate properties (Address?.Coords should use ?., Latitude should use .).
-
-**Complexity**
-
-Low. Add assertion verifying correct operator usage in generated path.
-
-**Files to Modify**
-
-- `tests/FreakyKit.Forge.Generator.Tests/FlatteningGeneratorTests.cs`
-
----
-
----
-
-### Documentation Accuracy
-
----
-
 ## Adoption & Project Health
 
 Items focused on discoverability, trust signals, and developer experience — the things that determine whether a new user evaluates Forge or closes the tab.
-
-### 15a. Additional Code Fix Providers — `P2`
-
-**Type:** Feature — Developer Experience
-
-**Why**
-
-4 code fix providers shipped (FKF003, FKF004, FKF002, FKF300). More diagnostics can benefit from lightbulb fixes.
-
-**Next candidates:**
-- FKF109 (both [ForgeIgnore] and [ForgeMap]) → Remove [ForgeMap]
-- FKF112 (self-referencing [ForgeMap]) → Remove [ForgeMap]
-- FKF524/525/526 (orphaned attributes) → Add [Forge] to class (requires analyzer changes to emit these for non-[Forge] classes)
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.CodeFixes/` — New code fix providers
-- `tests/FreakyKit.Forge.Analyzers.Tests/CodeFixes/` — Tests
-
----
-
-### 16. Expand Samples Project — `P2`
-
-**Type:** Documentation
-
-**Why**
-
-The samples project covers 15 features but is missing examples for several advanced capabilities: dictionary mapping, EF Core projections, strict mapping, ForgeUses cross-class sharing, conditional mapping (Condition/IgnoreIfNull/IgnoreIfDefault), and ShareReference. These are features that have docs coverage but no runnable sample code.
-
-**Complexity**
-
-Low-Medium. Each sample is a self-contained file following the existing pattern.
-
-**Impact**
-
-Medium. Samples are the fastest way for a new user to understand a feature. Copy-paste beats reading docs.
-
-**Files to Modify**
-
-- `samples/FreakyKit.Forge.Samples/Forges/` — New sample files
-- `samples/FreakyKit.Forge.Samples/Models/` — Additional model types as needed
-- `samples/FreakyKit.Forge.Samples/Program.cs` — Wire up new demos
-
-**Suggested Approach**
-
-Add these sample files:
-1. `DictionaryForges.cs` — Dictionary-to-object mapping with key casing policies
-2. `ProjectionForges.cs` — EF Core expression projection demo
-3. `StrictMappingForges.cs` — `StrictMapping = true` with drift detection
-4. `ForgeUsesForges.cs` — Cross-class method sharing via `[ForgeUses]`
-5. `ConditionalForges.cs` — `IgnoreIfNull`, `IgnoreIfDefault`, `Condition`
-6. `ShareReferenceForges.cs` — Reference semantics for same-type collections
-
----
-
-### 18. Project Config Files — `P2`
-
-**Type:** Infrastructure
-
-**Why**
-
-No `global.json` means contributors can build with any SDK version, leading to "works on my machine" issues. CONTRIBUTING.md says ".NET 8.0 SDK" but CI uses .NET 9. No `.editorconfig` means no enforced code style despite the CONTRIBUTING.md mentioning style guidelines.
-
-**Complexity**
-
-Low. Two small config files.
-
-**Impact**
-
-Low. Primarily affects contributors, not end users.
-
-**Files to Modify**
-
-- `global.json` — New file at repo root
-- `.editorconfig` — New file at repo root
-
-**Suggested Approach**
-
-1. `global.json`: Pin to the SDK version CI uses (currently 9.0.x) with `rollForward: latestFeature`
-2. `.editorconfig`: Use the standard .NET/C# conventions (`dotnet_style_*`, `csharp_style_*`), matching the project's existing style (4-space indent, no `this.` qualifier, `var` where type is apparent)
-
----
 
 ### 19. dotnet new Template — `P3`
 
@@ -432,27 +269,5 @@ Medium. Could be the basis for a blog post or conference talk demo.
 
 - `samples/FreakyKit.Forge.Samples.EFCore/` — New sample project (ASP.NET Core Minimal API + EF Core + Sqlite)
 
----
 
-### 21. .NET 10 Benchmarks — `P3`
-
-**Type:** Documentation
-
-**Why**
-
-The benchmarks doc has a ".NET 10" section that is entirely TODO placeholders. Now that .NET 10 has shipped, running and publishing these benchmarks shows the project is actively maintained and keeps the performance claims current.
-
-**Complexity**
-
-Medium. Requires running BenchmarkDotNet on .NET 10 and formatting results.
-
-**Impact**
-
-Low. Nice to have for completeness; the .NET 8 benchmarks are still valid.
-
-**Files to Modify**
-
-- `docs/benchmarks.md` — Fill in .NET 10 results
-- `benchmarks/FreakyKit.Forge.Benchmarks/` — May need TFM updates
-- `benchmarks/FreakyKit.Forge.Benchmarks.RealWorld/` — May need TFM updates
 

@@ -3,16 +3,20 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using FreakyKit.Forge.Analyzers;
+using FreakyKit.Forge.Generator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
-using Microsoft.CodeAnalysis.Diagnostics;
+using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
 
 namespace FreakyKit.Forge.Analyzers.Tests.CodeFixes;
 
-public abstract class CodeFixTestBase
+/// <summary>
+/// Base class for code fix tests where the diagnostic comes from the source generator
+/// (FKF524, FKF525, FKF526, FKF538) rather than the analyzer.
+/// </summary>
+public abstract class GeneratorCodeFixTestBase
 {
     protected abstract CodeFixProvider CreateCodeFixProvider();
 
@@ -23,11 +27,13 @@ public abstract class CodeFixTestBase
         {
             var compilation = (await document.Project.GetCompilationAsync())!;
 
-            var diagnostics = await compilation
-                .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new ForgeAnalyzer()))
-                .GetAnalyzerDiagnosticsAsync();
+            var generator = new ForgeGenerator();
+            CSharpGeneratorDriver
+                .Create(new ISourceGenerator[] { generator.AsSourceGenerator() })
+                .RunGeneratorsAndUpdateCompilation(
+                    (CSharpCompilation)compilation, out _, out var generatorDiagnostics);
 
-            var diagnostic = diagnostics.FirstOrDefault(d => d.Id == diagnosticId);
+            var diagnostic = generatorDiagnostics.FirstOrDefault(d => d.Id == diagnosticId);
             Assert.NotNull(diagnostic);
 
             var actions = new List<CodeAction>();
@@ -54,11 +60,13 @@ public abstract class CodeFixTestBase
         {
             var compilation = (await document.Project.GetCompilationAsync())!;
 
-            var diagnostics = await compilation
-                .WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new ForgeAnalyzer()))
-                .GetAnalyzerDiagnosticsAsync();
+            var generator = new ForgeGenerator();
+            CSharpGeneratorDriver
+                .Create(new ISourceGenerator[] { generator.AsSourceGenerator() })
+                .RunGeneratorsAndUpdateCompilation(
+                    (CSharpCompilation)compilation, out _, out var generatorDiagnostics);
 
-            var diagnostic = diagnostics.FirstOrDefault(d => d.Id == diagnosticId);
+            var diagnostic = generatorDiagnostics.FirstOrDefault(d => d.Id == diagnosticId);
             Assert.Null(diagnostic);
         }
     }

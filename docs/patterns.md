@@ -489,3 +489,58 @@ public static partial class AnimalForges
     // [ForgePolymorphic(typeof(Animal), nameof(MapBase))]
 }
 ```
+
+## 22. Mapping Profiles / Inheritance with `[ForgeIncludes]`
+
+Reuse base-type mappings across forge classes without redeclaring them. When `DerivedSource : BaseSource` and `DerivedDto : BaseDto`, the base method's property assignments are inlined into the derived method.
+
+```csharp
+public class BaseEntity { public int Id { get; set; } public DateTime CreatedAt { get; set; } }
+public class BaseDto { public int Id { get; set; } public DateTime CreatedAt { get; set; } }
+
+public class Person : BaseEntity { public string Name { get; set; } }
+public class PersonDto : BaseDto { public string Name { get; set; } }
+
+[Forge]
+public static partial class BaseForges
+{
+    public static partial BaseDto ToBaseDto(BaseEntity source);
+}
+
+[Forge]
+[ForgeIncludes(typeof(BaseForges))]
+public static partial class PersonForges
+{
+    public static partial PersonDto ToDto(Person source);
+    // Inherits Id and CreatedAt mappings from BaseForges
+    // Adds Name mapping locally
+}
+```
+
+Combine with `[ForgeUses]` for both inheritance and cross-class nested forging:
+
+```csharp
+public class Address { public string City { get; set; } }
+public class AddressDto { public string City { get; set; } }
+
+public class Person : BaseEntity { public string Name { get; set; } public Address Home { get; set; } }
+public class PersonDto : BaseDto { public string Name { get; set; } public AddressDto Home { get; set; } }
+
+[Forge]
+public static partial class AddressForges
+{
+    public static partial AddressDto ToAddressDto(Address source);
+}
+
+[Forge]
+[ForgeIncludes(typeof(BaseForges))]   // Inherit base assignments (Id, CreatedAt)
+[ForgeUses(typeof(AddressForges))]     // Discover Address → AddressDto for nested forging
+public static partial class PersonForges
+{
+    [ForgeMethod(AllowNestedForging = true)]
+    public static partial PersonDto ToDto(Person source);
+    // Id, CreatedAt inherited from BaseForges
+    // Name mapped locally
+    // Home mapped via AddressForges.ToAddressDto (nested forge)
+}
+```

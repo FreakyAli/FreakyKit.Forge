@@ -96,9 +96,28 @@ For most projects, add two packages:
 </ItemGroup>
 ```
 
-`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 77 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
+`Generator` writes your mapping bodies at compile time. `Analyzers` gives you 97 build-time diagnostics. Both automatically pull in the core `FreakyKit.Forge` attributes package — you never need to add it separately.
 
 See the [full installation guide](docs/installation.md) for lightweight setups, the optional conventions package, local development without NuGet, and custom Roslyn tooling.
+
+## Terminology
+
+```text
+Source (input)  ──────►  Destination (output)
+   Person                   PersonDto
+```
+
+| Term | Meaning |
+|------|---------|
+| **Source** | The type you map **from** — the method's first parameter (`Person source`) |
+| **Destination** | The type you map **to** — the return type (`PersonDto`) or second parameter in update methods |
+| **Source member** | A property/field on the source type the generator reads from |
+| **Destination member** | A property/field on the destination type the generator writes to |
+| **Flattening** | Mapping nested source properties into flat destination members by name convention (`AddressCity` matches `Address.City`) |
+| **Nested forging** | Calling another forge method to convert a type-mismatched member (requires `AllowNestedForging = true`) |
+| **Drift detection** | `StrictMapping = true` — unmapped members become errors instead of warnings |
+
+For the complete Forge glossary with examples, see the [Key Terms section in attributes.md](docs/attributes.md#key-terms).
 
 ## Features
 
@@ -120,7 +139,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Before/after hooks** — run custom logic before or after mapping via partial methods
 - **Implicit and explicit modes** — control which methods get generated
 - **Strict mapping (drift detection)** — opt-in error-level diagnostics when source/destination types drift apart
-- **Rich diagnostics** — 77 diagnostics across 7 categories guide you at build time
+- **Rich diagnostics** — 97 diagnostics across 9 categories guide you at build time
 - **Circular forge detection** — detects and reports circular dependencies in nested forge methods at compile time
 - **Top-level collection projection** — declare a `List<Dest> ToList(List<Source> source)` method and the generator produces the LINQ projection automatically
 - **Top-level dictionary projection** — declare a `Dictionary<string, Dest> ToDict(Dictionary<string, Source> source)` method and the generator produces an efficient `foreach`-based conversion
@@ -129,6 +148,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 - **Field support** — opt-in to include fields in member discovery
 - **Private method support** — opt-in to include private forge methods
 - **Conditional mapping** — skip assignments when source is null with `IgnoreIfNull`
+- **Mapping profiles / inheritance** — reuse base-type mappings with `[ForgeIncludes]` — include another forge class and its assignments are inlined into compatible derived methods
 - **Debugging friendly** — generated code includes `[GeneratedCode]`, `[DebuggerStepThrough]`, `#line` directives, `#pragma warning disable`, and XML doc comments
 
 ## Comparison
@@ -198,7 +218,7 @@ The meaningful comparison is against reflection-based mappers — see [docs/benc
 | Package | Install? | Downloads | What it does |
 |---------|:--------:|:---------:|--------------|
 | [**FreakyKit.Forge.Generator**](https://www.nuget.org/packages/FreakyKit.Forge.Generator) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Generator?style=flat-square) | Roslyn source generator — writes your mapping method bodies at compile time |
-| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers?style=flat-square) | Roslyn analyzer — 77 build-time diagnostics to catch mistakes before you run |
+| [**FreakyKit.Forge.Analyzers**](https://www.nuget.org/packages/FreakyKit.Forge.Analyzers) | ✅ Always | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Analyzers?style=flat-square) | Roslyn analyzer — 87 build-time diagnostics to catch mistakes before you run |
 | [**FreakyKit.Forge**](https://www.nuget.org/packages/FreakyKit.Forge) | ⛔ Never directly | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge?style=flat-square) | Core attributes and enums — pulled in automatically by Generator and Analyzers |
 | [**FreakyKit.Forge.Conventions**](https://www.nuget.org/packages/FreakyKit.Forge.Conventions) | 🔧 Optional | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Conventions?style=flat-square) | Naming helpers — `ForgeConventions.ForgeClassName("Person")` → `"PersonForges"` |
 | [**FreakyKit.Forge.Diagnostics**](https://www.nuget.org/packages/FreakyKit.Forge.Diagnostics) | 🔧 Advanced | ![NuGet Downloads](https://img.shields.io/nuget/dt/FreakyKit.Forge.Diagnostics?style=flat-square) | Shared diagnostic descriptors — only if you're building custom Roslyn tooling on top of Forge |
@@ -706,6 +726,7 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF002 | Warning | Method ignored in explicit mode |
 | FKF003 | Error | Forge class not static |
 | FKF004 | Error | Forge class not partial |
+| FKF005 | Error | `[Forge]` on non-class type |
 | FKF010 | Warning | Private forge method ignored |
 | FKF011 | Info | Private visibility enabled |
 | FKF020 | Error | Forge method declares a body |
@@ -732,9 +753,11 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF200 | Error | Incompatible member types |
 | FKF201 | Warning | Nullable value type to non-nullable mapping |
 | FKF202 | Info | Nullable mapping applied |
+| FKF203 | Warning | Lossy implicit conversion |
 | FKF210 | Info | Enum cast mapping |
 | FKF211 | Info | Enum name-based mapping |
 | FKF212 | Warning | Enum member missing in destination |
+| FKF230 | Info | Enum-string mapping applied |
 | FKF220 | Info | Type converter used |
 | FKF221 | Warning | Invalid converter signature |
 | FKF222 | Warning | Duplicate converter for same type pair |
@@ -775,6 +798,27 @@ See [docs/diagnostics.md](docs/diagnostics.md) for the full diagnostics referenc
 | FKF530 | Error | Ambiguous flattening auto-resolved |
 | FKF531 | Info | Deep flattening detected |
 | FKF532 | Error | Flattening nesting depth limit exceeded |
+| FKF533 | Error | Included profile forge class not found |
+| FKF534 | Error | Included profile class not a forge class |
+| FKF535 | Error | Circular `[ForgeIncludes]` detected |
+| FKF536 | Warning | No compatible method in included profile class |
+| FKF537 | Info | Local assignment shadows included assignment |
+| FKF538 | Error | `[ForgeIncludes]` requires `[Forge]` on the same class |
+| FKF539 | Info | Inherited assignment skipped — destination member not found |
+| FKF540 | Info | Inherited assignment skipped — constructor provides member |
+| FKF541 | Info | Inherited init-only assignment skipped in update method |
+| FKF542 | Info | Inherited assignment deduplicated (diamond include) |
+| FKF700 | Error | Dictionary key type not string |
+| FKF701 | Error | Unsupported dictionary value type |
+| FKF702 | Error | `ReturnNull` policy on non-nullable type |
+| FKF800 | Error | Polymorphic mapping method not found |
+| FKF801 | Error | Polymorphic return type not assignable |
+| FKF802 | Error | Polymorphic source type not assignable |
+| FKF803 | Error | Unreachable polymorphic pattern |
+| FKF804 | Error | Incompatible options on polymorphic dispatch |
+| FKF805 | Error | `GenerateExpression` on polymorphic method |
+| FKF806 | Error | Duplicate polymorphic source type |
+| FKF807 | Error | `[ForgePolymorphic]` without `[Forge]` class |
 
 ## Project Structure
 
@@ -783,12 +827,13 @@ src/
   FreakyKit.Forge/              # Core attributes and enums (NuGet: FreakyKit.Forge)
   FreakyKit.Forge.Generator/    # Roslyn source generator (NuGet: FreakyKit.Forge.Generator)
   FreakyKit.Forge.Analyzers/    # Roslyn analyzer (NuGet: FreakyKit.Forge.Analyzers)
+  FreakyKit.Forge.CodeFixes/    # Code fix providers (packed into Analyzers NuGet)
   FreakyKit.Forge.Diagnostics/  # Shared diagnostic descriptors (NuGet: FreakyKit.Forge.Diagnostics)
   FreakyKit.Forge.Conventions/  # Optional naming conventions (NuGet: FreakyKit.Forge.Conventions)
 tests/
-  FreakyKit.Forge.Analyzers.Tests/   # 171 tests
-  FreakyKit.Forge.Generator.Tests/   # 381 tests
-  FreakyKit.Forge.Integration.Tests/ # 47 tests
+  FreakyKit.Forge.Analyzers.Tests/   # 190 tests
+  FreakyKit.Forge.Generator.Tests/   # 407 tests
+  FreakyKit.Forge.Integration.Tests/ # 51 tests
   FreakyKit.Forge.EFCore.Tests/      # 8 tests — projection expressions verified against real EF Core 8 + Sqlite
 ```
 
@@ -798,7 +843,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a complete history of releases and what cha
 
 ## Roadmap
 
-Features planned for future versions — production-grade real-world benchmarks, reverse mapping, computed properties, mapping profiles, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
+Features planned for future versions — production-grade real-world benchmarks, reverse mapping, computed properties, generic forge methods, and more. See [docs/future-plans.md](docs/future-plans.md) for the full breakdown with design notes.
 
 ## Troubleshooting
 

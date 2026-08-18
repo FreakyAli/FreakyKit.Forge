@@ -9,8 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `[ForgeIncludes]` attribute for mapping profiles / inheritance — inherit base-type property assignments from other forge classes
+- FKF533–FKF542 diagnostics for `[ForgeIncludes]` validation and merge feedback (not found, not forge, circular, no compatible method, shadowed, missing [Forge], dest member not found, constructor overlap, init-only in update, diamond dedup)
 - `[ForgePolymorphic]` attribute for derived type dispatch via switch expressions
-- FKF800–FKF806 diagnostics for polymorphic mapping validation
+- FKF800–FKF807 diagnostics for polymorphic mapping validation
+- Code fix providers: FKF109 (remove conflicting `[ForgeMap]`), FKF112 (remove self-referencing `[ForgeMap]`), FKF524/FKF525/FKF526/FKF538 (add missing `[Forge]` to class)
+- Migration guides: [AutoMapper](docs/migrate-from-automapper.md), [Mapperly](docs/migrate-from-mapperly.md), [Mapster](docs/migrate-from-mapster.md), [Facet](docs/migrate-from-facet.md)
+- 6 new sample demos: dictionary mapping, expression projection, strict mapping, ForgeUses cross-class sharing, conditional mapping, ShareReference
+- Project config: `global.json` (SDK 9.0.x) and `.editorconfig`
+- .NET 10 benchmarks: core synthetic (10 scenarios) and real-world (8 scenarios) with multi-TFM `net8.0;net10.0`
+
+### Fixed
+
+- `IsInitOnlyMember` now walks the inheritance chain — previously, init-only properties inherited from a base type were not detected, causing invalid generated code (`CS8852`)
 
 ## [1.5.0] - 2026-07-30
 

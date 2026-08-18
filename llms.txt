@@ -2,7 +2,7 @@
 
 > Compile-time object mapping for C# powered by Roslyn source generators. Zero runtime reflection, zero allocation overhead, hand-written-code performance.
 
-Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 85 diagnostics (FKF001–FKF807) to catch mistakes at build time.
+Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 97 diagnostics (FKF001–FKF807) to catch mistakes at build time.
 
 ## Installation
 
@@ -15,10 +15,15 @@ Both pull in `FreakyKit.Forge` (core attributes) transitively.
 
 ## Core Concepts
 
+**Source** = the type you map FROM (input). First parameter of a forge method.
+**Destination** = the type you map TO (output). Return type (create) or second parameter (update).
+**Source member** = property/field on source type the generator reads from.
+**Destination member** = property/field on destination type the generator writes to.
+
 **Forge class** — a `static partial class` decorated with `[Forge]`. Contains forge method declarations.
 **Forge method** — a `static partial` method whose body the generator writes. Two shapes:
-- **Create**: one parameter (source), returns destination type.
-- **Update**: two parameters (source, existing destination), returns void.
+- **Create**: one parameter (source), returns destination type. Example: `PersonDto ToDto(Person source)`
+- **Update**: two parameters (source, existing destination), returns void. Example: `void Update(Person source, PersonDto dest)`
 
 **Member matching** — properties matched by name (case-insensitive). Fields included only with `ShouldIncludeFields = true`.
 
@@ -35,6 +40,9 @@ Both pull in `FreakyKit.Forge` (core attributes) transitively.
 
 ### `[ForgeUses(params Type[])]` — class-level
 Declares other `[Forge]` classes whose methods are searched during nested forge/converter/condition resolution. Order matters — first match wins.
+
+### `[ForgeIncludes(params Type[])]` — class-level
+Inherits property assignments from included `[Forge]` classes. When a forge method maps `DerivedSource → DerivedDto` and an included class has a method mapping `BaseSource → BaseDto` (where derived types extend base types), the base assignments are inlined into the derived method. Local assignments take precedence. Unlike `[ForgeUses]` (method discovery for nested forging), `[ForgeIncludes]` copies base-type property mappings directly. Diagnostics: FKF533 (not found), FKF534 (not forge), FKF535 (circular), FKF536 (no compatible method), FKF537 (shadowed), FKF538 (missing [Forge]).
 
 ### `[ForgeMethod]` — method-level
 | Property | Type | Default | Purpose |
@@ -178,8 +186,8 @@ Error-severity diagnostics block generation for the entire forge class. No parti
 | FKF051 | Info | After hook detected |
 | FKF100 | Warn | Destination member missing source |
 | FKF101 | Warn | Source member unused |
-| FKF102 | Info | Member ignored via [ForgeIgnore] (reserved) |
-| FKF103 | Info | Custom mapping applied (reserved) |
+| FKF102 | Info | Member ignored via [ForgeIgnore] |
+| FKF103 | Info | Custom mapping applied |
 | FKF104 | Error | [ForgeMap] target not found |
 | FKF105 | Warn | Duplicate [ForgeMap] target |
 | FKF106 | Info | Flattened mapping applied |
@@ -236,6 +244,16 @@ Error-severity diagnostics block generation for the entire forge class. No parti
 | FKF530 | Error | Ambiguous flattening |
 | FKF531 | Info | Deep flattening (3+ levels) |
 | FKF532 | Error | Flattening depth limit exceeded (>10) |
+| FKF533 | Error | Included profile class not found |
+| FKF534 | Error | Included profile class not [Forge] |
+| FKF535 | Error | Circular [ForgeIncludes] |
+| FKF536 | Warn | No compatible method in included profile |
+| FKF537 | Info | Local assignment shadows included assignment |
+| FKF538 | Error | [ForgeIncludes] without [Forge] |
+| FKF539 | Info | Included assignment skipped — dest member not found |
+| FKF540 | Info | Included assignment skipped — constructor provides member |
+| FKF541 | Info | Included init-only skipped in update method |
+| FKF542 | Info | Included assignment diamond dedup |
 | FKF700 | Error | Dictionary key type not string |
 | FKF701 | Error | Unsupported dictionary value type |
 | FKF702 | Error | ReturnNull on non-nullable type |
@@ -258,6 +276,11 @@ Forge ships code fix providers alongside the analyzer. When a diagnostic fires i
 | FKF004 (class not partial) | Add `partial` modifier |
 | FKF002 (method ignored in explicit mode) | Add `[ForgeMethod]` attribute |
 | FKF300 (nested forging disabled) | Add `AllowNestedForging = true` to `[ForgeMethod]` |
+| FKF109 (both [ForgeIgnore] and [ForgeMap]) | Remove `[ForgeMap]` |
+| FKF112 (self-referencing [ForgeMap]) | Remove `[ForgeMap]` |
+| FKF525 ([ForgeMethod] without [Forge] class) | Add `[Forge]` attribute to class |
+| FKF526 ([ForgeConverter] without [Forge] class) | Add `[Forge]` attribute to class |
+| FKF538 ([ForgeIncludes] without [Forge] class) | Add `[Forge]` attribute to class |
 
 ## Common Anti-Patterns
 
@@ -283,6 +306,6 @@ Side-by-side migration docs for teams switching from other mapping libraries:
 - Generator internals: docs/generator.md
 - Expression projections: docs/projections.md
 - Common patterns & cookbook: docs/patterns.md
-- Benchmarks: docs/benchmarks.md
+- Benchmarks (.NET 8 + .NET 10): docs/benchmarks.md
 - Installation: docs/installation.md
 - Changelog: CHANGELOG.md

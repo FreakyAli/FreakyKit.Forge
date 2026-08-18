@@ -31,6 +31,7 @@
     <ProjectReference Include="..\..\src\FreakyKit.Forge.Analyzers\FreakyKit.Forge.Analyzers.csproj" />
     <ProjectReference Include="..\..\src\FreakyKit.Forge.CodeFixes\FreakyKit.Forge.CodeFixes.csproj" />
     <ProjectReference Include="..\..\src\FreakyKit.Forge.Diagnostics\FreakyKit.Forge.Diagnostics.csproj" />
+    <ProjectReference Include="..\..\src\FreakyKit.Forge.Generator\FreakyKit.Forge.Generator.csproj" ReferenceOutputAssembly="true" OutputItemType="" />
     <ProjectReference Include="..\..\src\FreakyKit.Forge\FreakyKit.Forge.csproj" />
   </ItemGroup>
 
