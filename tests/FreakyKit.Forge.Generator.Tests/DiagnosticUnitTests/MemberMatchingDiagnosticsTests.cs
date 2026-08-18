@@ -17,14 +17,17 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
         const string source = """
             using FreakyKit.Forge;
 
-            public class Source { public int X { get; set; } }
-            public class Dest { public int X { get; set; } public int Unmatched { get; set; } }
-
-            [Forge]
-            public static partial class Forges
+            namespace TestNs
             {
-                [ForgeMethod]
-                public static partial Dest Map(Source s);
+                public class Source { public int X { get; set; } }
+                public class Dest { public int X { get; set; } public int Unmatched { get; set; } }
+
+                [Forge]
+                public static partial class Forges
+                {
+                    [ForgeMethod]
+                    public static partial Dest Map(Source s);
+                }
             }
             """;
 
@@ -60,14 +63,17 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
         const string source = """
             using FreakyKit.Forge;
 
-            public class Source { public int X { get; set; } public int Extra { get; set; } }
-            public class Dest { public int X { get; set; } }
-
-            [Forge]
-            public static partial class Forges
+            namespace TestNs
             {
-                [ForgeMethod]
-                public static partial Dest Map(Source s);
+                public class Source { public int X { get; set; } public int Extra { get; set; } }
+                public class Dest { public int X { get; set; } }
+
+                [Forge]
+                public static partial class Forges
+                {
+                    [ForgeMethod]
+                    public static partial Dest Map(Source s);
+                }
             }
             """;
 
@@ -85,7 +91,7 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
 
             namespace TestNs
             {
-                public class Source { }
+                public class Source { public int X { get; set; } }
                 public class Dest
                 {
                     [ForgeMap("NonExistent")]
@@ -115,7 +121,7 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
 
             namespace TestNs
             {
-                public class Source { }
+                public class Source { public int Name { get; set; } }
                 public class Dest
                 {
                     [ForgeMap("Name")]
@@ -175,8 +181,8 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
 
             namespace TestNs
             {
-                public class Source { public string Name { get; set; } = ""; }
-                public class Dest { public string Name { get; } }
+                public class Source { public string Name { get; set; } = ""; public int Value { get; set; } }
+                public class Dest { public string Name { get; } public int Value { get; set; } }
 
                 [Forge]
                 public static partial class Forges
@@ -201,7 +207,7 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
 
             namespace TestNs
             {
-                public class Source { }
+                public class Source { public int X { get; set; } }
                 public class Dest
                 {
                     [ForgeIgnore]
@@ -230,14 +236,17 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
         const string source = """
             using FreakyKit.Forge;
 
-            public class Source { public int X { get; set; } }
-            public class Dest { public int X { get; set; } public int Y { get; set; } }
-
-            [Forge]
-            public static partial class Forges
+            namespace TestNs
             {
-                [ForgeMethod(StrictMapping = true)]
-                public static partial Dest Map(Source s);
+                public class Source { public int X { get; set; } }
+                public class Dest { public int X { get; set; } public int Y { get; set; } }
+
+                [Forge]
+                public static partial class Forges
+                {
+                    [ForgeMethod(StrictMapping = true)]
+                    public static partial Dest Map(Source s);
+                }
             }
             """;
 
@@ -253,14 +262,17 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
         const string source = """
             using FreakyKit.Forge;
 
-            public class Source { public int X { get; set; } public int Extra { get; set; } }
-            public class Dest { public int X { get; set; } }
-
-            [Forge]
-            public static partial class Forges
+            namespace TestNs
             {
-                [ForgeMethod(StrictMapping = true)]
-                public static partial Dest Map(Source s);
+                public class Source { public int X { get; set; } public int Extra { get; set; } }
+                public class Dest { public int X { get; set; } }
+
+                [Forge]
+                public static partial class Forges
+                {
+                    [ForgeMethod(StrictMapping = true)]
+                    public static partial Dest Map(Source s);
+                }
             }
             """;
 
@@ -278,7 +290,7 @@ public sealed class MemberMatchingDiagnosticsTests : DiagnosticsTestBase
 
             namespace TestNs
             {
-                public class Source { }
+                public class Source { public string Name { get; set; } = ""; }
                 public class Dest
                 {
                     [ForgeMap("Name")]
