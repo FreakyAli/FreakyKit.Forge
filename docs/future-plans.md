@@ -38,7 +38,7 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
 | 22 | Eliminate silent skips | P2 | High | Medium | Add diagnostics for every silent skip in the generator |
 
-> **Completed (removed from backlog):** #6 Polymorphic mapping, #8 Mapping profiles/inheritance (`[ForgeIncludes]`, FKF533–538), #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet), #18 Project config files (global.json + .editorconfig), #15a Code fix providers (FKF109, FKF112, FKF525, FKF526), #16 Expand samples project (6 new samples: dictionary, projection, strict, ForgeUses, conditional, ShareReference), Orphaned attributes validation (FKF527/FKF528 now inspect forge method signatures), #21 .NET 10 benchmarks (core + 8 real-world scenarios, multi-TFM)
+> **Completed (removed from backlog):** #6 Polymorphic mapping, #8 Mapping profiles/inheritance (`[ForgeIncludes]`, FKF533–542), #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet), #18 Project config files (global.json + .editorconfig), #15a Code fix providers (FKF109, FKF112, FKF525, FKF526), #16 Expand samples project (6 new samples: dictionary, projection, strict, ForgeUses, conditional, ShareReference), Orphaned attributes validation (FKF527/FKF528 now inspect forge method signatures), #21 .NET 10 benchmarks (core + 8 real-world scenarios, multi-TFM)
 
 ---
 
