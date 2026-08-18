@@ -4,7 +4,7 @@
 
 Throughout Forge's documentation, these terms appear frequently:
 
-```
+```text
 Source ──────────────► Destination
 (input data)          (output data)
 ```

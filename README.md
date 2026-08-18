@@ -102,7 +102,7 @@ See the [full installation guide](docs/installation.md) for lightweight setups, 
 
 ## Terminology
 
-```
+```text
 Source (input)  ──────►  Destination (output)
    Person                   PersonDto
 ```

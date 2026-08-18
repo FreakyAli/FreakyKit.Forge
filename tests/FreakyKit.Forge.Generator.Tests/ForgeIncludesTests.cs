@@ -1081,4 +1081,65 @@ public sealed class ForgeIncludesTests : GeneratorTestBase
         Assert.Contains("__result.Breed = source.Breed", dogOutput);
         Assert.Contains("__result.Id = source.Id", dogOutput);
     }
+
+    [Fact]
+    public void ForgeIncludes_ProfileWithConditionMethod_NoErrors()
+    {
+        // Profile class has a condition method on a member.
+        // When inherited, the condition method name is qualified with the profile class FQN
+        // so it resolves in the consuming class. With C# inheritance the local member
+        // discovery shadows the inherited one, but the qualification logic is exercised
+        // for any non-shadowed members.
+        const string source = """
+            using FreakyKit.Forge;
+            namespace TestNs
+            {
+                public class BaseEntity { public int Id { get; set; } public string Status { get; set; } }
+                public class BaseDto
+                {
+                    public int Id { get; set; }
+                    [ForgeMap("Status", Condition = "ShouldMapStatus")]
+                    public string Status { get; set; }
+                }
+
+                public class Person : BaseEntity { public string Name { get; set; } }
+                public class PersonDto : BaseDto { public string Name { get; set; } }
+
+                [Forge]
+                public static partial class BaseForges
+                {
+                    public static partial BaseDto ToBaseDto(BaseEntity source);
+
+                    public static bool ShouldMapStatus(BaseEntity source) => source.Status != null;
+                }
+
+                [Forge]
+                [ForgeIncludes(typeof(BaseForges))]
+                public static partial class PersonForges
+                {
+                    public static partial PersonDto ToDto(Person source);
+                }
+            }
+            """;
+
+        var result = RunGenerator(source);
+        AssertNoErrors(result);
+
+        // BaseForges output should use ShouldMapStatus condition
+        var baseOutput = result.RunResult.GeneratedTrees
+            .Where(t => t.FilePath.EndsWith("TestNs_BaseForges.Forge.g.cs"))
+            .Select(t => t.GetText().ToString())
+            .FirstOrDefault();
+        Assert.NotNull(baseOutput);
+        Assert.Contains("ShouldMapStatus", baseOutput);
+
+        // PersonForges should compile without errors (condition is shadowed by local discovery
+        // but qualification logic handles non-shadowed cases)
+        var personOutput = result.RunResult.GeneratedTrees
+            .Where(t => t.FilePath.EndsWith("TestNs_PersonForges.Forge.g.cs"))
+            .Select(t => t.GetText().ToString())
+            .FirstOrDefault();
+        Assert.NotNull(personOutput);
+        Assert.Contains("__result.Name = source.Name", personOutput);
+    }
 }

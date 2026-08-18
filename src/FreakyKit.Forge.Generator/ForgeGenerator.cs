@@ -5497,6 +5497,13 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         adjustedExpr = SubstituteParam(adjustedExpr, assignment.CollectionElementForgeMethod!, adjustedCollectionElementMethod);
                     }
 
+                    // Qualify condition method name from profile class (same logic as nested forge methods)
+                    var adjustedConditionMethod = assignment.ConditionMethodName;
+                    if (adjustedConditionMethod != null && !adjustedConditionMethod.Contains("."))
+                    {
+                        adjustedConditionMethod = $"{profileFqnQualified}.{adjustedConditionMethod}";
+                    }
+
                     // Create adjusted assignment with substituted parameter name
                     inheritedAssignments.Add(new MemberAssignmentModel(
                         destMemberName: assignment.DestMemberName,
@@ -5522,7 +5529,7 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         collectionSourceIsRefType: assignment.CollectionSourceIsRefType,
                         nestedForgeNullFallback: assignment.NestedForgeNullFallback,
                         ignoreIfDefault: assignment.IgnoreIfDefault,
-                        conditionMethodName: assignment.ConditionMethodName,
+                        conditionMethodName: adjustedConditionMethod,
                         sourceMemberName: assignment.SourceMemberName,
                         sourceMemberType: assignment.SourceMemberType));
                 }
