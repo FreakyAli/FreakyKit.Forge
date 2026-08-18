@@ -36,71 +36,8 @@ Each feature is prioritized using an **Impact × Effort** matrix:
 | 10 | Generic forge methods | P3 | High | High | Type parameter support |
 | 19 | dotnet new template | P3 | Medium | Medium | `dotnet new forge-mapper` scaffold |
 | 20 | EF Core integration sample | P3 | Medium | Medium | Full API → EF Core → DTO pipeline sample project |
-| 22 | Eliminate silent skips | P2 | High | Medium | Add diagnostics for every silent skip in the generator |
 
 > **Completed (removed from backlog):** #6 Polymorphic mapping, #8 Mapping profiles/inheritance (`[ForgeIncludes]`, FKF533–542), #11 CHANGELOG.md, #12 NuGet discoverability, #13 GitHub issue templates, #14 Code coverage CI, #15 Roslyn code fix providers (FKF003, FKF004, FKF002, FKF300), #17 Migration guides (AutoMapper, Mapperly, Mapster, Facet), #18 Project config files (global.json + .editorconfig), #15a Code fix providers (FKF109, FKF112, FKF525, FKF526), #16 Expand samples project (6 new samples: dictionary, projection, strict, ForgeUses, conditional, ShareReference), Orphaned attributes validation (FKF527/FKF528 now inspect forge method signatures), #21 .NET 10 benchmarks (core + 8 real-world scenarios, multi-TFM)
-
----
-
-## P2 Fixes — Eliminate Silent Skips
-
-### 22. Eliminate Silent Skips — `P2`
-
-**Type:** Fix — Diagnostic Coverage
-
-**Why**
-
-The generator silently skips members and methods in several places without emitting diagnostics. When a user's mapping doesn't produce the output they expect, the absence of any diagnostic makes debugging extremely difficult. Every observable decision the generator makes should be communicated to the user via a diagnostic at the appropriate level (Error, Warning, or Info).
-
-**Rule:** The generator must NEVER silently skip anything that affects user-observable output. Every skip needs a diagnostic. This applies to the **generator** specifically — some diagnostics (FKF002, FKF010, FKF100, FKF300) are intentionally deferred to the **analyzer**, which is co-deployed in the same NuGet package. The guarantee is: between the generator and the analyzer combined, the user always sees feedback for every skipped member or method. No silent drops across the full toolchain.
-
-**Audit Results**
-
-Full audit of ForgeGenerator.cs (5589 lines) identified the following silent skips, grouped by priority:
-
-**HIGH PRIORITY (user-surprising, should fix first):**
-
-| Location | Issue | Level |
-|----------|-------|-------|
-| Line ~289 | `[ForgeMethod]` on wrong-shape method silently ignored | Warning |
-| Line ~593 | Non-`INamedTypeSymbol` source/dest type silently drops entire method | Error |
-| Line ~1891 | Malformed `[ForgePolymorphic]` attributes silently skipped | Error |
-| Line ~3490 | Flattening name match with type mismatch silently skipped | Warning |
-| Line ~3205 | Expression property silently suppressed due to non-translatable ctor arg | Warning |
-| Line ~5398 | Profile method extraction errors silently suppress inheritance | Warning |
-
-**MEDIUM PRIORITY (less common, but user-observable):**
-
-| Location | Issue | Level |
-|----------|-------|-------|
-| Line ~687 | Read-only destination members silently skipped (no FKF107 from generator) | Info |
-| Line ~693 | Init-only members silently skipped in update methods (no diagnostic) | Info |
-| Line ~3293 | Inaccessible members silently excluded from member collection | Info |
-| Line ~3299 | Dest properties with inaccessible setter silently excluded | Info |
-| Line ~2425 | Nested method not in lookup silently drops expression member | Info |
-| Line ~2428 | Non-create nested method silently drops expression member | Info |
-| Line ~2444 | Nested ctor arg not translatable silently drops expression member | Info |
-
-**LOW PRIORITY (defensive guards, edge cases):**
-
-| Location | Issue | Level |
-|----------|-------|-------|
-| Line ~5347 | Profile class resolution failure (defensive, unlikely) | Warning |
-| Line ~1876 | Included class resolution failure during polymorphic collection | Warning |
-| Line ~3230 | All expression members excluded, property suppressed entirely | Info |
-| Line ~683 | Constructor-consumed members not reported | Info |
-
-**Notes:**
-- Some skips are intentionally deferred to the analyzer (FKF002, FKF010, FKF100, FKF300). These are acceptable IF the analyzer is always co-deployed with the generator. Consider whether the generator should also emit these for standalone usage.
-- Line numbers are approximate — they shift as the file is edited. Search for the code patterns instead.
-- Medium-priority items on read-only (FKF107) and init-only in update context may already be partially covered by the analyzer but not by the generator.
-
-**Files to Modify**
-
-- `src/FreakyKit.Forge.Diagnostics/ForgeDiagnostics.cs` — Add ~13 new diagnostic descriptors
-- `src/FreakyKit.Forge.Generator/ForgeGenerator.cs` — Replace each `continue`/`return` with diagnostic + skip
-- `src/FreakyKit.Forge.Analyzers/ForgeAnalyzer.cs` — Register new diagnostics in `SupportedDiagnostics`
-- Tests for every new diagnostic (positive + negative cases)
 
 ---
 

@@ -47,6 +47,8 @@ public static partial class EmployeeForges
 // Generates: __result.DisplayName = source.FullName;
 ```
 
+**Note:** Only public members on source and destination types can be mapped. Private/protected source members emit **FKF549** (Info); destination members with inaccessible setters emit **FKF550** (Info). Make them public or exclude with `[ForgeIgnore]` to silence.
+
 ---
 
 ## 3. Nested Object Mapping
@@ -113,6 +115,8 @@ public static partial class UserForges
 //   if (source.Name != null) existing.Name = source.Name;
 //   if (source.Email != null) existing.Email = source.Email;
 ```
+
+**Note:** Members with `init`-only setters cannot be reassigned in update methods and will emit **FKF548** (Info). Convert to regular settable properties if you need to update them, or exclude them with `[ForgeIgnore]`.
 
 ---
 
@@ -229,6 +233,8 @@ var dtos = await dbContext.People
     .Select(PersonForges.ToDtoExpression)
     .ToListAsync();
 ```
+
+**Note:** Members excluded from the expression (due to converters, conditions, or non-translatable materializers) emit **FKF506** (Info). If all members are excluded, **FKF553** (Info) is emitted and no expression property is generated — the imperative method still works normally.
 
 ---
 
@@ -403,6 +409,8 @@ public class Dest
 }
 // Generates: var __result = new Dest(source.Name);
 ```
+
+**Note:** When a destination member name matches a constructor parameter name (case-insensitive), it is provided during construction and not reassigned afterward. **FKF554** (Info) reports which members are consumed by the constructor.
 
 ---
 

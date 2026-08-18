@@ -98,7 +98,20 @@ public sealed class ForgeAnalyzer : DiagnosticAnalyzer
             ForgeDiagnostics.IncludesDestMemberNotFound,
             ForgeDiagnostics.IncludesConstructorHandlesMember,
             ForgeDiagnostics.IncludesInitOnlyInUpdateSkipped,
-            ForgeDiagnostics.IncludesDiamondDedup
+            ForgeDiagnostics.IncludesDiamondDedup,
+            // Silent skip coverage diagnostics
+            ForgeDiagnostics.ForgeMethodInvalidShape,
+            ForgeDiagnostics.ForgeMethodInvalidTypes,
+            ForgeDiagnostics.ForgePolymorphicMalformed,
+            ForgeDiagnostics.FlatteningNameMatchTypeMismatch,
+            ForgeDiagnostics.ProfileMethodExtractionFailed,
+            ForgeDiagnostics.InitOnlyInUpdateContext,
+            ForgeDiagnostics.InaccessibleSourceMember,
+            ForgeDiagnostics.DestinationMemberNoSetter,
+            ForgeDiagnostics.ProfileClassResolutionFailed,
+            ForgeDiagnostics.IncludedClassResolutionFailed,
+            ForgeDiagnostics.ExpressionAllMembersExcluded,
+            ForgeDiagnostics.ConstructorConsumesMember
         );
 
     public override void Initialize(AnalysisContext context)

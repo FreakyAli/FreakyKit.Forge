@@ -1263,5 +1263,164 @@ public static class ForgeDiagnostics
         isEnabledByDefault: true,
         description: "[ForgePolymorphic] can only be used on methods in classes decorated with [Forge]. The containing class must be a static partial class with the [Forge] attribute.");
 
+    // ─── Silent Skip Coverage (P2: #22) ──────────────────────────────────────
+
+    /// <summary>
+    /// FKF543 (Error): A method is declared with [ForgeMethod] but has an invalid shape
+    /// (wrong parameter count, wrong return type, or other structural mismatch).
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeMethodInvalidShape = new(
+        id: "FKF543",
+        title: "ForgeMethod declared on method with invalid shape",
+        messageFormat: "Method '{0}' is decorated with [ForgeMethod] but has an invalid shape. Forge methods must be partial with one parameter (create) or two parameters (update).",
+        category: Category_MethodShape,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The [ForgeMethod] attribute was applied to a method that does not match the forge method shape. Valid shapes are: TDest MethodName(TSource source) or void MethodName(TSource source, TDest dest).");
+
+    /// <summary>
+    /// FKF544 (Error): A forge method's source or destination type is not an INamedTypeSymbol
+    /// (e.g., it is a type parameter, generic type, pointer, tuple, or other non-class type).
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgeMethodInvalidTypes = new(
+        id: "FKF544",
+        title: "Forge method has unsupported source or destination type",
+        messageFormat: "Forge method '{0}' has an unsupported source or destination type. Only named class types are supported; type parameters, pointers, tuples, and generics are not allowed.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The source or destination type of the forge method is not a named class type. Forge methods must map between concrete named types, not type parameters or other special types.");
+
+    /// <summary>
+    /// FKF545 (Error): A [ForgePolymorphic] attribute has a malformed or invalid configuration
+    /// (e.g., method not found, type not resolvable, or invalid parameters).
+    /// </summary>
+    public static readonly DiagnosticDescriptor ForgePolymorphicMalformed = new(
+        id: "FKF545",
+        title: "Malformed [ForgePolymorphic] attribute",
+        messageFormat: "[ForgePolymorphic] on method '{0}' has invalid configuration: {1}. Check the derived source type and mapping method name.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "The [ForgePolymorphic] attribute could not be processed due to invalid parameters or unresolvable types.");
+
+    /// <summary>
+    /// FKF546 (Error): A destination member matches a source property name via flattening,
+    /// but the resolved source member's type is incompatible with the destination member's type.
+    /// </summary>
+    public static readonly DiagnosticDescriptor FlatteningNameMatchTypeMismatch = new(
+        id: "FKF546",
+        title: "Flattening name match with type mismatch",
+        messageFormat: "Destination member '{0}' matches flattened source path '{1}' by name, but source type '{2}' is incompatible with destination type '{3}'. Use AllowNestedForging or provide a custom converter.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Flattening found a matching source property path by name, but the types are incompatible. The member will be skipped unless you enable nested forging or provide a type converter.");
+
+    /// <summary>
+    /// FKF547 (Warning): Profile method extraction for [ForgeIncludes] failed during resolution.
+    /// An included profile class method could not be fully extracted or validated.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ProfileMethodExtractionFailed = new(
+        id: "FKF547",
+        title: "Profile method extraction failed",
+        messageFormat: "Method '{0}' in included profile class '{1}' could not be extracted: {2}. Method will be skipped.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "An included profile class has a method that could not be processed due to extraction or validation errors. The method will not contribute to the inheritance chain.");
+
+    /// <summary>
+    /// FKF548 (Info): An init-only destination member was skipped because the forge method is an update method.
+    /// Init-only members can only be set during construction, not in update operations.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InitOnlyInUpdateContext = new(
+        id: "FKF548",
+        title: "Init-only member in update method",
+        messageFormat: "Destination member '{0}' is init-only and cannot be assigned in update method '{1}'. It will be skipped.",
+        category: Category_MemberMatching,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Init-only properties can only be set during object construction. Update methods modify existing instances, so init-only members are always skipped in update context.");
+
+    /// <summary>
+    /// FKF549 (Info): A source member is inaccessible (private/internal to another assembly)
+    /// and was excluded from member discovery.
+    /// </summary>
+    public static readonly DiagnosticDescriptor InaccessibleSourceMember = new(
+        id: "FKF549",
+        title: "Source member not accessible",
+        messageFormat: "Source member '{0}.{1}' is not accessible and will be excluded from member discovery. Make it public or internal.",
+        category: Category_MemberDiscovery,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "A source member has accessibility (private or inaccessible from another assembly) that prevents the generator from reading it. It will be excluded from mapping.");
+
+    /// <summary>
+    /// FKF550 (Info): A destination member matches a source member by name, but the destination
+    /// member has no settable accessor (no setter or init).
+    /// </summary>
+    public static readonly DiagnosticDescriptor DestinationMemberNoSetter = new(
+        id: "FKF550",
+        title: "Destination member has no setter",
+        messageFormat: "Destination member '{0}.{1}' matches source member '{2}' by name but has no settable accessor. Add a setter or exclude with [ForgeIgnore].",
+        category: Category_MemberDiscovery,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "The destination member is read-only or has no setter. It cannot be assigned during mapping.");
+
+    /// <summary>
+    /// FKF551 (Warning): A profile class referenced in [ForgeIncludes] could not be resolved.
+    /// This is a defensive error; the class reference is likely invalid or the assembly is not loaded.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ProfileClassResolutionFailed = new(
+        id: "FKF551",
+        title: "Profile class resolution failed",
+        messageFormat: "Profile class '{0}' in [ForgeIncludes] could not be resolved. Verify the type name and that the assembly is loaded.",
+        category: Category_Includes,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "A profile class specified in [ForgeIncludes] could not be found or loaded at code generation time. This may be a transient issue or indicate a missing reference.");
+
+    /// <summary>
+    /// FKF552 (Warning): An included forge class could not be resolved during polymorphic
+    /// mapping method collection.
+    /// </summary>
+    public static readonly DiagnosticDescriptor IncludedClassResolutionFailed = new(
+        id: "FKF552",
+        title: "Included class resolution failed",
+        messageFormat: "Included forge class '{0}' could not be resolved during polymorphic mapping collection. Verify the type exists.",
+        category: Category_Polymorphic,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "An included class in a polymorphic or nested-forging context could not be resolved. This may indicate a missing reference or typo in the class name.");
+
+    /// <summary>
+    /// FKF553 (Info): All destination members that would be included in an expression property
+    /// were excluded due to non-translatable conversion requirements. The expression property
+    /// will be generated but will contain no member assignments.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ExpressionAllMembersExcluded = new(
+        id: "FKF553",
+        title: "All expression members excluded from generation",
+        messageFormat: "Forge method '{0}': all destination members were excluded from the generated expression property. The expression will be empty.",
+        category: Category_TypeSafety,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "All members that would be mapped have been excluded from the expression property due to non-translatable conversions (custom converters, nested forging, etc.). The generated expression will map no members. Consider disabling GenerateExpression or simplifying the conversion logic.");
+
+    /// <summary>
+    /// FKF554 (Info): One or more destination members were consumed by a constructor
+    /// and will not receive separate assignment statements.
+    /// </summary>
+    public static readonly DiagnosticDescriptor ConstructorConsumesMember = new(
+        id: "FKF554",
+        title: "Destination member consumed by constructor",
+        messageFormat: "Destination member '{0}' is provided by a constructor parameter of '{1}' and will not receive a separate assignment.",
+        category: Category_Construction,
+        defaultSeverity: DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "The destination type has a constructor parameter that matches this member. The constructor will provide the value, so no separate assignment is generated for this member.");
+
 }
 

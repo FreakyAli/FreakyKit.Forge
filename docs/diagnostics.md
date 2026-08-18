@@ -1,6 +1,6 @@
 # Diagnostics Reference
 
-Forge emits 97 diagnostics across 9 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
+Forge emits 109 diagnostics across 10 categories. Error-severity diagnostics block source generation entirely for the affected forge class — no partial output is emitted.
 
 **Quick terminology:** In diagnostic messages, **source** = the type you map FROM (the method parameter), **destination** = the type you map TO (the return type). A "source member" is a property on the input type; a "destination member" is a property on the output type.
 
@@ -1578,3 +1578,283 @@ public class PersonDto
 Polymorphic dispatch methods generate a switch expression that dispatches to other forge methods based on the runtime type of the source parameter. The method itself performs no property mapping — it is pure dispatch. The default arm always throws `InvalidOperationException`.
 
 **Ordering matters:** Arms are emitted in user-declared order. Place more-derived types first; a base type before a derived type makes the derived type unreachable (FKF803).
+
+---
+
+## Silent Skip Diagnostics (FKF543–FKF554)
+
+These diagnostics report cases where the generator would previously skip code silently. Every skip now produces a diagnostic at the appropriate severity level (Error for config issues, Warning for resolution failures, Info for behavioral notes), ensuring users always see why code doesn't generate as expected.
+
+### FKF543 — ForgeMethod on wrong-shape method
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MethodShape |
+| **Message** | Forge method '{0}' has invalid shape. Forge methods must have one parameter (create) or two parameters with void return (update). |
+
+Emitted when a method with `[ForgeMethod]` attribute does not match either valid forge method shape:
+- **Create shape**: one parameter, returns destination type
+- **Update shape**: two parameters, returns void
+
+The method is not processed as a forge method. Fix the signature to match one of the valid shapes.
+
+```csharp
+// Wrong — FKF543: no parameters
+[ForgeMethod]
+public static partial void Map();
+
+// Wrong — FKF543: too many parameters
+[ForgeMethod]
+public static partial Dest Map(Source s, Dest d, int extra);
+
+// Correct — create shape
+[ForgeMethod]
+public static partial Dest Map(Source s);
+
+// Correct — update shape
+[ForgeMethod]
+public static partial void Update(Source s, Dest d);
+```
+
+### FKF544 — Non-INamedTypeSymbol source/dest type
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.TypeSafety |
+| **Message** | Forge method '{0}': source type '{1}' or destination type '{2}' is not a named class/struct type. Generic type parameters, array types, and pointer types cannot be forged. |
+
+Emitted when a forge method's source or destination type is not a concrete named type (e.g., a generic type parameter `TSource`, an array `Person[]`, or a pointer `int*`). Only concrete classes and structs can be forged.
+
+Fix by using concrete named types:
+
+```csharp
+// Wrong — FKF544: generic type parameter
+public static partial TDest GenericMap<TSource, TDest>(TSource source) where TDest : new();
+
+// Wrong — FKF544: array type
+public static partial Person[] MapArray(Person[] source);
+
+// Correct
+public static partial PersonDto Map(Person source);
+```
+
+### FKF545 — Malformed [ForgePolymorphic] attribute
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | [ForgePolymorphic] attribute on method '{0}' is malformed: {1}. Attribute requires two constructor arguments: DerivedSourceType and MethodName. |
+
+Emitted when a `[ForgePolymorphic]` attribute is missing required constructor arguments or the arguments have invalid types. The attribute requires:
+1. A type argument for the derived source type
+2. A string argument for the method name to dispatch to
+
+```csharp
+// Wrong — FKF545: missing arguments
+[ForgePolymorphic]
+public static partial AnimalDto MapAnimal(Animal animal);
+
+// Wrong — FKF545: wrong types
+[ForgePolymorphic("Dog", 42)]
+public static partial AnimalDto MapAnimal(Animal animal);
+
+// Correct
+[ForgePolymorphic(typeof(Dog), nameof(MapDog))]
+public static partial AnimalDto MapAnimal(Animal animal);
+```
+
+### FKF546 — Flattening name match with type mismatch
+
+| | |
+|--|--|
+| **Severity** | Error |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}' matches a flattened source path '{1}' by name but the source type '{2}' is incompatible with the destination type '{3}'. |
+
+Emitted when a destination member name matches a nested source property path by the flattening convention (e.g., `AddressCity`), but the source property has a different type that cannot be assigned to the destination member. The name match suggests an intent to flatten, but the type mismatch prevents generation.
+
+Resolve by:
+- Renaming the destination member to avoid the pattern
+- Excluding the source property with `[ForgeIgnore]`
+- Changing the source property type to match
+
+```csharp
+public class Source
+{
+    public Address Address { get; set; }  // has City: string
+    public int AddressCity { get; set; }  // different type — FKF546
+}
+
+public class Dest { public string AddressCity { get; set; } }
+
+// Fix 1: rename dest member
+public class Dest { public int CityCode { get; set; } }
+
+// Fix 2: exclude source property
+public class Source
+{
+    public Address Address { get; set; }
+    [ForgeIgnore] public int AddressCity { get; set; }
+}
+```
+
+### FKF547 — Profile method extraction errors
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Profile method extraction for forge method '{0}' failed: {1}. The included profile method could not be analyzed. |
+
+Emitted when a profile method (from `[ForgeIncludes]`) cannot be properly extracted and analyzed. This typically indicates a structural issue with the included method itself that prevents the generator from processing it.
+
+Fix by verifying the included forge class has valid method definitions.
+
+### FKF548 — Init-only member in update context
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Member '{0}.{1}' is init-only and will be skipped in update method '{2}'. Init-only members can only be set in the constructor, not via assignment. |
+
+Emitted when an update method encounters a destination member with an `init`-only setter. Since update methods modify objects in place (not via constructor), init-only members cannot be reassigned and are skipped.
+
+This is informational — no action required unless you want to update that member (convert it to a regular settable property).
+
+```csharp
+public class User
+{
+    public string Name { get; set; }
+    public DateTime CreatedAt { get; init; }  // init-only
+}
+
+[Forge]
+public static partial class UserForges
+{
+    [ForgeMethod]
+    public static partial void Update(UserUpdate source, User existing);
+    // FKF548: CreatedAt is skipped because it's init-only
+}
+```
+
+### FKF549 — Inaccessible source member excluded
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Source member '{0}.{1}' is not accessible and will be skipped. Only public members can be read for mapping. |
+
+Emitted when a source type has a member (property or field) with `private`, `protected`, or `internal` access that matches a destination member by name. The generator can only read public members, so the property is skipped.
+
+To map a private source member, either:
+- Make it public
+- Use a `[ForgeMap]` attribute on the destination member with a custom getter
+- Exclude the destination member with `[ForgeIgnore]`
+
+```csharp
+public class Source
+{
+    private string Secret { get; set; }  // private — FKF549
+    public string Public { get; set; }
+}
+
+public class Dest
+{
+    public string Secret { get; set; }
+    public string Public { get; set; }
+}
+
+// Fix: make it public
+public class Source
+{
+    public string Secret { get; set; }  // now accessible
+}
+```
+
+### FKF550 — Destination member setter inaccessible
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MemberMatching |
+| **Message** | Destination member '{0}.{1}' setter is not accessible and will be skipped. Only properties with public setters can be assigned. |
+
+Emitted when a destination member exists but its setter is not public (private, protected, or internal). The generator generates code that assigns to the member, but it cannot do so if the setter is inaccessible.
+
+To fix:
+- Make the setter public
+- Use a constructor parameter to set the value (if the destination supports constructor mapping)
+- Exclude the member with `[ForgeIgnore]`
+
+```csharp
+public class Dest
+{
+    public string Name { get; private set; }  // private setter — FKF550
+}
+
+// Fix 1: make setter public
+public class Dest { public string Name { get; set; } }
+
+// Fix 2: map via constructor
+public class Dest
+{
+    public string Name { get; }
+    public Dest(string name) => Name = name;
+}
+```
+
+### FKF551 — Profile class resolution failed
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Included profile class '{0}' specified in [ForgeIncludes] could not be resolved. Verify the type name and that the assembly is referenced. |
+
+Emitted when a type name specified in `[ForgeIncludes]` cannot be resolved. This typically means the type doesn't exist, was renamed, or the containing assembly is not referenced.
+
+Verify the type name is correct and the assembly is in scope.
+
+### FKF552 — Included class resolution failed
+
+| | |
+|--|--|
+| **Severity** | Warning |
+| **Category** | FreakyKit.Forge.Nested |
+| **Message** | Included forge class '{0}' specified in [ForgeIncludes] could not be resolved. Verify the type name and that the assembly is referenced. |
+
+Emitted when a forge class specified in `[ForgeIncludes]` cannot be resolved at compile time. Similar to FKF551, this typically indicates a type name mismatch or missing assembly reference.
+
+Verify the class exists and is decorated with `[Forge]`.
+
+### FKF553 — All expression members excluded
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.MethodShape |
+| **Message** | Expression property for forge method '{0}' would have no translatable member assignments. Either all members are excluded (FKF506), the destination has no settable members, or the destination type uses a parameterized constructor with no expression-compatible assignments. |
+
+Emitted when `GenerateExpression = true` but the generated expression would be empty or unsupported. This can occur when:
+- All destination members are excluded (due to converters, conditions, or non-translatable materializers)
+- The destination uses a parameterized constructor and has no property assignments to include
+- The destination type has no settable members
+
+No action required — the expression property is simply not generated. The imperative method still works normally.
+
+### FKF554 — Constructor-consumed members
+
+| | |
+|--|--|
+| **Severity** | Info |
+| **Category** | FreakyKit.Forge.Construction |
+| **Message** | Member '{0}' on destination type '{1}' is consumed by a constructor parameter and will not be assigned separately. The value is provided only during construction. |
+
+Emitted when a destination member matches a constructor parameter name exactly (case-insensitive). The value is supplied during construction and not reassigned afterward. This is informational — it indicates that the member is handled via constructor rather than post-construction assignment.
+
+No action required unless you want to assign the member separately after construction (in which case, rename the constructor parameter).

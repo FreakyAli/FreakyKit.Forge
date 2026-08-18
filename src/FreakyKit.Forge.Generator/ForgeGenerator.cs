@@ -286,7 +286,18 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             if (method.DeclaredAccessibility == Accessibility.Private && !includePrivate) continue;
 
             // Shape filter
-            if (!isCandidate) continue;
+            if (!isCandidate)
+            {
+                // FKF543: [ForgeMethod] on wrong-shape method
+                if (hasForgeAttr)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ForgeMethodInvalidShape,
+                        GetSafeLocation(method),
+                        method.Name));
+                }
+                continue;
+            }
 
             // Body check (analyzer handles FKF020)
             if (HasImplementationBody(method, ct))
@@ -615,7 +626,20 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         }
 
         if (sourceType is null || destType is null)
+        {
+            // FKF544: Non-INamedTypeSymbol source or destination type
+            var srcDisplay = method.Parameters[0].Type.ToDisplayString();
+            var destDisplay = isUpdate
+                ? method.Parameters[1].Type.ToDisplayString()
+                : method.ReturnType.ToDisplayString();
+            diagnostics.Add(Diagnostic.Create(
+                ForgeDiagnostics.ForgeMethodInvalidTypes,
+                GetSafeLocation(method),
+                method.Name,
+                srcDisplay,
+                destDisplay));
             return (null, diagnostics);
+        }
 
         var forgeAttr = GetForgeAttribute(method);
         bool includeFields = forgeAttr != null && GetBoolNamedArg(forgeAttr, "ShouldIncludeFields");
@@ -704,7 +728,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Skip if used in constructor
             if (constructorUsedKeys.Contains(key) &&
                 construction.Kind == ConstructionKind.Parameterized)
+            {
+                // FKF554: Member consumed by constructor
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ConstructorConsumesMember,
+                    GetSafeLocation(method),
+                    destMember.Name,
+                    destType.Name));
                 continue;
+            }
 
             // Skip read-only properties unless set via constructor
             if (IsReadOnlyMember(destType, key))
@@ -714,7 +746,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             // Init-only properties cannot be assigned in update methods
             bool initOnly = IsInitOnlyMember(destType, key);
             if (initOnly && isUpdate)
+            {
+                // FKF548: Init-only member in update context
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.InitOnlyInUpdateContext,
+                    GetSafeLocation(method),
+                    destMember.Name,
+                    method.Name));
                 continue;
+            }
 
             if (!sourceMembers.TryGetValue(key, out var srcMember))
             {
@@ -804,6 +844,25 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                         ForgeDiagnostics.FlatteningDepthLimitExceeded,
                         GetSafeLocation(method),
                         destMember.Name));
+                }
+
+                // FKF546: Check for name-matching source property with type mismatch
+                if (allowFlattening)
+                {
+                    var nameMismatch = sourceType.GetMembers()
+                        .OfType<IPropertySymbol>()
+                        .FirstOrDefault(p => p.Name.ToLowerInvariant() == key &&
+                                           p.Type.ToDisplayString() != destMember.Type.ToDisplayString());
+                    if (nameMismatch != null)
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.FlatteningNameMatchTypeMismatch,
+                            GetSafeLocation(method),
+                            destMember.Name,
+                            nameMismatch.Name,
+                            nameMismatch.Type.ToDisplayString(),
+                            destMember.Type.ToDisplayString()));
+                    }
                 }
 
                 // FKF100: handled by analyzer — generator just skips
@@ -1465,6 +1524,26 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         var sourceLocation = GetSafeLocation(method);
         var lineSpan = sourceLocation?.GetLineSpan();
 
+        // FKF553: Check if expression property would be generated with zero members
+        if (generateExpression && methodKind == ForgeMethodKind.Create && construction.Kind == ConstructionKind.Parameterized)
+        {
+            var ctorParamNames = new HashSet<string>(
+                construction.ConstructorArgs.Select(a => a.ParameterName.ToLowerInvariant()));
+            var emittableAssignments = assignments
+                .Where(a => a.ExpressionAssignment != null &&
+                           !ctorParamNames.Contains(a.DestMemberName.ToLowerInvariant()))
+                .ToList();
+
+            if (emittableAssignments.Count == 0)
+            {
+                // All expression members were excluded
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ExpressionAllMembersExcluded,
+                    GetSafeLocation(method),
+                    method.Name));
+            }
+        }
+
         var methodModel = new ForgeMethodModel(
             methodName: method.Name,
             accessibility: accessibility,
@@ -1897,7 +1976,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             foreach (var includedFqn in includedForgeClasses)
             {
                 var includedClass = compilation.GetTypeByMetadataName(includedFqn) as INamedTypeSymbol;
-                if (includedClass == null) continue;
+                if (includedClass == null)
+                {
+                    // FKF552: Included class resolution failed
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.IncludedClassResolutionFailed,
+                        location,
+                        includedFqn));
+                    continue;
+                }
                 foreach (var m in includedClass.GetMembers().OfType<IMethodSymbol>())
                 {
                     if (m.IsStatic && (m.IsPartialDefinition || m.PartialDefinitionPart != null))
@@ -1912,13 +1999,40 @@ public sealed class ForgeGenerator : IIncrementalGenerator
 
         foreach (var attr in polymorphicAttrs)
         {
-            if (attr.ConstructorArguments.Length < 2) continue;
+            if (attr.ConstructorArguments.Length < 2)
+            {
+                // FKF545: Malformed [ForgePolymorphic] attribute
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ForgePolymorphicMalformed,
+                    location,
+                    method.Name,
+                    "constructor arguments missing or incomplete"));
+                continue;
+            }
 
             var derivedTypeArg = attr.ConstructorArguments[0];
             var methodNameArg = attr.ConstructorArguments[1];
 
-            if (derivedTypeArg.Value is not INamedTypeSymbol derivedSourceType) continue;
-            if (methodNameArg.Value is not string targetMethodName) continue;
+            if (derivedTypeArg.Value is not INamedTypeSymbol derivedSourceType)
+            {
+                // FKF545: Malformed [ForgePolymorphic] attribute - derived type not resolvable
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ForgePolymorphicMalformed,
+                    location,
+                    method.Name,
+                    "derived source type argument not a named type"));
+                continue;
+            }
+            if (methodNameArg.Value is not string targetMethodName)
+            {
+                // FKF545: Malformed [ForgePolymorphic] attribute - method name not string
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ForgePolymorphicMalformed,
+                    location,
+                    method.Name,
+                    "mapping method name argument not a string"));
+                continue;
+            }
 
             var derivedFqn = derivedSourceType.ToDisplayString();
             var derivedShort = derivedSourceType.Name;
@@ -3330,13 +3444,37 @@ public sealed class ForgeGenerator : IIncrementalGenerator
             foreach (var member in currentType.GetMembers())
             {
                 if (member.IsStatic) continue;
-                if (!IsMemberAccessibleFromStaticContext(member, forgeAssembly)) continue;
+                if (!IsMemberAccessibleFromStaticContext(member, forgeAssembly))
+                {
+                    // FKF549: Inaccessible source member
+                    if (isSourceSide && diagnostics != null && forgeMethod != null && currentType.Equals(type, SymbolEqualityComparer.Default))
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            ForgeDiagnostics.InaccessibleSourceMember,
+                            GetSafeLocation(forgeMethod),
+                            type.Name,
+                            member.Name));
+                    }
+                    continue;
+                }
 
                 if (member is IPropertySymbol prop)
                 {
                     if (prop.IsIndexer) continue;
                     if (isSourceSide && (prop.GetMethod == null || !IsMemberAccessibleFromStaticContext(prop.GetMethod, forgeAssembly))) continue;
-                    if (!isSourceSide && prop.SetMethod != null && !IsMemberAccessibleFromStaticContext(prop.SetMethod, forgeAssembly)) continue;
+                    if (!isSourceSide && prop.SetMethod != null && !IsMemberAccessibleFromStaticContext(prop.SetMethod, forgeAssembly))
+                    {
+                        // FKF550: Destination member setter inaccessible
+                        if (diagnostics != null && forgeMethod != null && currentType.Equals(type, SymbolEqualityComparer.Default))
+                        {
+                            diagnostics.Add(Diagnostic.Create(
+                                ForgeDiagnostics.DestinationMemberNoSetter,
+                                GetSafeLocation(forgeMethod),
+                                type.Name,
+                                prop.Name));
+                        }
+                        continue;
+                    }
                     if (ShouldIgnoreMember(prop, isSourceSide)) continue;
                     var mapName = GetForgeMapName(prop);
                     var key = (mapName ?? prop.Name).ToLowerInvariant();
@@ -5333,7 +5471,15 @@ public sealed class ForgeGenerator : IIncrementalGenerator
         foreach (var profileFqn in includedProfileFqns)
         {
             var profileSymbol = compilation.GetTypeByMetadataName(profileFqn);
-            if (profileSymbol == null) continue;
+            if (profileSymbol == null)
+            {
+                // FKF551: Profile class resolution failed
+                diagnostics.Add(Diagnostic.Create(
+                    ForgeDiagnostics.ProfileClassResolutionFailed,
+                    GetSafeLocation(method),
+                    profileFqn));
+                continue;
+            }
 
             // Find all static partial methods in the profile class
             var profileMethods = profileSymbol.GetMembers()
@@ -5392,13 +5538,23 @@ public sealed class ForgeGenerator : IIncrementalGenerator
                 {
                     var includedForgeClasses = ExtractIncludedForgeClassesForProfile(profileSymbol, compilation);
                     var (extracted, profileDiags) = ExtractForgeMethod(profileMethod, profileSymbol, compilation, ct, includedForgeClasses);
-                    profileMethodModel = profileDiags.Any(d => d.Severity == DiagnosticSeverity.Error) ? null : extracted;
+                    var hasErrors = profileDiags.Any(d => d.Severity == DiagnosticSeverity.Error);
+                    profileMethodModel = hasErrors ? null : extracted;
                     if (profileMethodCache != null)
                         profileMethodCache[cacheKey] = profileMethodModel;
                 }
 
                 if (profileMethodModel == null)
+                {
+                    // FKF547: Profile method extraction failed silently
+                    diagnostics.Add(Diagnostic.Create(
+                        ForgeDiagnostics.ProfileMethodExtractionFailed,
+                        GetSafeLocation(method),
+                        profileMethod.Name,
+                        profileSymbol.ToDisplayString(),
+                        "method extraction produced errors"));
                     continue;
+                }
 
                 // Merge assignments, adjusting source parameter name
                 foreach (var assignment in profileMethodModel.Assignments)

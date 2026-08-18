@@ -2,7 +2,7 @@
 
 > Compile-time object mapping for C# powered by Roslyn source generators. Zero runtime reflection, zero allocation overhead, hand-written-code performance.
 
-Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 97 diagnostics (FKF001–FKF807) to catch mistakes at build time.
+Forge generates partial method bodies at compile time that map properties between source and destination types. You decorate a static partial class with `[Forge]`, declare partial method signatures, and the source generator writes the implementations. An accompanying Roslyn analyzer emits 109 diagnostics (FKF001–FKF807 + FKF543–FKF554) to catch mistakes at build time. Every silent skip in the generator has a corresponding diagnostic — users always know why code doesn't generate as expected.
 
 ## Installation
 
@@ -254,6 +254,18 @@ Error-severity diagnostics block generation for the entire forge class. No parti
 | FKF540 | Info | Included assignment skipped — constructor provides member |
 | FKF541 | Info | Included init-only skipped in update method |
 | FKF542 | Info | Included assignment diamond dedup |
+| FKF543 | Error | [ForgeMethod] on wrong-shape method |
+| FKF544 | Error | Non-INamedTypeSymbol source/dest type |
+| FKF545 | Error | Malformed [ForgePolymorphic] attribute |
+| FKF546 | Error | Flattening name match with type mismatch |
+| FKF547 | Warn | Profile method extraction errors |
+| FKF548 | Info | Init-only member in update context |
+| FKF549 | Info | Inaccessible source member excluded |
+| FKF550 | Info | Destination member setter inaccessible |
+| FKF551 | Warn | Profile class resolution failed |
+| FKF552 | Warn | Included class resolution failed |
+| FKF553 | Info | All expression members excluded |
+| FKF554 | Info | Constructor-consumed members |
 | FKF700 | Error | Dictionary key type not string |
 | FKF701 | Error | Unsupported dictionary value type |
 | FKF702 | Error | ReturnNull on non-nullable type |
